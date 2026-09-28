@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+
+# Parses real-world TypeScript and TSX files cloned into examples/ and rewrites script/known-failures.txt, the
+# list of files that fail to parse. With --check, fails instead when that list would change.
+
+set -euo pipefail
+
+check=false
+if [[ ${1-} == --check ]]; then
+  check=true
+fi
+
+# Each example repository is pinned to a commit so that the list of failures changes only with the grammar.
+# Moving a pin requires running this script without --check to update the list. The checkouts under
+# examples/ belong to this script: local changes there are discarded so that the pinned files are parsed.
+# The hosts occasionally answer with a server error, so each fetch is retried in place.
+clone() {
+  local dir=examples/$1
+  if [[ $(git -C "$dir" rev-parse HEAD 2> /dev/null) != "$3" ]]; then
+    if [[ ! -d $dir/.git ]]; then
+      rm -rf "$dir"
+      git init -q "$dir"
+    fi
+    local attempt
+    for attempt in 1 2 3 4; do
+      if git -C "$dir" fetch -q --depth=1 "$2" "$3"; then
+        break
+      fi
+      if [[ $attempt == 4 ]]; then
+        return 1
+      fi
+      sleep $((attempt * 15))
+    done
+    git -C "$dir" checkout -q -f --detach "$3"
+  fi
+  git -C "$dir" reset -q --hard
+  git -C "$dir" clean -q -ffdx
+}
+
+cd "$(dirname "$0")/.."
+
+clone desktop https://github.com/desktop/desktop f2686bcec9239a9f8c5d53e2e90bc3a4dd02059f
+clone redux https://github.com/reduxjs/redux 431c09612275e198e452b4de4bb6b41f5859bc0c
+clone vscode https://github.com/microsoft/vscode 12dc71b304d560398c1c991e9ebad13e917dcc38
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# Each extension has its own grammar: `<T>x` is a type assertion in .ts files but a JSX element in .tsx files.
+for grammar_and_extension in typescript:ts tsx:tsx; do
+  grammar=${grammar_and_extension%:*}
+  find examples -type f -name "*.${grammar_and_extension#*:}" -print | LC_ALL=C sort > "$tmp/files"
+  # `parse --grammar-path` would recompile the parser for every file.
+  bun run tree-sitter build -o "$tmp/$grammar.parser" "$grammar"
+  # The CLI exits non-zero whenever a file fails, so the output decides success. `--time` makes it print
+  # a line for each file, including files that exceed `--timeout` (2 s), which bounds a runaway parse.
+  bun run tree-sitter parse --lib-path "$tmp/$grammar.parser" --lang-name "$grammar" -q -s --time --timeout 2000000 \
+    --paths "$tmp/files" > "$tmp/$grammar" || true
+  if ! grep -q '^Total parses' "$tmp/$grammar"; then
+    cat "$tmp/$grammar" >&2
+    exit 1
+  fi
+  echo "$grammar: $(grep '^Total parses' "$tmp/$grammar")"
+  cat "$tmp/$grammar" >> "$tmp/output"
+done
+
+# A timeout depends on the machine, so it is no expected failure.
+if grep -q 'timed out' "$tmp/output"; then
+  echo 'These files exceeded the parse timeout; known-failures.txt is left unchanged:' >&2
+  awk '/timed out/{print $1}' "$tmp/output" >&2
+  exit 1
+fi
+awk '/ERROR|MISSING/{print $1}' "$tmp/output" | LC_ALL=C sort > "$tmp/failures"
+if [[ $check == true ]]; then
+  if ! diff -u script/known-failures.txt "$tmp/failures" >&2; then
+    echo 'The files failing to parse differ from script/known-failures.txt (- fixed, + broken).' >&2
+    echo 'Run script/parse-examples to update the list after checking the diff.' >&2
+    exit 1
+  fi
+else
+  cp "$tmp/failures" script/known-failures.txt
+fi
