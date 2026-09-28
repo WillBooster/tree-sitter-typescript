@@ -1,11 +1,7 @@
-# tree-sitter-typescript
+# @willbooster/tree-sitter-typescript
 
-[![CI][ci]](https://github.com/tree-sitter/tree-sitter-typescript/actions/workflows/ci.yml)
-[![discord][discord]](https://discord.gg/w7nTvsVJhm)
-[![matrix][matrix]](https://matrix.to/#/#tree-sitter-chat:matrix.org)
-[![crates][crates]](https://crates.io/crates/tree-sitter-typescript)
-[![npm][npm]](https://www.npmjs.com/package/tree-sitter-typescript)
-[![pypi][pypi]](https://pypi.org/project/tree-sitter-typescript)
+This is a fork of [tree-sitter/tree-sitter-typescript](https://github.com/tree-sitter/tree-sitter-typescript). We are grateful to its authors and
+contributors. This is not an official release of that project.
 
 TypeScript and TSX grammars for [tree-sitter][].
 
@@ -24,10 +20,3 @@ For Javascript files with [flow] type annotations you can use the `tsx` parser.
 References
 
 - [TypeScript Language Spec](https://github.com/microsoft/TypeScript/blob/30cb20434a6b117e007a4959b2a7c16489f86069/doc/spec-ARCHIVED.md)
-
-[ci]: https://img.shields.io/github/actions/workflow/status/tree-sitter/tree-sitter-typescript/ci.yml?logo=github&label=CI
-[discord]: https://img.shields.io/discord/1063097320771698699?logo=discord&label=discord
-[matrix]: https://img.shields.io/matrix/tree-sitter-chat%3Amatrix.org?logo=matrix&label=matrix
-[npm]: https://img.shields.io/npm/v/tree-sitter-typescript?logo=npm
-[crates]: https://img.shields.io/crates/v/tree-sitter-typescript?logo=rust
-[pypi]: https://img.shields.io/pypi/v/tree-sitter-typescript?logo=pypi&logoColor=ffd242
