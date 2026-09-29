@@ -1,7 +1,7 @@
 ## Project Information
 
 - Name: `@willbooster/tree-sitter-typescript`
-- Description: TypeScript grammar for tree-sitter
+- Description: TypeScript and TSX grammars for tree-sitter
 - Package Manager: bun
 
 ## General Instructions
