@@ -1,29 +1,17 @@
 {
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json",
   "grammars": [
     {
       "name": "typescript",
       "camelcase": "TypeScript",
       "scope": "source.ts",
       "path": "typescript",
-      "external-files": [
-        "common/scanner.h"
-      ],
-      "file-types": [
-        "ts"
-      ],
-      "highlights": [
-        "queries/highlights.scm",
-        "node_modules/tree-sitter-javascript/queries/highlights.scm"
-      ],
+      "external-files": ["common/scanner.h"],
+      "file-types": ["ts"],
+      "highlights": ["queries/highlights.scm", "node_modules/tree-sitter-javascript/queries/highlights.scm"],
       "injections": "node_modules/tree-sitter-javascript/queries/injections.scm",
-      "locals": [
-        "queries/locals.scm",
-        "node_modules/tree-sitter-javascript/queries/locals.scm"
-      ],
-      "tags": [
-        "queries/tags.scm",
-        "node_modules/tree-sitter-javascript/queries/tags.scm"
-      ],
+      "locals": ["queries/locals.scm", "node_modules/tree-sitter-javascript/queries/locals.scm"],
+      "tags": ["queries/tags.scm", "node_modules/tree-sitter-javascript/queries/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -31,12 +19,8 @@
       "camelcase": "TSX",
       "scope": "source.tsx",
       "path": "tsx",
-      "external-files": [
-        "common/scanner.h"
-      ],
-      "file-types": [
-        "tsx"
-      ],
+      "external-files": ["common/scanner.h"],
+      "file-types": ["tsx"],
       "highlights": [
         "queries/highlights.scm",
         "node_modules/tree-sitter-javascript/queries/highlights-jsx.scm",
@@ -44,10 +28,7 @@
       ],
       "injections": "node_modules/tree-sitter-javascript/queries/injections.scm",
       "locals": "node_modules/tree-sitter-javascript/queries/locals.scm",
-      "tags": [
-        "queries/tags.scm",
-        "node_modules/tree-sitter-javascript/queries/tags.scm"
-      ],
+      "tags": ["queries/tags.scm", "node_modules/tree-sitter-javascript/queries/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -55,12 +36,8 @@
       "camelcase": "Flow",
       "scope": "source.js.flow",
       "path": "tsx",
-      "external-files": [
-        "common/scanner.h"
-      ],
-      "file-types": [
-        "js"
-      ],
+      "external-files": ["common/scanner.h"],
+      "file-types": ["js"],
       "highlights": [
         "queries/highlights.scm",
         "node_modules/tree-sitter-javascript/queries/highlights-jsx.scm",
@@ -68,10 +45,7 @@
       ],
       "injections": "node_modules/tree-sitter-javascript/queries/injections.scm",
       "locals": "node_modules/tree-sitter-javascript/queries/locals.scm",
-      "tags": [
-        "queries/tags.scm",
-        "node_modules/tree-sitter-javascript/queries/tags.scm"
-      ],
+      "tags": ["queries/tags.scm", "node_modules/tree-sitter-javascript/queries/tags.scm"],
       "content-regex": "@flow"
     }
   ],
@@ -81,12 +55,7 @@
     "description": "TypeScript and TSX grammars for tree-sitter",
     "authors": [
       {
-        "name": "Max Brunsfeld",
-        "email": "maxbrunsfeld@gmail.com"
-      },
-      {
-        "name": "Amaan Qureshi",
-        "email": "amaanq12@gmail.com"
+        "name": "WillBooster Inc."
       }
     ],
     "links": {
@@ -94,11 +63,13 @@
     }
   },
   "bindings": {
-    "c": true,
-    "go": true,
-    "node": true,
-    "python": true,
+    "c": false,
+    "go": false,
+    "java": false,
+    "node": false,
+    "python": false,
     "rust": true,
-    "swift": true
+    "swift": false,
+    "zig": false
   }
 }

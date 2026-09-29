@@ -1,40 +1,37 @@
 [package]
-name = "tree-sitter-typescript"
-description = "TypeScript and TSX grammars for tree-sitter"
-version = "0.23.2"
-authors = [
-  "Max Brunsfeld <maxbrunsfeld@gmail.com>",
-  "Amaan Qureshi <amaanq12@gmail.com>",
-]
-license = "MIT"
-readme = "README.md"
-keywords = ["incremental", "parsing", "tree-sitter", "typescript", "tsx"]
-categories = ["parsing", "text-editors"]
-repository = "https://github.com/WillBooster/tree-sitter-typescript"
-edition = "2021"
+authors = ["WillBooster Inc."]
 autoexamples = false
+categories = ["parser-implementations", "parsing", "text-editors"]
+description = "TypeScript and TSX grammars for tree-sitter"
+edition = "2024"
+keywords = ["incremental", "parsing", "tree-sitter", "typescript", "tsx"]
+license = "MIT"
+name = "willbooster-tree-sitter-typescript"
+readme = "README.md"
+repository = "https://github.com/WillBooster/tree-sitter-typescript"
+version = "0.0.0"
 
 build = "bindings/rust/build.rs"
 include = [
-  "LICENSE",
-  "common",
-  "bindings/rust",
+  "bindings/rust/*",
+  "common/*",
   "typescript/grammar.js",
-  "typescript/src",
+  "typescript/src/*",
   "tsx/grammar.js",
-  "tsx/src",
-  "queries/*",
-  "./tree-sitter.json",
+  "tsx/src/*",
+  "/tree-sitter.json",
+  "/LICENSE",
 ]
 
 [lib]
+name = "tree_sitter_typescript"
 path = "bindings/rust/lib.rs"
 
 [dependencies]
 tree-sitter-language = "0.1"
 
 [build-dependencies]
-cc = "1.1"
+cc = "1.2"
 
 [dev-dependencies]
-tree-sitter = "0.24"
+tree-sitter = "0.27.0"
