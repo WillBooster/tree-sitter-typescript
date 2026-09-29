@@ -585,6 +585,45 @@ export type { A, B, C as D } from 'mymodule';
       (string_fragment))))
 
 =======================================
+Type-only star exports
+=======================================
+
+export type * from './x.js';
+export type * as ns from './x.js';
+
+---
+
+(program
+  (export_statement
+    (string
+      (string_fragment)))
+  (export_statement
+    (namespace_export
+      (identifier))
+    (string
+      (string_fragment))))
+
+=======================================
+Type-only star exports in TSX
+:language(tsx)
+=======================================
+
+export type * from './x.js';
+export type * as ns from './x.js';
+
+---
+
+(program
+  (export_statement
+    (string
+      (string_fragment)))
+  (export_statement
+    (namespace_export
+      (identifier))
+    (string
+      (string_fragment))))
+
+=======================================
 Flow Export Types
 =======================================
 
