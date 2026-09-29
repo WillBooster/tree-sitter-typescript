@@ -2195,6 +2195,91 @@ type Foo = import('node:fs').ReadStream & {
           (formal_parameters))))))
 
 =========================
+Import types with type arguments
+=========================
+
+type P = import('x').Props<'a'>;
+let v: import('x').a.B<C>[];
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))
+      (type_arguments
+        (literal_type
+          (string
+            (string_fragment))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (array_type
+          (generic_type
+            (member_expression
+              (member_expression
+                (call_expression
+                  (import)
+                  (arguments
+                    (string
+                      (string_fragment))))
+                (property_identifier))
+              (property_identifier))
+            (type_arguments
+              (type_identifier))))))))
+
+=========================
+Import types with type arguments in TSX
+:language(tsx)
+=========================
+
+type P = import('x').Props<'a'>;
+let v: import('x').a.B<C>[];
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))
+      (type_arguments
+        (literal_type
+          (string
+            (string_fragment))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (array_type
+          (generic_type
+            (member_expression
+              (member_expression
+                (call_expression
+                  (import)
+                  (arguments
+                    (string
+                      (string_fragment))))
+                (property_identifier))
+              (property_identifier))
+            (type_arguments
+              (type_identifier))))))))
+
+=========================
 Import assert
 =========================
 
