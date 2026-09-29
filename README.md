@@ -1,9 +1,11 @@
 # @willbooster/tree-sitter-typescript
 
+[![npm version](https://img.shields.io/npm/v/@willbooster/tree-sitter-typescript.svg)](https://www.npmjs.com/package/@willbooster/tree-sitter-typescript)
+[![license](https://img.shields.io/npm/l/@willbooster/tree-sitter-typescript.svg)](https://www.npmjs.com/package/@willbooster/tree-sitter-typescript)
 [![Test](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml)
 [![Test rust](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![wbfy](https://img.shields.io/badge/wbfy-20.24.0-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
+[![wbfy](https://img.shields.io/badge/wbfy-20.26.0-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
 [![crates.io](https://img.shields.io/crates/v/willbooster-tree-sitter-typescript.svg)](https://crates.io/crates/willbooster-tree-sitter-typescript)
 
 TypeScript and TSX grammars for [tree-sitter](https://github.com/tree-sitter/tree-sitter), forked from
@@ -20,17 +22,46 @@ so this package defines two grammars: `typescript` in `typescript/` and `tsx` in
 ## Usage
 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
-[web-tree-sitter](https://www.npmjs.com/package/web-tree-sitter):
+[@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
+Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
+for `.tsx` files.
+
+In Node.js and Bun:
 
 ```js
 import { fileURLToPath } from 'node:url';
-import { Language, Parser } from 'web-tree-sitter';
+import { Language, Parser } from '@willbooster/web-tree-sitter';
 
 await Parser.init();
 const parser = new Parser();
 const wasmPath = fileURLToPath(import.meta.resolve('@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm'));
 parser.setLanguage(await Language.load(wasmPath));
 const tree = parser.parse('const x: number = 1;\n');
+```
+
+In browsers, load the `.wasm` files by URL. With Vite:
+
+```js
+import { Language, Parser } from '@willbooster/web-tree-sitter';
+import runtimeUrl from '@willbooster/web-tree-sitter/web-tree-sitter.wasm?url';
+import tsxUrl from '@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url';
+
+await Parser.init({ locateFile: () => runtimeUrl });
+const parser = new Parser();
+parser.setLanguage(await Language.load(tsxUrl));
+```
+
+In Cloudflare Workers, which do not allow compiling Wasm at run time, import the `.wasm` files as modules (with or
+without Node.js compatibility):
+
+```js
+import { Language, Parser } from '@willbooster/web-tree-sitter';
+import runtime from '@willbooster/web-tree-sitter/web-tree-sitter.wasm';
+import typescript from '@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm';
+
+await Parser.init({ wasmModule: runtime });
+const parser = new Parser();
+parser.setLanguage(await Language.load(typescript));
 ```
 
 The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`.
@@ -57,13 +88,15 @@ parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?;
 ```sh
 mise install
 bun install --frozen-lockfile
+bun run test/ci-setup
 bun run build/ci
 bun run test
 script/parse-examples
 cargo test
 ```
 
-`bun run build/ci` regenerates `typescript/src/` and `tsx/src/` and builds both Wasm files. `bun run test` runs:
+`bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
+`tsx/src/` and builds both Wasm files. `bun run test` runs:
 
 - the corpus in `test/corpus`, with the native build and with the Wasm build (the first run downloads the WASI SDK).
   Cases run with the `typescript` grammar unless they carry `:language(tsx)`;
@@ -77,7 +110,10 @@ cargo test
   rewrites it; review its diff before committing;
 - a performance check (`test/unit/performance.test.ts`) that recovering from an error on each of 10,000 lines takes
   linear time with each grammar, since consumers parse files while they are being edited. It loads the Wasm builds
-  through web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers.
+  through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers;
+- checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
+  (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
+  (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`).
 
 CI also runs these tests on Linux arm64 and macOS, where the Rust binding compiles the parsers natively, and fuzzes
 both parsers with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).
