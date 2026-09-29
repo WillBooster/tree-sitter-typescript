@@ -163,6 +163,16 @@ module.exports = function defineGrammar(dialect) {
               field('arguments', $.arguments)
             )
           ),
+          // A tag with type arguments is parsed like a generic call. Optional type arguments in the `template_call`
+          // alternative below would make the parser commit to a tagged template at the `<` of `f<T>(x)`.
+          prec(
+            'call',
+            seq(
+              field('function', $.expression),
+              field('type_arguments', $.type_arguments),
+              field('arguments', $.template_string)
+            )
+          ),
           prec(
             'template_call',
             seq(
