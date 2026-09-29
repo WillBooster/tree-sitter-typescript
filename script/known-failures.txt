@@ -49,4 +49,3 @@ examples/vscode/src/vs/sessions/electron-browser/sessions.ts
 examples/vscode/src/vs/workbench/contrib/chat/test/common/promptSyntax/hookSchema.test.ts
 examples/vscode/src/vs/workbench/contrib/issue/browser/issueFormService.ts
 examples/vscode/src/vs/workbench/contrib/terminal/test/browser/terminalProfileService.integrationTest.ts
-examples/vscode/src/vs/workbench/contrib/terminalContrib/voice/browser/terminalVoice.ts

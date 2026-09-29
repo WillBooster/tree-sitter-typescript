@@ -1565,6 +1565,121 @@ type t = [a: A, b?: B, ...c: C[]]
             (type_identifier)))))))
 
 ==================================
+Tuple labels that are type keywords
+==================================
+
+type A = [object: object, message?: string, ...args: unknown[]];
+type B = [string: string, this?: this, ...readonly: readonly X[]];
+type C = [number?, ...string[], keyof T];
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (this_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (readonly_type
+            (array_type
+              (type_identifier)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (optional_type
+        (predefined_type))
+      (rest_type
+        (array_type
+          (predefined_type)))
+      (index_type_query
+        (type_identifier)))))
+
+==================================
+Tuple labels that are type keywords in TSX
+:language(tsx)
+==================================
+
+type A = [object: object, message?: string, ...args: unknown[]];
+type B = [string: string, this?: this, ...readonly: readonly X[]];
+type C = [number?, ...string[], keyof T];
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (this_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (readonly_type
+            (array_type
+              (type_identifier)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (optional_type
+        (predefined_type))
+      (rest_type
+        (array_type
+          (predefined_type)))
+      (index_type_query
+        (type_identifier)))))
+
+==================================
 Conditional types
 ==================================
 
