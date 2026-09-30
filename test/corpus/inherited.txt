@@ -162,6 +162,43 @@ h(() => {}
         (number)))))
 
 ============================================================
+Arrow functions with a block body before a comment with a line break
+============================================================
+
+const f = () => {} /* a
+*/ (5)();
+
+const g = () => {} /* b */ (6)();
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (statement_block))))
+  (comment)
+  (expression_statement
+    (call_expression
+      (parenthesized_expression
+        (number))
+      (arguments)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (call_expression
+          (arrow_function
+            (formal_parameters)
+            (statement_block))
+          (comment)
+          (arguments
+            (number)))
+        (arguments)))))
+
+============================================================
 Invalid escape sequences in tagged templates
 ============================================================
 

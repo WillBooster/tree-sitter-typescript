@@ -116,6 +116,46 @@ static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comme
     return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
 }
 
+static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
+
+typedef enum {
+    NO_COMMENT,
+    COMMENT,
+    COMMENT_WITH_LINE_TERMINATOR,
+} CommentResult;
+
+// Skips the comment that the `/` at the lookahead starts, if any. A line comment ends before its line terminator, which
+// the caller then sees; a block comment reports whether it contains one, since it then separates lines as well.
+static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
+    skip(lexer);
+    if (lexer->lookahead == '/') {
+        while (lexer->lookahead != 0 && !is_line_terminator(lexer->lookahead)) {
+            skip(lexer);
+        }
+        *scanned_comment = true;
+        return COMMENT;
+    }
+    if (lexer->lookahead != '*') {
+        return NO_COMMENT;
+    }
+    skip(lexer);
+    bool saw_line_terminator = false;
+    while (lexer->lookahead != 0) {
+        if (lexer->lookahead == '*') {
+            skip(lexer);
+            if (lexer->lookahead == '/') {
+                skip(lexer);
+                break;
+            }
+        } else {
+            saw_line_terminator |= is_line_terminator(lexer->lookahead);
+            skip(lexer);
+        }
+    }
+    *scanned_comment = true;
+    return saw_line_terminator ? COMMENT_WITH_LINE_TERMINATOR : COMMENT;
+}
+
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
                                      bool *scanned_comment) {
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
@@ -137,6 +177,23 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 return valid_symbols[LOGICAL_OR]; // Don't return false if we're in a ternary by checking if || is valid
             }
             return true;
+        }
+        if (after_block_arrow) {
+            // The line terminator after an arrow function's block body may also be in a comment or be U+2028 or U+2029,
+            // as the JavaScript grammar's scanner detects.
+            if (lexer->lookahead == '/') {
+                CommentResult result = skip_comment(lexer, scanned_comment);
+                if (result == NO_COMMENT) {
+                    return false;
+                }
+                if (result == COMMENT_WITH_LINE_TERMINATOR) {
+                    return ends_statement_after_block_arrow(lexer, scanned_comment);
+                }
+                continue;
+            }
+            if (lexer->lookahead == 0x2028 || lexer->lookahead == 0x2029) {
+                break;
+            }
         }
         if (!iswspace(lexer->lookahead)) {
             return false;
