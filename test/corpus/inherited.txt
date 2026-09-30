@@ -628,13 +628,17 @@ x = using as T;
         (type_identifier)))))
 
 ============================================================
-For-of heads with contextual keywords as binding names
+Contextual keywords as binding names in declarations and for heads
 ============================================================
 
 for (using as of items) {}
 for (await using satisfies of items) {}
 for (let as of items) {}
 for (using [a] of items) {}
+for (const as = 1; ; ) {}
+for (var satisfies of items) {}
+let as = 1;
+const satisfies = 2;
 
 ---
 
@@ -656,4 +660,23 @@ for (using [a] of items) {}
       (identifier)
       (identifier))
     (identifier)
-    (statement_block)))
+    (statement_block))
+  (for_statement
+    (lexical_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number))))

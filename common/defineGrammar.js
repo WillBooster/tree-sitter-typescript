@@ -360,7 +360,7 @@ module.exports = function defineGrammar(dialect) {
         seq(field('name', $._binding_identifier), field('type', optional($.type_annotation)), optional($._initializer)),
 
       // After a declaration keyword that may also be an identifier (`let`, `using`), the lexer reads `of`, `as`, and
-      // `satisfies` as the keywords that could follow that identifier.
+      // `satisfies` as the keywords that could follow that identifier, and every declaration shares that lexer state.
       _binding_identifier: ($) => choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier)),
 
       _for_header: ($) =>
@@ -370,7 +370,7 @@ module.exports = function defineGrammar(dialect) {
             field('left', choice($._lhs_expression, $.parenthesized_expression)),
             seq(
               field('kind', 'var'),
-              field('left', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
+              field('left', choice($._binding_identifier, $._destructuring_pattern)),
               optional($._initializer)
             ),
             seq(
@@ -389,7 +389,7 @@ module.exports = function defineGrammar(dialect) {
       variable_declarator: ($) =>
         choice(
           seq(
-            field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
+            field('name', choice($._binding_identifier, $._destructuring_pattern)),
             field('type', optional($.type_annotation)),
             optional($._initializer)
           ),
