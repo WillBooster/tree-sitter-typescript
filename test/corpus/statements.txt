@@ -146,3 +146,47 @@ Unicode spaces in JSX text
       (jsx_text)
       (jsx_closing_element
         (identifier)))))
+
+============================================================
+Same-line comments after an arrow function's block body
+============================================================
+
+x = () => {} /* c */
+b
+const f = () => {} // c
+(5)();
+g(() => {} /* c */, 1);
+
+---
+
+(program
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (statement_block))))
+  (comment)
+  (expression_statement
+    (identifier))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (statement_block))))
+  (comment)
+  (expression_statement
+    (call_expression
+      (parenthesized_expression
+        (number))
+      (arguments)))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (arrow_function
+          (formal_parameters)
+          (statement_block))
+        (comment)
+        (number)))))

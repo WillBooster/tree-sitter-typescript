@@ -172,12 +172,14 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             return true;
         }
         if (lexer->lookahead == '/') {
-            // A comment on the same line stays in the statement: the scanner runs again after it. A block comment
-            // containing a line terminator must be decided here, since the scanner cannot see that line break after it.
-            if (skip_comment(lexer, scanned_comment) != COMMENT_WITH_LINE_TERMINATOR) {
+            // A comment on the same line stays in the statement: the scanner runs again after it. The exceptions are a
+            // block comment containing a line terminator, since the scanner cannot see that line break after it, and a
+            // comment after an arrow function's block body, which would otherwise become part of the arrow function.
+            CommentResult result = skip_comment(lexer, scanned_comment);
+            if (result == NO_COMMENT || (result == COMMENT && !after_block_arrow)) {
                 return false;
             }
-            at_line_break = true;
+            at_line_break = result == COMMENT_WITH_LINE_TERMINATOR;
         } else if (is_whitespace(lexer->lookahead)) {
             at_line_break = is_line_terminator(lexer->lookahead);
             skip(lexer);
