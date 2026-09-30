@@ -1,5 +1,5 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
-const JavaScript = require('tree-sitter-javascript/grammar');
+const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
@@ -174,7 +174,7 @@ module.exports = function defineGrammar(dialect) {
             'member',
             seq(
               field('function', $.primary_expression),
-              '?.',
+              field('optional_chain', $.optional_chain),
               field('type_arguments', optional($.type_arguments)),
               field('arguments', $.arguments)
             )
@@ -195,12 +195,7 @@ module.exports = function defineGrammar(dialect) {
       assignment_expression: ($) =>
         prec.right(
           'assign',
-          seq(
-            optional('using'),
-            field('left', choice($.parenthesized_expression, $._lhs_expression)),
-            '=',
-            field('right', $.expression)
-          )
+          seq(field('left', choice($.parenthesized_expression, $._lhs_expression)), '=', field('right', $.expression))
         ),
 
       _augmented_assignment_lhs: ($, previous) => choice(previous, $.non_null_expression),
@@ -298,7 +293,7 @@ module.exports = function defineGrammar(dialect) {
       variable_declarator: ($) =>
         choice(
           seq(
-            field('name', choice($.identifier, $._destructuring_pattern)),
+            field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
             field('type', optional($.type_annotation)),
             optional($._initializer)
           ),
@@ -364,16 +359,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      decorator_parenthesized_expression: ($) =>
-        seq(
-          '(',
-          choice(
-            $.identifier,
-            alias($.decorator_member_expression, $.member_expression),
-            alias($.decorator_call_expression, $.call_expression)
-          ),
-          ')'
-        ),
+      decorator_parenthesized_expression: ($) => seq('(', $.expression, ')'),
 
       class_body: ($) =>
         seq(
@@ -598,7 +584,10 @@ module.exports = function defineGrammar(dialect) {
             )
           ),
           '.',
-          field('property', choice($.private_property_identifier, alias($.identifier, $.property_identifier)))
+          field(
+            'property',
+            choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+          )
         ),
       _type_query_call_expression_in_type_annotation: ($) =>
         seq(
@@ -747,8 +736,11 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_call_expression, $.call_expression)
             )
           ),
-          choice('.', '?.'),
-          field('property', choice($.private_property_identifier, alias($.identifier, $.property_identifier)))
+          choice('.', field('optional_chain', $.optional_chain)),
+          field(
+            'property',
+            choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+          )
         ),
       _type_query_subscript_expression: ($) =>
         seq(
@@ -762,7 +754,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_call_expression, $.call_expression)
             )
           ),
-          optional('?.'),
+          optional(field('optional_chain', $.optional_chain)),
           '[',
           field('index', choice($.predefined_type, $.string, $.number)),
           ']'
