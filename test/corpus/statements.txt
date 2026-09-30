@@ -83,12 +83,24 @@ c
 instanceof$
 f
 ing
+h
+ini
+j
+in\u0041k
 d
 in e
 
 ---
 
 (program
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
   (expression_statement
     (identifier))
   (expression_statement

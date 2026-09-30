@@ -77,11 +77,12 @@ static inline bool is_whitespace(int32_t c) {
            c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x2060 || c == 0x3000 || c == 0xFEFF;
 }
 
-// Counts every non-ASCII character other than whitespace, which suffices to tell `in` and `instanceof` from the
-// identifiers they start.
+// Counts the characters the grammar's identifiers may continue with (a backslash starts a `\u` escape), with every
+// character from U+007F on other than whitespace, which suffices to tell `in` and `instanceof` from the identifiers they
+// start.
 static inline bool is_identifier_part(int32_t c) {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' ||
-           (c >= 0x80 && !is_whitespace(c));
+           c == '\\' || (c >= 0x7F && !is_whitespace(c));
 }
 
 typedef enum {
