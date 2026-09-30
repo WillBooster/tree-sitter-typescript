@@ -222,7 +222,7 @@ Reserved words at the end of qualified names
 
 type T = A.default;
 let x: A.B.delete<C>;
-import D = A.export;
+namespace N.default {}
 
 ---
 
@@ -244,11 +244,12 @@ import D = A.export;
             (type_identifier))
           (type_arguments
             (type_identifier))))))
-  (import_alias
-    (identifier)
-    (nested_identifier
-      (identifier)
-      (property_identifier))))
+  (expression_statement
+    (internal_module
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (statement_block))))
 
 ============================================================
 Using declarations
