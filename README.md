@@ -103,9 +103,10 @@ cargo test
 
 - the corpus in `test/corpus`, with the native build and with the Wasm build (the first run downloads the WASI SDK).
   Cases run with the `typescript` grammar unless they carry `:language(tsx)`;
-- an incremental-parsing check (`test/unit/incremental.test.ts`): `tree-sitter fuzz` edits each corpus case of the
-  `typescript` grammar at random, reparses it, undoes the edits, and reparses again. `TREE_SITTER_SEED`,
-  `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
+- an incremental-parsing check (`test/unit/incremental.test.ts`): `script/fuzz-corpus` runs `tree-sitter fuzz`, which
+  edits each corpus case of each grammar at random, reparses it, undoes the edits, and reparses again, on the
+  WillBooster/tree-sitter runtime version locked in `Cargo.lock` (the first run builds that CLI with `cargo`).
+  `TREE_SITTER_SEED`, `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
 - a check that the real-world files in `examples/`, the checked-in ones and those of the cloned repositories, fail to
   parse exactly as listed in `script/known-failures.txt`. `.ts` files are parsed with the `typescript` grammar and
   `.tsx` files with the `tsx` grammar. The first run clones the repositories. The example repositories are pinned to
