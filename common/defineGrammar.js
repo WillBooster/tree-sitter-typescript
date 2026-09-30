@@ -319,6 +319,32 @@ module.exports = function defineGrammar(dialect) {
       // the call; TypeScript and V8 read the operator (WillBooster/tree-sitter-javascript#23).
       await_expression: ($) => prec.dynamic(2, prec('unary_void', seq('await', $.expression))),
 
+      // The JavaScript grammar's for header takes no `using` declaration, although ECMAScript allows one.
+      for_statement: ($) =>
+        seq(
+          'for',
+          '(',
+          choice(
+            field(
+              'initializer',
+              choice(
+                alias($.for_lexical_declaration, $.lexical_declaration),
+                alias($.for_variable_declaration, $.variable_declaration),
+                alias($._for_using_declaration, $.using_declaration)
+              )
+            ),
+            seq(field('initializer', $._expressions), ';'),
+            field('initializer', $.empty_statement)
+          ),
+          field('condition', choice(seq($._expressions, ';'), $.empty_statement)),
+          field('increment', optional($._expressions)),
+          ')',
+          field('body', $.statement)
+        ),
+
+      _for_using_declaration: ($) =>
+        seq(field('kind', choice('using', seq('await', 'using'))), commaSep1($.variable_declarator), ';'),
+
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
       variable_declarator: ($) =>
@@ -391,6 +417,18 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       decorator_parenthesized_expression: ($) => seq('(', $._expressions, ')'),
+
+      // A decorator's member name may be any identifier name, as a member expression's may, which the JavaScript
+      // grammar's reserved words reject.
+      decorator_member_expression: ($) =>
+        prec(
+          'member',
+          seq(
+            field('object', choice($.identifier, alias($.decorator_member_expression, $.member_expression))),
+            '.',
+            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+          )
+        ),
 
       class_body: ($) =>
         seq(

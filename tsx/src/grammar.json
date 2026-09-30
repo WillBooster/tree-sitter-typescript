@@ -1341,6 +1341,15 @@
                     },
                     "named": true,
                     "value": "variable_declaration"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_for_using_declaration"
+                    },
+                    "named": true,
+                    "value": "using_declaration"
                   }
                 ]
               }
@@ -6917,13 +6926,17 @@
             "type": "FIELD",
             "name": "property",
             "content": {
-              "type": "ALIAS",
+              "type": "RESERVED",
               "content": {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "named": true,
+                "value": "property_identifier"
               },
-              "named": true,
-              "value": "property_identifier"
+              "context_name": "properties"
             }
           }
         ]
@@ -8005,6 +8018,66 @@
           },
           "named": true,
           "value": "identifier"
+        }
+      ]
+    },
+    "_for_using_declaration": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "FIELD",
+          "name": "kind",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "using"
+              },
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "await"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "using"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "variable_declarator"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": ","
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "variable_declarator"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ";"
         }
       ]
     },

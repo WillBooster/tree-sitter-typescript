@@ -2325,6 +2325,10 @@
             "named": true
           },
           {
+            "type": "using_declaration",
+            "named": true
+          },
+          {
             "type": "variable_declaration",
             "named": true
           }

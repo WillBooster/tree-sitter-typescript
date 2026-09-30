@@ -348,6 +348,34 @@ Sequence expressions in parenthesized decorators
     (class_body)))
 
 ============================================================
+Reserved words as decorator member names
+============================================================
+
+@a.delete() class C {
+  @a.default x = 1;
+}
+
+---
+
+(program
+  (class_declaration
+    (decorator
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (arguments)))
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (decorator
+          (member_expression
+            (identifier)
+            (property_identifier)))
+        (property_identifier)
+        (number)))))
+
+============================================================
 Reserved words as module export names
 ============================================================
 
@@ -444,6 +472,8 @@ Using declarations
 
 using r = open();
 await using s = open();
+for (using t = open(); ; ) {}
+for (await using u = open(), v = open(); ; ) {}
 
 ---
 
@@ -459,5 +489,28 @@ await using s = open();
       (identifier)
       (call_expression
         (identifier)
-        (arguments)))))
+        (arguments))))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments))))
+    (empty_statement)
+    (statement_block))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments)))
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments))))
+    (empty_statement)
+    (statement_block)))
 
