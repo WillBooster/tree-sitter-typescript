@@ -25,6 +25,34 @@ const a = <p title="A & B">A & B &amp; C</p>;
           (identifier))))))
 
 ============================================================
+Reserved words as JSX attribute names
+:language(tsx)
+============================================================
+
+const a = <label class="x" for="y" data-z="1" />;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier)
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))))))
+
+============================================================
 Arrow functions with a block body before a line starting with ( or [
 ============================================================
 

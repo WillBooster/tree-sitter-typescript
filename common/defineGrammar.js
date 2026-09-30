@@ -252,6 +252,15 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      // Any identifier name may name a JSX attribute, such as `class` in `<div class="x" />`, which the JavaScript
+      // grammar's reserved words reject (WillBooster/tree-sitter-javascript#25).
+      _jsx_attribute_name: ($) =>
+        choice(
+          alias($.jsx_identifier, $.property_identifier),
+          alias(reserved('properties', $.identifier), $.property_identifier),
+          $.jsx_namespace_name
+        ),
+
       // This rule is only referenced by expression when the dialect is 'tsx'
       jsx_opening_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '>')),
 
