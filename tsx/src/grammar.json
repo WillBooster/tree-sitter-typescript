@@ -8112,8 +8112,31 @@
           "type": "FIELD",
           "name": "name",
           "content": {
-            "type": "SYMBOL",
-            "name": "identifier"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "as"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "satisfies"
+                    }
+                  ]
+                },
+                "named": true,
+                "value": "identifier"
+              }
+            ]
           }
         },
         {
@@ -11897,6 +11920,14 @@
     [
       "class_static_block",
       "_property_name"
+    ],
+    [
+      "primary_expression",
+      "using_declaration"
+    ],
+    [
+      "primary_expression",
+      "_for_using_declaration"
     ],
     [
       "call_expression",

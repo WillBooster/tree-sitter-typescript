@@ -579,3 +579,37 @@ using y: T = open();
       (call_expression
         (identifier)
         (arguments)))))
+
+============================================================
+Using declarations of variables named as or satisfies
+============================================================
+
+using as = 1;
+using satisfies = 2;
+for (using as = 1; ; ) {}
+x = using as T;
+
+---
+
+(program
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (as_expression
+        (identifier)
+        (type_identifier)))))

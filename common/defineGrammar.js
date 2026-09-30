@@ -58,6 +58,8 @@ module.exports = function defineGrammar(dialect) {
 
     conflicts: ($, previous) => [
       ...previous,
+      [$.primary_expression, $.using_declaration],
+      [$.primary_expression, $._for_using_declaration],
       [$.call_expression, $.instantiation_expression, $.binary_expression],
       [$.call_expression, $.instantiation_expression, $.binary_expression, $.unary_expression],
       [$.call_expression, $.instantiation_expression, $.binary_expression, $.update_expression],
@@ -358,8 +360,13 @@ module.exports = function defineGrammar(dialect) {
           ';'
         ),
 
+      // After `using`, the lexer reads `as` and `satisfies` as the operators that could follow an identifier `using`.
       _using_declarator: ($) =>
-        seq(field('name', $.identifier), field('type', optional($.type_annotation)), optional($._initializer)),
+        seq(
+          field('name', choice($.identifier, alias(choice('as', 'satisfies'), $.identifier))),
+          field('type', optional($.type_annotation)),
+          optional($._initializer)
+        ),
 
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
