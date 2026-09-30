@@ -81,12 +81,18 @@ a
 in_b
 c
 instanceof$
+f
+ing
 d
 in e
 
 ---
 
 (program
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
   (expression_statement
     (identifier))
   (expression_statement

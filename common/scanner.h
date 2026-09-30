@@ -70,10 +70,10 @@ static bool scan_template_chars(TSLexer *lexer) {
 
 static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
 
-// The characters the grammar's extras skip as whitespace, which iswspace reports differently depending on the C library
-// and locale.
+// The characters the grammar's extras skip as whitespace (see `extras_character_set_1` in the generated parser), which
+// iswspace reports differently depending on the C library and locale.
 static inline bool is_whitespace(int32_t c) {
-    return (c >= '\t' && c <= '\r') || c == ' ' || c == 0x85 || c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200B) ||
+    return (c >= '\t' && c <= '\r') || c == ' ' || c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200B) ||
            c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x2060 || c == 0x3000 || c == 0xFEFF;
 }
 
