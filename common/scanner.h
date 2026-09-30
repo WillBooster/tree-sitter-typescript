@@ -70,52 +70,18 @@ static bool scan_template_chars(TSLexer *lexer) {
 
 static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
 
-static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) {
-    for (;;) {
-        while (iswspace(lexer->lookahead) || is_line_terminator(lexer->lookahead)) {
-            skip(lexer);
-        }
-
-        if (lexer->lookahead == '/') {
-            skip(lexer);
-
-            if (lexer->lookahead == '/') {
-                skip(lexer);
-                while (lexer->lookahead != 0 && !is_line_terminator(lexer->lookahead)) {
-                    skip(lexer);
-                }
-                *scanned_comment = true;
-            } else if (lexer->lookahead == '*') {
-                skip(lexer);
-                while (lexer->lookahead != 0) {
-                    if (lexer->lookahead == '*') {
-                        skip(lexer);
-                        if (lexer->lookahead == '/') {
-                            skip(lexer);
-                            break;
-                        }
-                    } else {
-                        skip(lexer);
-                    }
-                }
-            } else {
-                return false;
-            }
-        } else {
-            return true;
-        }
-    }
+// The characters the grammar's extras skip as whitespace, which iswspace reports differently depending on the C library
+// and locale.
+static inline bool is_whitespace(int32_t c) {
+    return (c >= '\t' && c <= '\r') || c == ' ' || c == 0x85 || c == 0xA0 || c == 0x1680 || (c >= 0x2000 && c <= 0x200B) ||
+           c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x2060 || c == 0x3000 || c == 0xFEFF;
 }
 
-// Called after an arrow function's block body and a line break: such a function cannot be continued by a member
-// access, call, or operator, so the statement ends unless a `,` continues the list, a `;` ends it explicitly, or a `?`
-// continues an enclosing conditional expression (`a ? b : () => {}` then `? c : d`, which V8 accepts).
-static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comment) {
-    // A `/` that starts no comment starts a regex.
-    if (!scan_whitespace_and_comments(lexer, scanned_comment)) {
-        return true;
-    }
-    return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
+// Counts every non-ASCII character other than whitespace, which suffices to tell `in` and `instanceof` from the
+// identifiers they start.
+static inline bool is_identifier_part(int32_t c) {
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' ||
+           (c >= 0x80 && !is_whitespace(c));
 }
 
 typedef enum {
@@ -156,13 +122,40 @@ static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
     return saw_line_terminator ? COMMENT_WITH_LINE_TERMINATOR : COMMENT;
 }
 
+// Returns false at a `/` that starts no comment.
+static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) {
+    for (;;) {
+        while (is_whitespace(lexer->lookahead)) {
+            skip(lexer);
+        }
+        if (lexer->lookahead != '/') {
+            return true;
+        }
+        if (skip_comment(lexer, scanned_comment) == NO_COMMENT) {
+            return false;
+        }
+    }
+}
+
+// Called after an arrow function's block body and a line break: such a function cannot be continued by a member
+// access, call, or operator, so the statement ends unless a `,` continues the list, a `;` ends it explicitly, or a `?`
+// continues an enclosing conditional expression (`a ? b : () => {}` then `? c : d`, which V8 accepts).
+static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comment) {
+    // A `/` that starts no comment starts a regex.
+    if (!scan_whitespace_and_comments(lexer, scanned_comment)) {
+        return true;
+    }
+    return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
+}
+
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
                                      bool *scanned_comment) {
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
     lexer->mark_end(lexer);
 
-    for (;;) {
-        if (lexer->lookahead == 0) {
+    // A line terminator, also one inside a block comment, separates statements.
+    for (bool at_line_break = false; !at_line_break;) {
+        if (lexer->lookahead == 0 || lexer->is_at_included_range_start(lexer)) {
             return true;
         }
         if (lexer->lookahead == '}') {
@@ -172,39 +165,26 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             // Therefore, disable automatic semicolons when followed by typing
             do {
                 skip(lexer);
-            } while (iswspace(lexer->lookahead));
+            } while (is_whitespace(lexer->lookahead));
             if (lexer->lookahead == ':') {
                 return valid_symbols[LOGICAL_OR]; // Don't return false if we're in a ternary by checking if || is valid
             }
             return true;
         }
-        if (after_block_arrow) {
-            // The line terminator after an arrow function's block body may also be in a comment or be a lone CR, U+2028,
-            // or U+2029.
-            if (lexer->lookahead == '/') {
-                CommentResult result = skip_comment(lexer, scanned_comment);
-                if (result == NO_COMMENT) {
-                    return false;
-                }
-                if (result == COMMENT_WITH_LINE_TERMINATOR) {
-                    return ends_statement_after_block_arrow(lexer, scanned_comment);
-                }
-                continue;
+        if (lexer->lookahead == '/') {
+            // A comment on the same line stays in the statement: the scanner runs again after it. A block comment
+            // containing a line terminator must be decided here, since the scanner cannot see that line break after it.
+            if (skip_comment(lexer, scanned_comment) != COMMENT_WITH_LINE_TERMINATOR) {
+                return false;
             }
-            if (is_line_terminator(lexer->lookahead)) {
-                break;
-            }
-        }
-        if (!iswspace(lexer->lookahead)) {
+            at_line_break = true;
+        } else if (is_whitespace(lexer->lookahead)) {
+            at_line_break = is_line_terminator(lexer->lookahead);
+            skip(lexer);
+        } else {
             return false;
         }
-        if (lexer->lookahead == '\n') {
-            break;
-        }
-        skip(lexer);
     }
-
-    skip(lexer);
 
     if (after_block_arrow) {
         return ends_statement_after_block_arrow(lexer, scanned_comment);
@@ -217,7 +197,6 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
     switch (lexer->lookahead) {
         case '`':
         case ',':
-        case '.':
         case ';':
         case '*':
         case '%':
@@ -231,6 +210,11 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
         case '/':
         case ':':
             return false;
+
+        // Insert a semicolon before a decimal literal such as `.5`, but not before a member access.
+        case '.':
+            skip(lexer);
+            return iswdigit(lexer->lookahead);
 
         case '{':
             if (valid_symbols[FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON]) {
@@ -271,7 +255,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             }
             skip(lexer);
 
-            if (!iswalpha(lexer->lookahead)) {
+            if (!is_identifier_part(lexer->lookahead)) {
                 return false;
             }
 
@@ -282,7 +266,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 skip(lexer);
             }
 
-            if (!iswalpha(lexer->lookahead)) {
+            if (!is_identifier_part(lexer->lookahead)) {
                 return false;
             }
             break;
@@ -293,7 +277,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
 
 static bool scan_ternary_qmark(TSLexer *lexer) {
     for (;;) {
-        if (!iswspace(lexer->lookahead)) {
+        if (!is_whitespace(lexer->lookahead)) {
             break;
         }
         skip(lexer);
@@ -313,7 +297,7 @@ static bool scan_ternary_qmark(TSLexer *lexer) {
         /* TypeScript optional arguments contain the ?: sequence, possibly
            with whitespace. */
         for (;;) {
-            if (!iswspace(lexer->lookahead)) {
+            if (!is_whitespace(lexer->lookahead)) {
                 break;
             }
             advance(lexer);
@@ -336,7 +320,7 @@ static bool scan_ternary_qmark(TSLexer *lexer) {
 }
 
 static bool scan_closing_comment(TSLexer *lexer) {
-    while (iswspace(lexer->lookahead) || lexer->lookahead == 0x2028 || lexer->lookahead == 0x2029) {
+    while (is_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
 
@@ -433,7 +417,9 @@ static bool scan_jsx_text(TSLexer *lexer) {
                 break;
         }
 
-        bool is_wspace = iswspace(lexer->lookahead);
+        // Only ASCII whitespace counts, as with iswspace in the C locale, whereas the C library of the Wasm build also
+        // reports Unicode spaces.
+        bool is_wspace = (lexer->lookahead >= '\t' && lexer->lookahead <= '\r') || lexer->lookahead == ' ';
         if (lexer->lookahead == '\n') {
             at_newline = true;
         } else {

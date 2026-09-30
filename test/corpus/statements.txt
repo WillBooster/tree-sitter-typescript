@@ -1,0 +1,148 @@
+============================================================
+Automatic semicolons at line breaks in block comments
+============================================================
+
+a /*
+*/ b
+let x = 1 /* one
+ */ let y = 2
+c /* same line */
++ d
+
+---
+
+(program
+  (expression_statement
+    (identifier))
+  (comment)
+  (expression_statement
+    (identifier))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (comment)
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (comment)
+      (identifier))))
+
+============================================================
+Automatic semicolons at U+2028 and U+2029
+============================================================
+
+a b
+c // comment d
+
+---
+
+(program
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier)
+    (comment))
+  (expression_statement
+    (identifier)))
+
+============================================================
+Automatic semicolons before decimal literals
+============================================================
+
+a
+.5
+b
+.c
+
+---
+
+(program
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (number))
+  (expression_statement
+    (member_expression
+      (identifier)
+      (property_identifier))))
+
+============================================================
+Automatic semicolons before identifiers starting with in
+============================================================
+
+a
+in_b
+c
+instanceof$
+d
+in e
+
+---
+
+(program
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (identifier))))
+
+============================================================
+Comments between a line break and a conditional operator
+============================================================
+
+a
+/* c */ ? b : d
+
+---
+
+(program
+  (expression_statement
+    (ternary_expression
+      (identifier)
+      (comment)
+      (identifier)
+      (identifier))))
+
+============================================================
+Unicode spaces in JSX text
+:language(tsx)
+============================================================
+
+<p>
+ 
+</p>;
+<p>
+ 
+</p>;
+
+---
+
+(program
+  (expression_statement
+    (jsx_element
+      (jsx_opening_element
+        (identifier))
+      (jsx_text)
+      (jsx_closing_element
+        (identifier))))
+  (expression_statement
+    (jsx_element
+      (jsx_opening_element
+        (identifier))
+      (jsx_text)
+      (jsx_closing_element
+        (identifier)))))
