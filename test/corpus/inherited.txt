@@ -581,11 +581,13 @@ using y: T = open();
         (arguments)))))
 
 ============================================================
-Using declarations of variables named as or satisfies
+Using declarations of variables named of, as, or satisfies
 ============================================================
 
+using of = 0;
 using as = 1;
 using satisfies = 2;
+for (using of = 0; ; ) {}
 for (using as = 1; ; ) {}
 x = using as T;
 
@@ -600,6 +602,17 @@ x = using as T;
     (variable_declarator
       (identifier)
       (number)))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
   (for_statement
     (using_declaration
       (variable_declarator

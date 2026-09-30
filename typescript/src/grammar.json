@@ -8125,6 +8125,10 @@
                   "members": [
                     {
                       "type": "STRING",
+                      "value": "of"
+                    },
+                    {
+                      "type": "STRING",
                       "value": "as"
                     },
                     {

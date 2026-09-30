@@ -360,10 +360,10 @@ module.exports = function defineGrammar(dialect) {
           ';'
         ),
 
-      // After `using`, the lexer reads `as` and `satisfies` as the operators that could follow an identifier `using`.
+      // After `using`, the lexer reads `of`, `as`, and `satisfies` as the keywords that could follow an identifier `using`.
       _using_declarator: ($) =>
         seq(
-          field('name', choice($.identifier, alias(choice('as', 'satisfies'), $.identifier))),
+          field('name', choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier))),
           field('type', optional($.type_annotation)),
           optional($._initializer)
         ),
