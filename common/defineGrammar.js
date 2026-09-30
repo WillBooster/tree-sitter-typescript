@@ -1,5 +1,5 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
-const JavaScript = require('tree-sitter-javascript/grammar');
+const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
@@ -188,7 +188,7 @@ module.exports = function defineGrammar(dialect) {
             'member',
             seq(
               field('function', $.primary_expression),
-              '?.',
+              field('optional_chain', $.optional_chain),
               field('type_arguments', optional($.type_arguments)),
               field('arguments', $.arguments)
             )
@@ -209,12 +209,7 @@ module.exports = function defineGrammar(dialect) {
       assignment_expression: ($) =>
         prec.right(
           'assign',
-          seq(
-            optional('using'),
-            field('left', choice($.parenthesized_expression, $._lhs_expression)),
-            '=',
-            field('right', $.expression)
-          )
+          seq(field('left', choice($.parenthesized_expression, $._lhs_expression)), '=', field('right', $.expression))
         ),
 
       _augmented_assignment_lhs: ($, previous) => choice(previous, $.non_null_expression),
@@ -257,6 +252,15 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      // Any identifier name may name a JSX attribute, such as `class` in `<div class="x" />`, which the JavaScript
+      // grammar's reserved words reject (WillBooster/tree-sitter-javascript#25).
+      _jsx_attribute_name: ($) =>
+        choice(
+          alias($.jsx_identifier, $.property_identifier),
+          alias(reserved('properties', $.identifier), $.property_identifier),
+          $.jsx_namespace_name
+        ),
+
       // This rule is only referenced by expression when the dialect is 'tsx'
       jsx_opening_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '>')),
 
@@ -264,6 +268,10 @@ module.exports = function defineGrammar(dialect) {
       jsx_self_closing_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '/>')),
 
       export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
+
+      // Any identifier name may be exported or imported. The JavaScript grammar rejects reserved words other than
+      // `default`, for which it leaves no node (WillBooster/tree-sitter-javascript#17 and #24).
+      _module_export_name: ($) => choice(reserved('properties', $.identifier), $.string),
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 
@@ -307,12 +315,42 @@ module.exports = function defineGrammar(dialect) {
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
         ),
 
+      // The JavaScript grammar leaves `await (x).y` ambiguous with a call of an identifier named `await`, and GLR keeps
+      // the call; TypeScript and V8 read the operator (WillBooster/tree-sitter-javascript#23).
+      await_expression: ($) => prec.dynamic(2, prec('unary_void', seq('await', $.expression))),
+
+      // The JavaScript grammar's for header takes no `using` declaration, although ECMAScript allows one.
+      for_statement: ($) =>
+        seq(
+          'for',
+          '(',
+          choice(
+            field(
+              'initializer',
+              choice(
+                alias($.for_lexical_declaration, $.lexical_declaration),
+                alias($.for_variable_declaration, $.variable_declaration),
+                alias($._for_using_declaration, $.using_declaration)
+              )
+            ),
+            seq(field('initializer', $._expressions), ';'),
+            field('initializer', $.empty_statement)
+          ),
+          field('condition', choice(seq($._expressions, ';'), $.empty_statement)),
+          field('increment', optional($._expressions)),
+          ')',
+          field('body', $.statement)
+        ),
+
+      _for_using_declaration: ($) =>
+        seq(field('kind', choice('using', seq('await', 'using'))), commaSep1($.variable_declarator), ';'),
+
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
       variable_declarator: ($) =>
         choice(
           seq(
-            field('name', choice($.identifier, $._destructuring_pattern)),
+            field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
             field('type', optional($.type_annotation)),
             optional($._initializer)
           ),
@@ -378,15 +416,18 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      decorator_parenthesized_expression: ($) =>
-        seq(
-          '(',
-          choice(
-            $.identifier,
-            alias($.decorator_member_expression, $.member_expression),
-            alias($.decorator_call_expression, $.call_expression)
-          ),
-          ')'
+      decorator_parenthesized_expression: ($) => seq('(', $._expressions, ')'),
+
+      // A decorator's member name may be any identifier name, as a member expression's may, which the JavaScript
+      // grammar's reserved words reject.
+      decorator_member_expression: ($) =>
+        prec(
+          'member',
+          seq(
+            field('object', choice($.identifier, alias($.decorator_member_expression, $.member_expression))),
+            '.',
+            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+          )
         ),
 
       class_body: ($) =>
@@ -523,7 +564,7 @@ module.exports = function defineGrammar(dialect) {
       _module: ($) =>
         prec.right(
           seq(
-            field('name', choice($.string, $.identifier, $.nested_identifier)),
+            field('name', choice($.string, reserved('properties', $.identifier), $.nested_identifier)),
             // On .d.ts files "declare module foo" desugars to "declare module foo {}",
             // hence why it is optional here
             field('body', optional($.statement_block))
@@ -531,6 +572,17 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       import_alias: ($) => seq('import', $.identifier, '=', choice($.identifier, $.nested_identifier), $._semicolon),
+
+      // A qualified name may end in any identifier name, as a member expression may.
+      nested_identifier: ($) =>
+        prec(
+          'member',
+          seq(
+            field('object', choice($.identifier, alias($.nested_identifier, $.member_expression))),
+            '.',
+            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+          )
+        ),
 
       nested_type_identifier: ($) =>
         prec(
@@ -612,7 +664,10 @@ module.exports = function defineGrammar(dialect) {
             )
           ),
           '.',
-          field('property', choice($.private_property_identifier, alias($.identifier, $.property_identifier)))
+          field(
+            'property',
+            choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+          )
         ),
       _type_query_call_expression_in_type_annotation: ($) =>
         seq(
@@ -673,7 +728,8 @@ module.exports = function defineGrammar(dialect) {
               'const',
               'unique',
               'abstract',
-              'import'
+              'import',
+              'function'
             ),
             $.identifier
           ),
@@ -791,29 +847,32 @@ module.exports = function defineGrammar(dialect) {
           field(
             'object',
             choice(
-              $.identifier,
+              reserved('properties', $.identifier),
               $.this,
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression)
             )
           ),
-          choice('.', '?.'),
-          field('property', choice($.private_property_identifier, alias($.identifier, $.property_identifier)))
+          choice('.', field('optional_chain', $.optional_chain)),
+          field(
+            'property',
+            choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+          )
         ),
       _type_query_subscript_expression: ($) =>
         seq(
           field(
             'object',
             choice(
-              $.identifier,
+              reserved('properties', $.identifier),
               $.this,
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression)
             )
           ),
-          optional('?.'),
+          optional(field('optional_chain', $.optional_chain)),
           '[',
           field('index', choice($.predefined_type, $.string, $.number)),
           ']'
@@ -824,7 +883,7 @@ module.exports = function defineGrammar(dialect) {
             'function',
             choice(
               $.import,
-              $.identifier,
+              reserved('properties', $.identifier),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
@@ -837,7 +896,7 @@ module.exports = function defineGrammar(dialect) {
             'function',
             choice(
               $.import,
-              $.identifier,
+              reserved('properties', $.identifier),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
@@ -853,7 +912,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression),
               alias($._type_query_instantiation_expression, $.instantiation_expression),
-              $.identifier,
+              reserved('properties', $.identifier),
               $.this
             )
           )
@@ -1001,7 +1060,9 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _type_identifier: ($) => alias($.identifier, $.type_identifier),
+      // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
+      // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
+      _type_identifier: ($) => alias(reserved('properties', $.identifier), $.type_identifier),
 
       _reserved_identifier: (_, previous) =>
         choice(

@@ -1207,7 +1207,7 @@ class C {
       (decorator
         (parenthesized_expression
           (member_expression
-            (identifier)
+            (super)
             (property_identifier))))
       (method_definition
         (property_identifier)

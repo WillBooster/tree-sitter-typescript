@@ -1610,7 +1610,8 @@ Tuple labels that are type keywords
 type A = [object: object, message?: string, ...args: unknown[]];
 type B = [string: string, this?: this, ...readonly: readonly X[]];
 type C = [true: true, null?: null, ...undefined: undefined[]];
-type D = [number?, ...string[], keyof T];
+type D = [function: F, function?: F, ...function: F[]];
+type E = [number?, ...string[], keyof T];
 
 ---
 
@@ -1670,6 +1671,23 @@ type D = [number?, ...string[], keyof T];
           (array_type
             (literal_type
               (undefined)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (type_identifier)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (type_identifier)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (type_identifier))))))
   (type_alias_declaration
     (type_identifier)
     (tuple_type
@@ -1689,7 +1707,8 @@ Tuple labels that are type keywords in TSX
 type A = [object: object, message?: string, ...args: unknown[]];
 type B = [string: string, this?: this, ...readonly: readonly X[]];
 type C = [true: true, null?: null, ...undefined: undefined[]];
-type D = [number?, ...string[], keyof T];
+type D = [function: F, function?: F, ...function: F[]];
+type E = [number?, ...string[], keyof T];
 
 ---
 
@@ -1749,6 +1768,23 @@ type D = [number?, ...string[], keyof T];
           (array_type
             (literal_type
               (undefined)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (type_identifier)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (type_identifier)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (type_identifier))))))
   (type_alias_declaration
     (type_identifier)
     (tuple_type

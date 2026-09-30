@@ -1,0 +1,516 @@
+============================================================
+Bare ampersands in JSX text and attribute strings
+:language(tsx)
+============================================================
+
+const a = <p title="A & B">A & B &amp; C</p>;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_element
+        (jsx_opening_element
+          (identifier)
+          (jsx_attribute
+            (property_identifier)
+            (string
+              (string_fragment))))
+        (jsx_text)
+        (html_character_reference)
+        (jsx_text)
+        (jsx_closing_element
+          (identifier))))))
+
+============================================================
+Reserved words as JSX attribute names
+:language(tsx)
+============================================================
+
+const a = <label class="x" for="y" data-z="1" />;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier)
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))))))
+
+============================================================
+Arrow functions with a block body before a line starting with ( or [
+============================================================
+
+const f = (): void => {}
+(function () {})();
+
+const g = <T,>(x: T): T => {
+  return x;
+}
+[1, 2].forEach(g);
+
+h(() => {}
+, 1);
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (type_annotation
+          (predefined_type))
+        (statement_block))))
+  (expression_statement
+    (call_expression
+      (parenthesized_expression
+        (function_expression
+          (formal_parameters)
+          (statement_block)))
+      (arguments)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (type_parameters
+          (type_parameter
+            (type_identifier)))
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (type_identifier))))
+        (type_annotation
+          (type_identifier))
+        (statement_block
+          (return_statement
+            (identifier))))))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (array
+          (number)
+          (number))
+        (property_identifier))
+      (arguments
+        (identifier))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (arrow_function
+          (formal_parameters)
+          (statement_block))
+        (number)))))
+
+============================================================
+Arrow functions with a block body before a line starting with ( or [ in TSX
+:language(tsx)
+============================================================
+
+const f = (): void => {}
+(function () {})();
+
+const g = <T,>(x: T): T => {
+  return x;
+}
+[1, 2].forEach(g);
+
+h(() => {}
+, 1);
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (type_annotation
+          (predefined_type))
+        (statement_block))))
+  (expression_statement
+    (call_expression
+      (parenthesized_expression
+        (function_expression
+          (formal_parameters)
+          (statement_block)))
+      (arguments)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (type_parameters
+          (type_parameter
+            (type_identifier)))
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (type_identifier))))
+        (type_annotation
+          (type_identifier))
+        (statement_block
+          (return_statement
+            (identifier))))))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (array
+          (number)
+          (number))
+        (property_identifier))
+      (arguments
+        (identifier))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (arrow_function
+          (formal_parameters)
+          (statement_block))
+        (number)))))
+
+============================================================
+Arrow functions with a block body before a comment
+============================================================
+
+const f = () => {} /* a
+*/ (5)();
+
+const g = () => {} /* b */, h = 1;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (statement_block))))
+  (comment)
+  (expression_statement
+    (call_expression
+      (parenthesized_expression
+        (number))
+      (arguments)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (statement_block)))
+    (comment)
+    (variable_declarator
+      (identifier)
+      (number))))
+
+============================================================
+Invalid escape sequences in tagged templates
+============================================================
+
+latex`\unicode \xerxes`;
+
+---
+
+(program
+  (expression_statement
+    (call_expression
+      (identifier)
+      (template_string
+        (escape_sequence)
+        (string_fragment)
+        (escape_sequence)
+        (string_fragment)))))
+
+============================================================
+Reserved words at the end of qualified names
+============================================================
+
+type T = A.default;
+let x: A.B.delete<C>;
+namespace N.default {}
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (identifier)
+      (type_identifier)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (generic_type
+          (nested_type_identifier
+            (nested_identifier
+              (identifier)
+              (property_identifier))
+            (type_identifier))
+          (type_arguments
+            (type_identifier))))))
+  (expression_statement
+    (internal_module
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (statement_block))))
+
+============================================================
+Reserved words as type, interface, and namespace names
+============================================================
+
+interface default { x: number }
+declare namespace class { const y: number }
+declare module delete {}
+let x: default | default.B;
+type T = typeof default | typeof delete.y;
+
+---
+
+(program
+  (interface_declaration
+    (type_identifier)
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))))
+  (ambient_declaration
+    (internal_module
+      (identifier)
+      (statement_block
+        (lexical_declaration
+          (variable_declarator
+            (identifier)
+            (type_annotation
+              (predefined_type)))))))
+  (ambient_declaration
+    (module
+      (identifier)
+      (statement_block)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (union_type
+          (type_identifier)
+          (nested_type_identifier
+            (identifier)
+            (type_identifier))))))
+  (type_alias_declaration
+    (type_identifier)
+    (union_type
+      (type_query
+        (identifier))
+      (type_query
+        (member_expression
+          (identifier)
+          (property_identifier))))))
+
+============================================================
+Sequence expressions in parenthesized decorators
+============================================================
+
+@(a, b) class C {}
+
+---
+
+(program
+  (class_declaration
+    (decorator
+      (parenthesized_expression
+        (sequence_expression
+          (identifier)
+          (identifier))))
+    (type_identifier)
+    (class_body)))
+
+============================================================
+Reserved words as decorator member names
+============================================================
+
+@a.delete() class C {
+  @a.default x = 1;
+}
+
+---
+
+(program
+  (class_declaration
+    (decorator
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (arguments)))
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (decorator
+          (member_expression
+            (identifier)
+            (property_identifier)))
+        (property_identifier)
+        (number)))))
+
+============================================================
+Reserved words as module export names
+============================================================
+
+export { default } from './x';
+import { default as d } from 'm';
+export { x as default };
+export * as default from 'm';
+export { default as export } from './x';
+import { break as b } from 'm';
+
+---
+
+(program
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (namespace_export
+      (identifier))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment))))
+
+============================================================
+Await before a continued parenthesized expression
+============================================================
+
+const m = await (await import('./x')).default;
+await (x)();
+await (x)[0];
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (await_expression
+        (member_expression
+          (parenthesized_expression
+            (await_expression
+              (call_expression
+                (import)
+                (arguments
+                  (string
+                    (string_fragment))))))
+          (property_identifier)))))
+  (expression_statement
+    (await_expression
+      (call_expression
+        (parenthesized_expression
+          (identifier))
+        (arguments))))
+  (expression_statement
+    (await_expression
+      (subscript_expression
+        (parenthesized_expression
+          (identifier))
+        (number)))))
+
+============================================================
+Using declarations
+============================================================
+
+using r = open();
+await using s = open();
+for (using t = open(); ; ) {}
+for (await using u = open(), v = open(); ; ) {}
+
+---
+
+(program
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (identifier)
+        (arguments))))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (identifier)
+        (arguments))))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments))))
+    (empty_statement)
+    (statement_block))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments)))
+      (variable_declarator
+        (identifier)
+        (call_expression
+          (identifier)
+          (arguments))))
+    (empty_statement)
+    (statement_block)))
+

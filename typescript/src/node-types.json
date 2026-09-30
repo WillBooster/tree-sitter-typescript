@@ -56,6 +56,10 @@
         "named": true
       },
       {
+        "type": "using_declaration",
+        "named": true
+      },
+      {
         "type": "variable_declaration",
         "named": true
       }
@@ -1240,6 +1244,16 @@
           }
         ]
       },
+      "optional_chain": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "optional_chain",
+            "named": true
+          }
+        ]
+      },
       "type_arguments": {
         "multiple": false,
         "required": false,
@@ -2137,15 +2151,23 @@
         ]
       },
       "kind": {
-        "multiple": false,
+        "multiple": true,
         "required": false,
         "types": [
+          {
+            "type": "await",
+            "named": false
+          },
           {
             "type": "const",
             "named": false
           },
           {
             "type": "let",
+            "named": false
+          },
+          {
+            "type": "using",
             "named": false
           },
           {
@@ -2300,6 +2322,10 @@
           },
           {
             "type": "sequence_expression",
+            "named": true
+          },
+          {
+            "type": "using_declaration",
             "named": true
           },
           {
@@ -3930,11 +3956,6 @@
     }
   },
   {
-    "type": "optional_chain",
-    "named": true,
-    "fields": {}
-  },
-  {
     "type": "optional_parameter",
     "named": true,
     "fields": {
@@ -4136,19 +4157,7 @@
       "required": true,
       "types": [
         {
-          "type": "call_expression",
-          "named": true
-        },
-        {
           "type": "expression",
-          "named": true
-        },
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "member_expression",
           "named": true
         },
         {
@@ -5266,6 +5275,36 @@
     }
   },
   {
+    "type": "using_declaration",
+    "named": true,
+    "fields": {
+      "kind": {
+        "multiple": true,
+        "required": true,
+        "types": [
+          {
+            "type": "await",
+            "named": false
+          },
+          {
+            "type": "using",
+            "named": false
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "variable_declarator",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "variable_declaration",
     "named": true,
     "fields": {},
@@ -5584,10 +5623,6 @@
     "named": false
   },
   {
-    "type": "?.",
-    "named": false
-  },
-  {
     "type": "?:",
     "named": false
   },
@@ -5844,6 +5879,10 @@
   {
     "type": "of",
     "named": false
+  },
+  {
+    "type": "optional_chain",
+    "named": true
   },
   {
     "type": "override",

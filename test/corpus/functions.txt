@@ -131,6 +131,7 @@ A?.<B>();
   (expression_statement
     (call_expression
       (identifier)
+      (optional_chain)
       (type_arguments (type_identifier))
       (arguments))))
 

@@ -11,6 +11,7 @@
         "@vitest/browser-playwright": "5.0.1",
         "@willbooster/oxfmt-config": "1.2.2",
         "@willbooster/oxlint-config": "1.4.8",
+        "@willbooster/tree-sitter-javascript": "1.0.3",
         "@willbooster/wb": "22.11.5",
         "@willbooster/web-tree-sitter": "1.0.7",
         "conventional-changelog-conventionalcommits": "10.4.0",
@@ -22,7 +23,6 @@
         "semantic-release": "25.0.9",
         "sort-package-json": "4.0.0",
         "tree-sitter-cli": "0.27.0",
-        "tree-sitter-javascript": "0.23.1",
         "typescript": "7.0.2",
         "vite": "8.3.0",
         "vitest": "5.0.1",
@@ -473,6 +473,8 @@
 
     "@willbooster/oxlint-config": ["@willbooster/oxlint-config@1.4.8", "", { "peerDependencies": { "oxlint": ">=1.60.0", "oxlint-tsgolint": ">=0.18.1" } }, "sha512-i3WWcAc1N6QzA91321dJFGUxXYuuXG4bj12pKlyjCmQRqrulvshFW35PUcaRdw1pVr7I7zHEGK1WUIjbkBd3Vg=="],
 
+    "@willbooster/tree-sitter-javascript": ["@willbooster/tree-sitter-javascript@1.0.3", "", { "peerDependencies": { "@willbooster/web-tree-sitter": "^1.0.0" }, "optionalPeers": ["@willbooster/web-tree-sitter"] }, "sha512-ntcZ69gAacZOrzlGRvHMlA23r2CgBzNNmViQWBOnp+daB0NBQ3rkoANX5B949JQ0evcyk2GWdeNxd33iI+xjvg=="],
+
     "@willbooster/wb": ["@willbooster/wb@22.11.5", "", { "dependencies": { "@textlint-rule/textlint-rule-no-invalid-control-character": "3.0.0", "@textlint/kernel": "15.8.0", "@textlint/module-interop": "15.8.0", "@textlint/textlint-plugin-markdown": "15.8.0", "chalk": "6.0.0", "dotenv": "18.0.1", "dotenv-expand": "13.0.0", "fast-glob": "3.3.3", "fastest-levenshtein": "1.0.16", "globby": "16.2.4", "jsonc-parser": "3.3.1", "minimal-promise-pool": "6.0.3", "semver": "7.8.5", "smol-toml": "1.8.0", "textlint-rule-no-zero-width-spaces": "1.0.1", "yargs": "18.1.0", "zod": "4.6.5" }, "bin": { "wb": "bin/index.js" } }, "sha512-4/ET3InJj/1pkDg7lIAszuwVk1Y6WTdVEkpqXW09oIDQ9LgQDbq4UocxuXiPnbsR4lCqfhwHYlOPaTDcLfpvwg=="],
 
     "@willbooster/web-tree-sitter": ["@willbooster/web-tree-sitter@1.0.7", "", { "dependencies": { "@types/emscripten": "^1.41.5" } }, "sha512-AIdrwsuZJyLpCDyYKTpnnnO/aspnpdYypB8mcRbGu1WwZokbqURFmB15wE9vQUoN4gG8HMgY+IYxim6xtfNwsQ=="],
@@ -905,11 +907,7 @@
 
     "nerf-dart": ["nerf-dart@1.0.0", "", {}, "sha512-EZSPZB70jiVsivaBLYDCyntd5eH8NTSMOn3rB+HxwdmKThGELLdYv8qVIMWvZEFy9w8ZZpW9h9OB32l1rGtj7g=="],
 
-    "node-addon-api": ["node-addon-api@8.9.2", "", {}, "sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg=="],
-
     "node-emoji": ["node-emoji@2.2.0", "", { "dependencies": { "@sindresorhus/is": "^4.6.0", "char-regex": "^1.0.2", "emojilib": "^2.4.0", "skin-tone": "^2.0.0" } }, "sha512-Z3lTE9pLaJF47NyMhd4ww1yFTAP8YhYI8SleJiHzM46Fgpm5cnNzSl9XfzFNqbaz+VlJrIj3fXQ4DeN1Rjm6cw=="],
-
-    "node-gyp-build": ["node-gyp-build@4.8.4", "", { "bin": { "node-gyp-build": "bin.js", "node-gyp-build-optional": "optional.js", "node-gyp-build-test": "build-test.js" } }, "sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ=="],
 
     "normalize-package-data": ["normalize-package-data@8.0.0", "", { "dependencies": { "hosted-git-info": "^9.0.0", "semver": "^7.3.5", "validate-npm-package-license": "^3.0.4" } }, "sha512-RWk+PI433eESQ7ounYxIp67CYuVsS1uYSonX3kA6ps/3LWfjVQa/ptEg6Y3T6uAMq1mWpX9PQ+qx+QaHpsc7gQ=="],
 
@@ -1134,8 +1132,6 @@
     "traverse": ["traverse@0.6.8", "", {}, "sha512-aXJDbk6SnumuaZSANd21XAo15ucCDE38H4fkqiGsc3MhCK+wOlZvLP9cB/TvpHT0mOyWgC4Z8EwRlzqYSUzdsA=="],
 
     "tree-sitter-cli": ["tree-sitter-cli@0.27.0", "", { "bin": { "tree-sitter": "cli.js" } }, "sha512-E42kR0og1mFlZBxPj7K4fBXCTjxPTGe19U9RXGWNq0FQKzXOxIp8bhCYFMKhddiVZUsJwW35MYGU9Q1oVYtpbA=="],
-
-    "tree-sitter-javascript": ["tree-sitter-javascript@0.23.1", "", { "dependencies": { "node-addon-api": "^8.2.2", "node-gyp-build": "^4.8.2" }, "peerDependencies": { "tree-sitter": "^0.21.1" }, "optionalPeers": ["tree-sitter"] }, "sha512-/bnhbrTD9frUYHQTiYnPcxyHORIw157ERBa6dqzaKxvR/x3PC4Yzd+D1pZIMS6zNg2v3a8BZ0oK7jHqsQo9fWA=="],
 
     "trough": ["trough@1.0.5", "", {}, "sha512-rvuRbTarPXmMb79SmzEp8aqXNKcK+y0XaB298IXueQ8I2PsrATcPBCSPyK/dDNa2iWOhKlfNnOjdAOTBU/nkFA=="],
 
