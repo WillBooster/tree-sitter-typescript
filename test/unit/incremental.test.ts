@@ -6,12 +6,13 @@ import { testCommand } from './run.js';
 // again: the changed ranges must cover every change and the final tree must match the corpus. The CLI
 // exits zero even when a case fails or no corpus is found, so its output decides: it must list the cases
 // it fuzzed and print no failure summary. TREE_SITTER_SEED, TREE_SITTER_ITERATIONS,
-// and TREE_SITTER_EDITS explore further locally.
+// and TREE_SITTER_EDITS explore further locally. The first test builds the CLI, which takes over 10 minutes on
+// GitHub's Intel macOS runner.
 for (const grammar of ['typescript', 'tsx']) {
   testCommand(
     `reparses the ${grammar} corpus consistently after random edits`,
     ['script/fuzz-corpus', grammar],
-    900_000,
+    1_800_000,
     {
       env: {
         TREE_SITTER_SEED: process.env.TREE_SITTER_SEED ?? '1',
