@@ -250,12 +250,13 @@ namespace N.default {}
       (statement_block))))
 
 ============================================================
-Reserved words as interface and namespace names
+Reserved words as type, interface, and namespace names
 ============================================================
 
 interface default { x: number }
 declare namespace class { const y: number }
 declare module delete {}
+let x: default | default.B;
 
 ---
 
@@ -279,7 +280,16 @@ declare module delete {}
   (ambient_declaration
     (module
       (identifier)
-      (statement_block))))
+      (statement_block)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (union_type
+          (type_identifier)
+          (nested_type_identifier
+            (identifier)
+            (type_identifier)))))))
 
 ============================================================
 Sequence expressions in parenthesized decorators
