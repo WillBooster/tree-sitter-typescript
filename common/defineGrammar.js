@@ -252,6 +252,15 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      // Any identifier name may name a JSX attribute, such as `class` in `<div class="x" />`, which the JavaScript
+      // grammar's reserved words reject (WillBooster/tree-sitter-javascript#25).
+      _jsx_attribute_name: ($) =>
+        choice(
+          alias($.jsx_identifier, $.property_identifier),
+          alias(reserved('properties', $.identifier), $.property_identifier),
+          $.jsx_namespace_name
+        ),
+
       // This rule is only referenced by expression when the dialect is 'tsx'
       jsx_opening_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '>')),
 
@@ -260,9 +269,9 @@ module.exports = function defineGrammar(dialect) {
 
       export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
 
-      // The JavaScript grammar's anonymous 'default' token would leave the name or alias of `export { default }` or
-      // `import { default as d }` without a node (WillBooster/tree-sitter-javascript#24).
-      _module_export_name: ($) => choice($.identifier, $.string, alias('default', $.identifier)),
+      // Any identifier name may be exported or imported. The JavaScript grammar rejects reserved words other than
+      // `default`, for which it leaves no node (WillBooster/tree-sitter-javascript#17 and #24).
+      _module_export_name: ($) => choice(reserved('properties', $.identifier), $.string),
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 

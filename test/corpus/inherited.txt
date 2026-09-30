@@ -25,6 +25,34 @@ const a = <p title="A & B">A & B &amp; C</p>;
           (identifier))))))
 
 ============================================================
+Reserved words as JSX attribute names
+:language(tsx)
+============================================================
+
+const a = <label class="x" for="y" data-z="1" />;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier)
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))
+        (jsx_attribute
+          (property_identifier)
+          (string
+            (string_fragment)))))))
+
+============================================================
 Arrow functions with a block body before a line starting with ( or [
 ============================================================
 
@@ -320,13 +348,15 @@ Sequence expressions in parenthesized decorators
     (class_body)))
 
 ============================================================
-Default as a module export name
+Reserved words as module export names
 ============================================================
 
 export { default } from './x';
 import { default as d } from 'm';
 export { x as default };
 export * as default from 'm';
+export { default as export } from './x';
+import { break as b } from 'm';
 
 ---
 
@@ -353,6 +383,21 @@ export * as default from 'm';
   (export_statement
     (namespace_export
       (identifier))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
     (string
       (string_fragment))))
 

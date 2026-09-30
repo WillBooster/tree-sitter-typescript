@@ -22,7 +22,6 @@ examples/vscode/extensions/copilot/src/platform/telemetry/test/node/assignmentFi
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/eslint_comma_expected.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/eslint_unexpected_token.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/tsc_error_1128.ts
-examples/vscode/extensions/terminal-suggest/src/upstreamSpecs.ts
 examples/vscode/extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts
 examples/vscode/src/vs/platform/agentHost/node/claude/claudeSubagentSignals.ts
 examples/vscode/src/vs/platform/browserView/electron-browser/preload-browserView.ts

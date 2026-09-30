@@ -431,21 +431,16 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "identifier"
+          "type": "RESERVED",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          },
+          "context_name": "properties"
         },
         {
           "type": "SYMBOL",
           "name": "string"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
-            "value": "default"
-          },
-          "named": true,
-          "value": "identifier"
         }
       ]
     },
@@ -3322,7 +3317,20 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_jsx_identifier"
+            "name": "jsx_identifier"
+          },
+          "named": true,
+          "value": "property_identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "RESERVED",
+            "content": {
+              "type": "SYMBOL",
+              "name": "identifier"
+            },
+            "context_name": "properties"
           },
           "named": true,
           "value": "property_identifier"
