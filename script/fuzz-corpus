@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+# Runs `tree-sitter fuzz` for the given grammar (`typescript` or `tsx`): it edits each corpus case of that grammar at
+# random, reparses it incrementally, undoes the edits, and reparses again. The CLI comes from WillBooster/tree-sitter at
+# the willbooster-tree-sitter version in Cargo.lock, since the runtime embedded in the upstream CLI never finishes
+# recovering from some edited cases. WillBooster/tree-sitter does not publish its CLI, so the first run builds it into
+# .tmp/, which takes a few minutes.
+
+set -euo pipefail
+
+grammar=$1
+cd "$(dirname "$0")/.."
+
+version=$(awk '/^name = "willbooster-tree-sitter"$/ { getline; gsub(/version = |"/, ""); print }' Cargo.lock)
+cli=.tmp/tree-sitter-cli/${version:?Cargo.lock locks no willbooster-tree-sitter}
+if [[ ! -x $cli/bin/tree-sitter ]]; then
+  # The default `qjs-rt` feature only serves `tree-sitter generate`, which stays on the pinned upstream CLI.
+  cargo install --quiet --locked --no-default-features --root "$cli" \
+    --git https://github.com/WillBooster/tree-sitter --tag "v$version" tree-sitter-cli
+fi
+
+mkdir -p .tmp/fuzz
+bun run tree-sitter build -o ".tmp/fuzz/$grammar.parser" "$grammar"
+"$cli/bin/tree-sitter" fuzz --lib-path ".tmp/fuzz/$grammar.parser" --lang-name "$grammar"
