@@ -373,7 +373,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      decorator_parenthesized_expression: ($) => seq('(', $.expression, ')'),
+      decorator_parenthesized_expression: ($) => seq('(', $._expressions, ')'),
 
       class_body: ($) =>
         seq(
@@ -509,7 +509,7 @@ module.exports = function defineGrammar(dialect) {
       _module: ($) =>
         prec.right(
           seq(
-            field('name', choice($.string, $.identifier, $.nested_identifier)),
+            field('name', choice($.string, reserved('properties', $.identifier), $.nested_identifier)),
             // On .d.ts files "declare module foo" desugars to "declare module foo {}",
             // hence why it is optional here
             field('body', optional($.statement_block))
@@ -542,7 +542,9 @@ module.exports = function defineGrammar(dialect) {
       interface_declaration: ($) =>
         seq(
           'interface',
-          field('name', $._type_identifier),
+          // The reserved words must be allowed on the identifier inside the alias: around the alias, the keyword token
+          // still wins in the lexer.
+          field('name', alias(reserved('properties', $.identifier), $.type_identifier)),
           field('type_parameters', optional($.type_parameters)),
           optional($.extends_type_clause),
           field('body', alias($.object_type, $.interface_body))

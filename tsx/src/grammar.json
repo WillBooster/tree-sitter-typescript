@@ -8259,7 +8259,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "expression"
+          "name": "_expressions"
         },
         {
           "type": "STRING",
@@ -8670,8 +8670,12 @@
                   "name": "string"
                 },
                 {
-                  "type": "SYMBOL",
-                  "name": "identifier"
+                  "type": "RESERVED",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  },
+                  "context_name": "properties"
                 },
                 {
                   "type": "SYMBOL",
@@ -8786,8 +8790,17 @@
           "type": "FIELD",
           "name": "name",
           "content": {
-            "type": "SYMBOL",
-            "name": "_type_identifier"
+            "type": "ALIAS",
+            "content": {
+              "type": "RESERVED",
+              "content": {
+                "type": "SYMBOL",
+                "name": "identifier"
+              },
+              "context_name": "properties"
+            },
+            "named": true,
+            "value": "type_identifier"
           }
         },
         {

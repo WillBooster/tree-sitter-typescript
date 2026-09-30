@@ -252,6 +252,56 @@ namespace N.default {}
       (statement_block))))
 
 ============================================================
+Reserved words as interface and namespace names
+============================================================
+
+interface default { x: number }
+declare namespace class { const y: number }
+declare module delete {}
+
+---
+
+(program
+  (interface_declaration
+    (type_identifier)
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))))
+  (ambient_declaration
+    (internal_module
+      (identifier)
+      (statement_block
+        (lexical_declaration
+          (variable_declarator
+            (identifier)
+            (type_annotation
+              (predefined_type)))))))
+  (ambient_declaration
+    (module
+      (identifier)
+      (statement_block))))
+
+============================================================
+Sequence expressions in parenthesized decorators
+============================================================
+
+@(a, b) class C {}
+
+---
+
+(program
+  (class_declaration
+    (decorator
+      (parenthesized_expression
+        (sequence_expression
+          (identifier)
+          (identifier))))
+    (type_identifier)
+    (class_body)))
+
+============================================================
 Using declarations
 ============================================================
 
