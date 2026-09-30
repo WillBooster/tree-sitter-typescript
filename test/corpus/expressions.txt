@@ -324,6 +324,103 @@ f<T>(x)
       (arguments
         (identifier)))))
 
+=========================================
+Tagged templates with type arguments
+=========================================
+
+const r = db.$queryRaw<Row[]>`SELECT 1`;
+const D = styled.div<{ r: R }>`color: red;`;
+f<T>`x${y}`;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (type_arguments
+          (array_type
+            (type_identifier)))
+        (template_string
+          (string_fragment)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (type_arguments
+          (object_type
+            (property_signature
+              (property_identifier)
+              (type_annotation
+                (type_identifier)))))
+        (template_string
+          (string_fragment)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (type_identifier))
+      (template_string
+        (string_fragment)
+        (template_substitution
+          (identifier))))))
+
+=========================================
+Tagged templates with type arguments in TSX
+:language(tsx)
+=========================================
+
+const r = db.$queryRaw<Row[]>`SELECT 1`;
+const D = styled.div<{ r: R }>`color: red;`;
+f<T>`x${y}`;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (type_arguments
+          (array_type
+            (type_identifier)))
+        (template_string
+          (string_fragment)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (call_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (type_arguments
+          (object_type
+            (property_signature
+              (property_identifier)
+              (type_annotation
+                (type_identifier)))))
+        (template_string
+          (string_fragment)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (type_identifier))
+      (template_string
+        (string_fragment)
+        (template_substitution
+          (identifier))))))
+
 ==================================
 Instantiation expressions
 ==================================
