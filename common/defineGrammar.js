@@ -84,7 +84,11 @@ module.exports = function defineGrammar(dialect) {
       [$._parameter_name, $.primary_type],
       [$.pattern, $.primary_type],
 
-      [$.optional_tuple_parameter, $.primary_type],
+      [$._tuple_label, $.primary_type],
+      [$._tuple_label, $.literal_type],
+      [$._tuple_label, $.index_type_query],
+      [$._tuple_label, $.readonly_type],
+      [$._tuple_label, $.predefined_type],
       [$.rest_pattern, $.primary_type, $.primary_expression],
 
       [$.object, $.object_type],
@@ -298,6 +302,7 @@ module.exports = function defineGrammar(dialect) {
         choice(
           previous,
           seq('export', 'type', $.export_clause, optional($._from_clause), $._semicolon),
+          seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
         ),
@@ -634,9 +639,46 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       tuple_parameter: ($) =>
-        seq(field('name', choice($.identifier, $.rest_pattern)), field('type', $.type_annotation)),
+        seq(
+          field('name', choice($._tuple_label, alias($._tuple_rest_label, $.rest_pattern))),
+          field('type', $.type_annotation)
+        ),
 
-      optional_tuple_parameter: ($) => seq(field('name', $.identifier), '?', field('type', $.type_annotation)),
+      optional_tuple_parameter: ($) => seq(field('name', $._tuple_label), '?', field('type', $.type_annotation)),
+
+      _tuple_rest_label: ($) => seq('...', $._tuple_label),
+
+      // TypeScript accepts any identifier name as a tuple label, but where a tuple member begins, the keywords that
+      // can begin a type are lexed as those keywords, so they are listed here. Keywords that are rules of their own
+      // are aliased as rules: repeating their strings would turn those rules into nodes that wrap a token.
+      _tuple_label: ($) =>
+        choice(
+          $.identifier,
+          alias(
+            choice(
+              'any',
+              'number',
+              'boolean',
+              'string',
+              'symbol',
+              'void',
+              'unknown',
+              'never',
+              'object',
+              'readonly',
+              'keyof',
+              'infer',
+              'typeof',
+              'new',
+              'const',
+              'unique',
+              'abstract',
+              'import'
+            ),
+            $.identifier
+          ),
+          alias(choice($.undefined, $.null, $.true, $.false, $.this), $.identifier)
+        ),
 
       optional_type: ($) => seq($.type, '?'),
       rest_type: ($) => seq('...', $.type),
@@ -710,7 +752,14 @@ module.exports = function defineGrammar(dialect) {
         prec(
           'call',
           seq(
-            field('name', choice($._type_identifier, $.nested_type_identifier)),
+            field(
+              'name',
+              choice(
+                $._type_identifier,
+                $.nested_type_identifier,
+                alias($._type_query_member_expression_in_type_annotation, $.member_expression)
+              )
+            ),
             field('type_arguments', $.type_arguments)
           )
         ),
