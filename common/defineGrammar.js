@@ -59,7 +59,7 @@ module.exports = function defineGrammar(dialect) {
     conflicts: ($, previous) => [
       ...previous,
       [$.primary_expression, $.using_declaration],
-      [$.primary_expression, $._for_using_declaration],
+      [$.primary_expression, $._for_header, $._for_using_declaration],
       [$.call_expression, $.instantiation_expression, $.binary_expression],
       [$.call_expression, $.instantiation_expression, $.binary_expression, $.unary_expression],
       [$.call_expression, $.instantiation_expression, $.binary_expression, $.update_expression],
@@ -360,12 +360,32 @@ module.exports = function defineGrammar(dialect) {
           ';'
         ),
 
-      // After `using`, the lexer reads `of`, `as`, and `satisfies` as the keywords that could follow an identifier `using`.
       _using_declarator: ($) =>
+        seq(field('name', $._binding_identifier), field('type', optional($.type_annotation)), optional($._initializer)),
+
+      // After a declaration keyword that may also be an identifier (`let`, `using`), the lexer reads `of`, `as`, and
+      // `satisfies` as the keywords that could follow that identifier.
+      _binding_identifier: ($) => choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier)),
+
+      _for_header: ($) =>
         seq(
-          field('name', choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier))),
-          field('type', optional($.type_annotation)),
-          optional($._initializer)
+          '(',
+          choice(
+            field('left', choice($._lhs_expression, $.parenthesized_expression)),
+            seq(
+              field('kind', 'var'),
+              field('left', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
+              optional($._initializer)
+            ),
+            seq(
+              field('kind', choice('let', 'const')),
+              field('left', choice($._binding_identifier, $._destructuring_pattern))
+            ),
+            seq(field('kind', choice('using', seq('await', 'using'))), field('left', $._binding_identifier))
+          ),
+          field('operator', choice('in', 'of')),
+          field('right', $._expressions),
+          ')'
         ),
 
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),

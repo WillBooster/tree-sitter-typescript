@@ -626,3 +626,34 @@ x = using as T;
       (as_expression
         (identifier)
         (type_identifier)))))
+
+============================================================
+For-of heads with contextual keywords as binding names
+============================================================
+
+for (using as of items) {}
+for (await using satisfies of items) {}
+for (let as of items) {}
+for (using [a] of items) {}
+
+---
+
+(program
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (subscript_expression
+      (identifier)
+      (identifier))
+    (identifier)
+    (statement_block)))
