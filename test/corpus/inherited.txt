@@ -257,6 +257,7 @@ interface default { x: number }
 declare namespace class { const y: number }
 declare module delete {}
 let x: default | default.B;
+type T = typeof default | typeof delete.y;
 
 ---
 
@@ -289,7 +290,16 @@ let x: default | default.B;
           (type_identifier)
           (nested_type_identifier
             (identifier)
-            (type_identifier)))))))
+            (type_identifier))))))
+  (type_alias_declaration
+    (type_identifier)
+    (union_type
+      (type_query
+        (identifier))
+      (type_query
+        (member_expression
+          (identifier)
+          (property_identifier))))))
 
 ============================================================
 Sequence expressions in parenthesized decorators

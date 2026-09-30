@@ -10193,8 +10193,12 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "RESERVED",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "context_name": "properties"
               },
               {
                 "type": "SYMBOL",
@@ -10285,8 +10289,12 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "RESERVED",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "context_name": "properties"
               },
               {
                 "type": "SYMBOL",
@@ -10383,8 +10391,12 @@
                 "name": "import"
               },
               {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "RESERVED",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "context_name": "properties"
               },
               {
                 "type": "ALIAS",
@@ -10431,8 +10443,12 @@
                 "name": "import"
               },
               {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "RESERVED",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "context_name": "properties"
               },
               {
                 "type": "ALIAS",
@@ -10515,8 +10531,12 @@
                 "value": "instantiation_expression"
               },
               {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "RESERVED",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "context_name": "properties"
               },
               {
                 "type": "SYMBOL",
