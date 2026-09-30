@@ -58,6 +58,24 @@ mod tests {
             .expect("Error loading TSX parser");
     }
 
+    // JSX text that is only whitespace around line breaks forms no node, also with CRLF and lone CR line breaks, which
+    // the test corpus cannot hold.
+    #[test]
+    fn test_drops_whitespace_jsx_text_at_every_line_break() {
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(&super::LANGUAGE_TSX.into()).unwrap();
+        let expected = parser
+            .parse("<p>\n  <b>x</b>\n</p>;", None)
+            .unwrap()
+            .root_node()
+            .to_sexp();
+        for line_break in ["\r\n", "\r"] {
+            let code = format!("<p>{line_break}  <b>x</b>{line_break}</p>;");
+            let tree = parser.parse(&code, None).unwrap();
+            assert_eq!(tree.root_node().to_sexp(), expected, "{code:?}");
+        }
+    }
+
     // A lone CR, U+2028, and U+2029 end a line in ECMAScript, so a statement ends before them, the arrow function ends
     // before the next line's `(` instead of being called by it, and a line comment ends before them. The test corpus cannot hold a lone CR, which
     // Git and editors may rewrite.

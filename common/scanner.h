@@ -423,7 +423,7 @@ static bool scan_jsx_text(TSLexer *lexer) {
         // Only ASCII whitespace counts, as with iswspace in the C locale, whereas the C library of the Wasm build also
         // reports Unicode spaces.
         bool is_wspace = (lexer->lookahead >= '\t' && lexer->lookahead <= '\r') || lexer->lookahead == ' ';
-        if (lexer->lookahead == '\n') {
+        if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
             at_newline = true;
         } else {
             // If at_newline is already true, and we see some whitespace, then it must stay true.
