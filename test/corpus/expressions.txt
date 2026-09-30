@@ -615,6 +615,57 @@ x = lo < hi >>> 1;
           (identifier)
           (number))))))
 
+==================================
+Type arguments followed by an operator or a bracket
+==================================
+
+f<T> + 1;
+f<T>[0];
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (unary_expression
+        (number))))
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (array
+        (number)))))
+
+==================================
+Type arguments followed by an operator or a bracket in TSX
+:language(tsx)
+==================================
+
+f<T> + 1;
+f<T>[0];
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (unary_expression
+        (number))))
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (array
+        (number)))))
+
 =========================================
 Tagged templates with type arguments
 =========================================

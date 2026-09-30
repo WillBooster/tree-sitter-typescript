@@ -8536,7 +8536,7 @@
       "type": "PREC",
       "value": "extends",
       "content": {
-        "type": "CHOICE",
+        "type": "SEQ",
         "members": [
           {
             "type": "FIELD",
@@ -8547,25 +8547,20 @@
             }
           },
           {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "FIELD",
-                "name": "value",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "primary_expression"
-                }
-              },
-              {
-                "type": "FIELD",
-                "name": "type_arguments",
-                "content": {
+            "type": "FIELD",
+            "name": "type_arguments",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
                   "type": "SYMBOL",
                   "name": "type_arguments"
+                },
+                {
+                  "type": "BLANK"
                 }
-              }
-            ]
+              ]
+            }
           }
         ]
       }
@@ -11889,12 +11884,6 @@
       "expression",
       "call_expression",
       "instantiation_expression"
-    ],
-    [
-      "expression",
-      "call_expression",
-      "instantiation_expression",
-      "_extends_clause_single"
     ],
     [
       "class"

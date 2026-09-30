@@ -60,7 +60,6 @@ module.exports = function defineGrammar(dialect) {
     conflicts: ($, previous) => [
       ...previous,
       [$.expression, $.call_expression, $.instantiation_expression],
-      [$.expression, $.call_expression, $.instantiation_expression, $._extends_clause_single],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
@@ -505,13 +504,7 @@ module.exports = function defineGrammar(dialect) {
       extends_clause: ($) => seq('extends', commaSep1($._extends_clause_single)),
 
       _extends_clause_single: ($) =>
-        prec(
-          'extends',
-          choice(
-            field('value', $.expression),
-            seq(field('value', $.primary_expression), field('type_arguments', $.type_arguments))
-          )
-        ),
+        prec('extends', seq(field('value', $.expression), field('type_arguments', optional($.type_arguments)))),
 
       implements_clause: ($) => seq('implements', commaSep1($.type)),
 
