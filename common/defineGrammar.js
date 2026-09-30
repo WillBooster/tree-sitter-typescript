@@ -1050,8 +1050,10 @@ module.exports = function defineGrammar(dialect) {
       tuple_type: ($) => seq('[', commaSep($._tuple_type_member), optional(','), ']'),
       readonly_type: ($) => seq('readonly', $.type),
 
-      union_type: ($) => prec.left(seq(optional($.type), '|', $.type)),
-      intersection_type: ($) => prec.left(seq(optional($.type), '&', $.type)),
+      // TypeScript allows a leading `|` or `&` only at the start of a type, so `a < b || c > (d)` compares instead of
+      // calling `a` with `b | | c`. The negative dynamic precedence outweighs that of the generic call.
+      union_type: ($) => prec.left(choice(seq($.type, '|', $.type), prec.dynamic(-2, seq('|', $.type)))),
+      intersection_type: ($) => prec.left(choice(seq($.type, '&', $.type), prec.dynamic(-2, seq('&', $.type)))),
 
       function_type: ($) =>
         prec.left(

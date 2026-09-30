@@ -469,6 +469,87 @@ a < b > (c);
       (arguments
         (identifier)))))
 
+==================================
+Comparisons joined by logical operators before a parenthesized expression
+==================================
+
+a < b || c > (d);
+a < b && c > (d);
+f<| A | B>(x);
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (binary_expression
+        (identifier)
+        (parenthesized_expression
+          (identifier)))))
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (binary_expression
+        (identifier)
+        (parenthesized_expression
+          (identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (union_type
+          (union_type
+            (type_identifier))
+          (type_identifier)))
+      (arguments
+        (identifier)))))
+
+==================================
+Comparisons joined by logical operators before a parenthesized expression in TSX
+:language(tsx)
+==================================
+
+a < b || c > (d);
+a < b && c > (d);
+f<| A | B>(x);
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (binary_expression
+        (identifier)
+        (parenthesized_expression
+          (identifier)))))
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (identifier)
+        (identifier))
+      (binary_expression
+        (identifier)
+        (parenthesized_expression
+          (identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (union_type
+          (union_type
+            (type_identifier))
+          (type_identifier)))
+      (arguments
+        (identifier)))))
+
 =========================================
 Tagged templates with type arguments
 =========================================
