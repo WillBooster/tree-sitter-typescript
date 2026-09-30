@@ -9163,11 +9163,16 @@
             "members": [
               {
                 "type": "SYMBOL",
-                "name": "identifier"
+                "name": "_tuple_label"
               },
               {
-                "type": "SYMBOL",
-                "name": "rest_pattern"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_tuple_rest_label"
+                },
+                "named": true,
+                "value": "rest_pattern"
               }
             ]
           }
@@ -9190,7 +9195,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_tuple_label"
           }
         },
         {
@@ -9204,6 +9209,140 @@
             "type": "SYMBOL",
             "name": "type_annotation"
           }
+        }
+      ]
+    },
+    "_tuple_rest_label": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "..."
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_tuple_label"
+        }
+      ]
+    },
+    "_tuple_label": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "any"
+              },
+              {
+                "type": "STRING",
+                "value": "number"
+              },
+              {
+                "type": "STRING",
+                "value": "boolean"
+              },
+              {
+                "type": "STRING",
+                "value": "string"
+              },
+              {
+                "type": "STRING",
+                "value": "symbol"
+              },
+              {
+                "type": "STRING",
+                "value": "void"
+              },
+              {
+                "type": "STRING",
+                "value": "unknown"
+              },
+              {
+                "type": "STRING",
+                "value": "never"
+              },
+              {
+                "type": "STRING",
+                "value": "object"
+              },
+              {
+                "type": "STRING",
+                "value": "readonly"
+              },
+              {
+                "type": "STRING",
+                "value": "keyof"
+              },
+              {
+                "type": "STRING",
+                "value": "infer"
+              },
+              {
+                "type": "STRING",
+                "value": "typeof"
+              },
+              {
+                "type": "STRING",
+                "value": "new"
+              },
+              {
+                "type": "STRING",
+                "value": "const"
+              },
+              {
+                "type": "STRING",
+                "value": "unique"
+              },
+              {
+                "type": "STRING",
+                "value": "abstract"
+              },
+              {
+                "type": "STRING",
+                "value": "import"
+              }
+            ]
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "undefined"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "null"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "true"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "false"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "this"
+              }
+            ]
+          },
+          "named": true,
+          "value": "identifier"
         }
       ]
     },
@@ -11293,8 +11432,24 @@
       "primary_type"
     ],
     [
-      "optional_tuple_parameter",
+      "_tuple_label",
       "primary_type"
+    ],
+    [
+      "_tuple_label",
+      "literal_type"
+    ],
+    [
+      "_tuple_label",
+      "index_type_query"
+    ],
+    [
+      "_tuple_label",
+      "readonly_type"
+    ],
+    [
+      "_tuple_label",
+      "predefined_type"
     ],
     [
       "rest_pattern",
