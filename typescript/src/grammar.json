@@ -1166,7 +1166,7 @@
                 "name": "name",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "identifier"
+                  "name": "_binding_identifier"
                 }
               },
               {
@@ -11939,6 +11939,10 @@
       "primary_expression",
       "_for_header",
       "_for_using_declaration"
+    ],
+    [
+      "_for_header",
+      "_binding_identifier"
     ],
     [
       "expression",

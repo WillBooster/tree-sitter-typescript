@@ -61,6 +61,7 @@ module.exports = function defineGrammar(dialect) {
       ...previous,
       [$.primary_expression, $.using_declaration],
       [$.primary_expression, $._for_header, $._for_using_declaration],
+      [$._for_header, $._binding_identifier],
       [$.expression, $.call_expression, $.instantiation_expression],
 
       // This appears to be necessary to parse a parenthesized class expression
@@ -393,7 +394,7 @@ module.exports = function defineGrammar(dialect) {
             field('type', optional($.type_annotation)),
             optional($._initializer)
           ),
-          prec('declaration', seq(field('name', $.identifier), '!', field('type', $.type_annotation)))
+          prec('declaration', seq(field('name', $._binding_identifier), '!', field('type', $.type_annotation)))
         ),
 
       method_signature: ($) =>

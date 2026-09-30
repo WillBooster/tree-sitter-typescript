@@ -639,6 +639,7 @@ for (const as = 1; ; ) {}
 for (var satisfies of items) {}
 let as = 1;
 const satisfies = 2;
+var as!: number;
 
 ---
 
@@ -679,4 +680,9 @@ const satisfies = 2;
   (lexical_declaration
     (variable_declarator
       (identifier)
-      (number))))
+      (number)))
+  (variable_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (predefined_type)))))
