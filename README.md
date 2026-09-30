@@ -17,7 +17,10 @@ and, for TSX, [JSX](https://facebook.github.io/jsx/).
 
 TypeScript and TSX are two different dialects (`<T>x` is a type assertion in TypeScript but a JSX element in TSX),
 so this package defines two grammars: `typescript` in `typescript/` and `tsx` in `tsx/`, both generated from
-`common/defineGrammar.js`. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type annotations.
+`common/defineGrammar.js`, which extends the JavaScript grammar of
+[@willbooster/tree-sitter-javascript](https://www.npmjs.com/package/@willbooster/tree-sitter-javascript) and ports its
+external scanner in `common/scanner.h`. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type
+annotations.
 
 ## Usage
 
