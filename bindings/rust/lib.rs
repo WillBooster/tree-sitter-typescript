@@ -77,7 +77,7 @@ mod tests {
     }
 
     // A lone CR, U+2028, and U+2029 end a line in ECMAScript, so a statement ends before them, the arrow function ends
-    // before the next line's `(` instead of being called by it, and a line comment ends before them. The test corpus cannot hold a lone CR, which
+    // before the next line's `(` instead of being called by it, and a line or HTML comment ends before them. The test corpus cannot hold a lone CR, which
     // Git and editors may rewrite.
     #[test]
     fn test_ends_lines_at_every_line_terminator() {
@@ -85,6 +85,14 @@ mod tests {
             let mut parser = tree_sitter::Parser::new();
             parser.set_language(&language.into()).unwrap();
             for terminator in ["\r", "\u{2028}", "\u{2029}"] {
+                let code = format!("a\n--> c{terminator}b");
+                let tree = parser.parse(&code, None).unwrap();
+                assert_eq!(
+                    tree.root_node().to_sexp(),
+                    "(program (expression_statement (identifier)) (html_comment) (expression_statement (identifier)))",
+                    "{code:?}"
+                );
+
                 let code = format!("a{terminator}b");
                 let tree = parser.parse(&code, None).unwrap();
                 assert_eq!(
