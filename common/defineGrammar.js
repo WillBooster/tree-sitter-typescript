@@ -85,13 +85,9 @@ module.exports = function defineGrammar(dialect) {
       [$.pattern, $.primary_type],
 
       [$._tuple_label, $.primary_type],
+      [$._tuple_label, $.literal_type],
       [$._tuple_label, $.index_type_query],
       [$._tuple_label, $.readonly_type],
-      [$.undefined, $._tuple_label],
-      [$.null, $._tuple_label],
-      [$.false, $._tuple_label],
-      [$.true, $._tuple_label],
-      [$.this, $._tuple_label],
       [$._tuple_label, $.predefined_type],
       [$.rest_pattern, $.primary_type, $.primary_expression],
 
@@ -643,7 +639,8 @@ module.exports = function defineGrammar(dialect) {
       _tuple_rest_label: ($) => seq('...', $._tuple_label),
 
       // TypeScript accepts any identifier name as a tuple label, but where a tuple member begins, the keywords that
-      // can begin a type are lexed as those keywords, so they are listed here.
+      // can begin a type are lexed as those keywords, so they are listed here. Keywords that are rules of their own
+      // are aliased as rules: repeating their strings would turn those rules into nodes that wrap a token.
       _tuple_label: ($) =>
         choice(
           $.identifier,
@@ -658,11 +655,6 @@ module.exports = function defineGrammar(dialect) {
               'unknown',
               'never',
               'object',
-              'undefined',
-              'null',
-              'true',
-              'false',
-              'this',
               'readonly',
               'keyof',
               'infer',
@@ -674,7 +666,8 @@ module.exports = function defineGrammar(dialect) {
               'import'
             ),
             $.identifier
-          )
+          ),
+          alias(choice($.undefined, $.null, $.true, $.false, $.this), $.identifier)
         ),
 
       optional_type: ($) => seq($.type, '?'),

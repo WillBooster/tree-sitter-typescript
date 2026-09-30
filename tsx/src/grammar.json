@@ -9275,26 +9275,6 @@
               },
               {
                 "type": "STRING",
-                "value": "undefined"
-              },
-              {
-                "type": "STRING",
-                "value": "null"
-              },
-              {
-                "type": "STRING",
-                "value": "true"
-              },
-              {
-                "type": "STRING",
-                "value": "false"
-              },
-              {
-                "type": "STRING",
-                "value": "this"
-              },
-              {
-                "type": "STRING",
                 "value": "readonly"
               },
               {
@@ -9328,6 +9308,36 @@
               {
                 "type": "STRING",
                 "value": "import"
+              }
+            ]
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "undefined"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "null"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "true"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "false"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "this"
               }
             ]
           },
@@ -11427,31 +11437,15 @@
     ],
     [
       "_tuple_label",
+      "literal_type"
+    ],
+    [
+      "_tuple_label",
       "index_type_query"
     ],
     [
       "_tuple_label",
       "readonly_type"
-    ],
-    [
-      "undefined",
-      "_tuple_label"
-    ],
-    [
-      "null",
-      "_tuple_label"
-    ],
-    [
-      "false",
-      "_tuple_label"
-    ],
-    [
-      "true",
-      "_tuple_label"
-    ],
-    [
-      "this",
-      "_tuple_label"
     ],
     [
       "_tuple_label",
