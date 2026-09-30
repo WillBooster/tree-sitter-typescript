@@ -31,17 +31,28 @@ for (const grammar of ['typescript', 'tsx']) {
       ).toBe(false);
     });
 
-    // Consumers parse files being edited, so recovering from many errors must stay linear. Linear recovery
-    // takes about 0.15 s here.
+    // Consumers parse files being edited, so recovering from many errors must stay linear: ten times the lines
+    // must take about ten times as long (quadratic recovery would take a hundred times). A ratio, unlike a fixed
+    // limit, does not fail on a slow or busy machine, and the fastest of a few parses discards pauses.
     test('recovers from an error on each of 10,000 lines in linear time', () => {
-      const start = performance.now();
-      const tree = parser.parse('$ a\n'.repeat(10_000));
-      const elapsed = performance.now() - start;
-      if (!tree) throw new Error('The parser returned no tree');
-      const { hasError } = tree.rootNode;
-      tree.delete();
-      expect(hasError).toBe(true);
-      expect(elapsed).toBeLessThan(3000);
+      parseErrors(parser, 1000);
+      const ratio = fastestParse(parser, 10_000) / fastestParse(parser, 1000);
+      expect(ratio).toBeLessThan(30);
     });
   });
+}
+
+function fastestParse(parser: Parser, lines: number): number {
+  return Math.min(...Array.from({ length: 3 }, () => parseErrors(parser, lines)));
+}
+
+function parseErrors(parser: Parser, lines: number): number {
+  const start = performance.now();
+  const tree = parser.parse('$ a\n'.repeat(lines));
+  const elapsed = performance.now() - start;
+  if (!tree) throw new Error('The parser returned no tree');
+  const { hasError } = tree.rootNode;
+  tree.delete();
+  expect(hasError).toBe(true);
+  return elapsed;
 }
