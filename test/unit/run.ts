@@ -23,8 +23,9 @@ export function testCommand(
         cwd: repositoryRoot,
         detached: true,
         // The CLI caches compiled parsers by language name in a directory shared by every checkout and reuses one that is
-        // newer than the sources, so another checkout's parser could be tested instead of this one.
-        env: { TREE_SITTER_LIBDIR: `${repositoryRoot}/.tmp/tree-sitter-lib`, ...process.env, ...options.env },
+        // newer than the sources, so another checkout's parser could be tested instead of this one, also through a
+        // TREE_SITTER_LIBDIR set in the environment.
+        env: { ...process.env, TREE_SITTER_LIBDIR: `${repositoryRoot}/.tmp/tree-sitter-lib`, ...options.env },
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let output = '';
