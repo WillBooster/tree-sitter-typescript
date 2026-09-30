@@ -302,6 +302,80 @@ Sequence expressions in parenthesized decorators
     (class_body)))
 
 ============================================================
+Default as a module export name
+============================================================
+
+export { default } from './x';
+import { default as d } from 'm';
+export { x as default };
+export * as default from 'm';
+
+---
+
+(program
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (namespace_export
+      (identifier))
+    (string
+      (string_fragment))))
+
+============================================================
+Await before a continued parenthesized expression
+============================================================
+
+const m = await (await import('./x')).default;
+await (x)();
+await (x)[0];
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (await_expression
+        (member_expression
+          (parenthesized_expression
+            (await_expression
+              (call_expression
+                (import)
+                (arguments
+                  (string
+                    (string_fragment))))))
+          (property_identifier)))))
+  (expression_statement
+    (await_expression
+      (call_expression
+        (parenthesized_expression
+          (identifier))
+        (arguments))))
+  (expression_statement
+    (await_expression
+      (subscript_expression
+        (parenthesized_expression
+          (identifier))
+        (number)))))
+
+============================================================
 Using declarations
 ============================================================
 

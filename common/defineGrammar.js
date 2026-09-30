@@ -260,6 +260,10 @@ module.exports = function defineGrammar(dialect) {
 
       export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
 
+      // The JavaScript grammar's anonymous 'default' token would leave the name or alias of `export { default }` or
+      // `import { default as d }` without a node (WillBooster/tree-sitter-javascript#24).
+      _module_export_name: ($) => choice($.identifier, $.string, alias('default', $.identifier)),
+
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 
       import_specifier: ($) =>
@@ -301,6 +305,10 @@ module.exports = function defineGrammar(dialect) {
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
         ),
+
+      // The JavaScript grammar leaves `await (x).y` ambiguous with a call of an identifier named `await`, and GLR keeps
+      // the call; TypeScript and V8 read the operator (WillBooster/tree-sitter-javascript#23).
+      await_expression: ($) => prec.dynamic(2, prec('unary_void', seq('await', $.expression))),
 
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
