@@ -59,9 +59,10 @@ mod tests {
     }
 
     // A lone CR, U+2028, and U+2029 end a line in ECMAScript, so the arrow function ends before the next line's `(`
-    // instead of being called by it. The test corpus cannot hold a lone CR, which Git and editors may rewrite.
+    // instead of being called by it, and a line comment ends before them. The test corpus cannot hold a lone CR, which
+    // Git and editors may rewrite.
     #[test]
-    fn test_ends_arrow_function_with_block_body_at_every_line_terminator() {
+    fn test_ends_lines_at_every_line_terminator() {
         for language in [super::LANGUAGE_TYPESCRIPT, super::LANGUAGE_TSX] {
             let mut parser = tree_sitter::Parser::new();
             parser.set_language(&language.into()).unwrap();
@@ -73,6 +74,16 @@ mod tests {
                     "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
                      parameters: (formal_parameters) body: (statement_block)))) (expression_statement \
                      (call_expression function: (parenthesized_expression (number)) arguments: (arguments))))",
+                    "{code:?}"
+                );
+
+                let code = format!("const f = () => {{}} /*\n*/ // c{terminator}, g = 1;");
+                let tree = parser.parse(&code, None).unwrap();
+                assert_eq!(
+                    tree.root_node().to_sexp(),
+                    "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
+                     parameters: (formal_parameters) body: (statement_block))) (comment) (comment) \
+                     (variable_declarator name: (identifier) value: (number))))",
                     "{code:?}"
                 );
             }

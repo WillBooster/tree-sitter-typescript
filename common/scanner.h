@@ -68,9 +68,11 @@ static bool scan_template_chars(TSLexer *lexer) {
     }
 }
 
+static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
+
 static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) {
     for (;;) {
-        while (iswspace(lexer->lookahead)) {
+        while (iswspace(lexer->lookahead) || is_line_terminator(lexer->lookahead)) {
             skip(lexer);
         }
 
@@ -79,7 +81,7 @@ static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) 
 
             if (lexer->lookahead == '/') {
                 skip(lexer);
-                while (lexer->lookahead != 0 && lexer->lookahead != '\n') {
+                while (lexer->lookahead != 0 && !is_line_terminator(lexer->lookahead)) {
                     skip(lexer);
                 }
                 *scanned_comment = true;
@@ -115,8 +117,6 @@ static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comme
     }
     return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
 }
-
-static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
 
 typedef enum {
     NO_COMMENT,
