@@ -8777,12 +8777,8 @@
             "type": "FIELD",
             "name": "name",
             "content": {
-              "type": "RESERVED",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_type_identifier"
-              },
-              "context_name": "properties"
+              "type": "SYMBOL",
+              "name": "_type_identifier"
             }
           }
         ]
@@ -8799,17 +8795,8 @@
           "type": "FIELD",
           "name": "name",
           "content": {
-            "type": "ALIAS",
-            "content": {
-              "type": "RESERVED",
-              "content": {
-                "type": "SYMBOL",
-                "name": "identifier"
-              },
-              "context_name": "properties"
-            },
-            "named": true,
-            "value": "type_identifier"
+            "type": "SYMBOL",
+            "name": "_type_identifier"
           }
         },
         {
@@ -11648,8 +11635,12 @@
     "_type_identifier": {
       "type": "ALIAS",
       "content": {
-        "type": "SYMBOL",
-        "name": "identifier"
+        "type": "RESERVED",
+        "content": {
+          "type": "SYMBOL",
+          "name": "identifier"
+        },
+        "context_name": "properties"
       },
       "named": true,
       "value": "type_identifier"

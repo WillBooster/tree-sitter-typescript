@@ -540,19 +540,13 @@ module.exports = function defineGrammar(dialect) {
       nested_type_identifier: ($) =>
         prec(
           'member',
-          seq(
-            field('module', choice($.identifier, $.nested_identifier)),
-            '.',
-            field('name', reserved('properties', $._type_identifier))
-          )
+          seq(field('module', choice($.identifier, $.nested_identifier)), '.', field('name', $._type_identifier))
         ),
 
       interface_declaration: ($) =>
         seq(
           'interface',
-          // The reserved words must be allowed on the identifier inside the alias: around the alias, the keyword token
-          // still wins in the lexer.
-          field('name', alias(reserved('properties', $.identifier), $.type_identifier)),
+          field('name', $._type_identifier),
           field('type_parameters', optional($.type_parameters)),
           optional($.extends_type_clause),
           field('body', alias($.object_type, $.interface_body))
@@ -1019,7 +1013,9 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _type_identifier: ($) => alias($.identifier, $.type_identifier),
+      // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
+      // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
+      _type_identifier: ($) => alias(reserved('properties', $.identifier), $.type_identifier),
 
       _reserved_identifier: (_, previous) =>
         choice(
