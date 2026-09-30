@@ -324,6 +324,151 @@ f<T>(x)
       (arguments
         (identifier)))))
 
+==================================
+Generic calls and instantiations after operators
+==================================
+
+a + b<T>(c);
+await b<T>(c);
+-b<T>(c);
+typeof b<T>(c);
+a + b<T>`c`;
+a + b<T>;
+a < b > (c);
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (await_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (unary_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (unary_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (template_string
+          (string_fragment)))))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (instantiation_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (type_identifier))
+      (arguments
+        (identifier)))))
+
+==================================
+Generic calls and instantiations after operators in TSX
+:language(tsx)
+==================================
+
+a + b<T>(c);
+await b<T>(c);
+-b<T>(c);
+typeof b<T>(c);
+a + b<T>`c`;
+a + b<T>;
+a < b > (c);
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (await_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (unary_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (unary_expression
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (call_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (template_string
+          (string_fragment)))))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (instantiation_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (type_arguments
+        (type_identifier))
+      (arguments
+        (identifier)))))
+
 =========================================
 Tagged templates with type arguments
 =========================================

@@ -13,6 +13,7 @@ module.exports = function defineGrammar(dialect) {
       ...previous,
       ['call', 'instantiation', 'unary', 'binary', $.await_expression, $.arrow_function],
       ['extends', 'instantiation'],
+      ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
       [
         $.intersection_type,
         $.union_type,
@@ -58,10 +59,8 @@ module.exports = function defineGrammar(dialect) {
 
     conflicts: ($, previous) => [
       ...previous,
-      [$.call_expression, $.instantiation_expression, $.binary_expression],
-      [$.call_expression, $.instantiation_expression, $.binary_expression, $.unary_expression],
-      [$.call_expression, $.instantiation_expression, $.binary_expression, $.update_expression],
-      [$.call_expression, $.instantiation_expression, $.binary_expression, $.await_expression],
+      [$.expression, $.call_expression, $.instantiation_expression],
+      [$.expression, $.call_expression, $.instantiation_expression, $._extends_clause_single],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
@@ -159,22 +158,20 @@ module.exports = function defineGrammar(dialect) {
 
       call_expression: ($) =>
         choice(
-          prec(
-            'call',
-            seq(
-              field('function', choice($.expression, $.import)),
-              field('type_arguments', optional($.type_arguments)),
-              field('arguments', $.arguments)
-            )
-          ),
-          // A tag with type arguments is parsed like a generic call. Optional type arguments in the `template_call`
-          // alternative below would make the parser commit to a tagged template at the `<` of `f<T>(x)`.
-          prec(
-            'call',
-            seq(
-              field('function', $.expression),
-              field('type_arguments', $.type_arguments),
-              field('arguments', $.template_string)
+          prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
+          // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
+          // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call, hence the dynamic
+          // precedence. A tag with type arguments is parsed like a generic call. Optional type arguments in the
+          // `template_call` alternative below would make the parser commit to a tagged template at the `<` of `f<T>(x)`.
+          prec.dynamic(
+            1,
+            prec(
+              'generic_call',
+              seq(
+                field('function', $.primary_expression),
+                field('type_arguments', $.type_arguments),
+                field('arguments', choice($.arguments, $.template_string))
+              )
             )
           ),
           prec(
@@ -493,7 +490,7 @@ module.exports = function defineGrammar(dialect) {
       satisfies_expression: ($) => prec.left('binary', seq($.expression, 'satisfies', $.type)),
 
       instantiation_expression: ($) =>
-        prec('instantiation', seq($.expression, field('type_arguments', $.type_arguments))),
+        prec('instantiation', seq($.primary_expression, field('type_arguments', $.type_arguments))),
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
@@ -502,7 +499,13 @@ module.exports = function defineGrammar(dialect) {
       extends_clause: ($) => seq('extends', commaSep1($._extends_clause_single)),
 
       _extends_clause_single: ($) =>
-        prec('extends', seq(field('value', $.expression), field('type_arguments', optional($.type_arguments)))),
+        prec(
+          'extends',
+          choice(
+            field('value', $.expression),
+            seq(field('value', $.primary_expression), field('type_arguments', $.type_arguments))
+          )
+        ),
 
       implements_clause: ($) => seq('implements', commaSep1($.type)),
 

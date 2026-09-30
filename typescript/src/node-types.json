@@ -3099,7 +3099,7 @@
       "required": false,
       "types": [
         {
-          "type": "expression",
+          "type": "primary_expression",
           "named": true
         }
       ]
