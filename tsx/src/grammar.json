@@ -4168,8 +4168,17 @@
                   "type": "FIELD",
                   "name": "function",
                   "content": {
-                    "type": "SYMBOL",
-                    "name": "primary_expression"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "primary_expression"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "new_expression"
+                      }
+                    ]
                   }
                 },
                 {
@@ -8423,24 +8432,37 @@
       }
     },
     "instantiation_expression": {
-      "type": "PREC",
-      "value": "instantiation",
+      "type": "PREC_DYNAMIC",
+      "value": -1,
       "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "SYMBOL",
-            "name": "primary_expression"
-          },
-          {
-            "type": "FIELD",
-            "name": "type_arguments",
-            "content": {
-              "type": "SYMBOL",
-              "name": "type_arguments"
+        "type": "PREC",
+        "value": "instantiation",
+        "content": {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "primary_expression"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "new_expression"
+                }
+              ]
+            },
+            {
+              "type": "FIELD",
+              "name": "type_arguments",
+              "content": {
+                "type": "SYMBOL",
+                "name": "type_arguments"
+              }
             }
-          }
-        ]
+          ]
+        }
       }
     },
     "import_require_clause": {

@@ -550,6 +550,71 @@ f<| A | B>(x);
       (arguments
         (identifier)))))
 
+==================================
+Generic calls and instantiations of new expressions
+==================================
+
+new Foo()<T>();
+new Foo<T>()<U>(x);
+new Foo()<T>;
+
+---
+
+(program
+  (expression_statement
+    (call_expression
+      (new_expression
+        (identifier)
+        (arguments))
+      (type_arguments
+        (type_identifier))
+      (arguments)))
+  (expression_statement
+    (call_expression
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments))
+      (type_arguments
+        (type_identifier))
+      (arguments
+        (identifier))))
+  (expression_statement
+    (instantiation_expression
+      (new_expression
+        (identifier)
+        (arguments))
+      (type_arguments
+        (type_identifier)))))
+
+==================================
+Comparisons with a shift on the right
+==================================
+
+if (i < n >> 1) {}
+x = lo < hi >>> 1;
+
+---
+
+(program
+  (if_statement
+    (parenthesized_expression
+      (binary_expression
+        (identifier)
+        (binary_expression
+          (identifier)
+          (number))))
+    (statement_block))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (identifier)
+        (binary_expression
+          (identifier)
+          (number))))))
+
 =========================================
 Tagged templates with type arguments
 =========================================

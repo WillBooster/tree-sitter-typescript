@@ -168,7 +168,7 @@ module.exports = function defineGrammar(dialect) {
             prec(
               'generic_call',
               seq(
-                field('function', $.primary_expression),
+                field('function', choice($.primary_expression, $.new_expression)),
                 field('type_arguments', $.type_arguments),
                 field('arguments', choice($.arguments, $.template_string))
               )
@@ -490,7 +490,13 @@ module.exports = function defineGrammar(dialect) {
       satisfies_expression: ($) => prec.left('binary', seq($.expression, 'satisfies', $.type)),
 
       instantiation_expression: ($) =>
-        prec('instantiation', seq($.primary_expression, field('type_arguments', $.type_arguments))),
+        prec.dynamic(
+          -1,
+          prec(
+            'instantiation',
+            seq(choice($.primary_expression, $.new_expression), field('type_arguments', $.type_arguments))
+          )
+        ),
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
