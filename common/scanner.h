@@ -179,8 +179,8 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             return true;
         }
         if (after_block_arrow) {
-            // The line terminator after an arrow function's block body may also be in a comment or be U+2028 or U+2029,
-            // as the JavaScript grammar's scanner detects.
+            // The line terminator after an arrow function's block body may also be in a comment or be a lone CR, U+2028,
+            // or U+2029.
             if (lexer->lookahead == '/') {
                 CommentResult result = skip_comment(lexer, scanned_comment);
                 if (result == NO_COMMENT) {
@@ -191,7 +191,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 }
                 continue;
             }
-            if (lexer->lookahead == 0x2028 || lexer->lookahead == 0x2029) {
+            if (is_line_terminator(lexer->lookahead)) {
                 break;
             }
         }
