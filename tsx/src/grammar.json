@@ -431,21 +431,16 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "identifier"
+          "type": "RESERVED",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          },
+          "context_name": "properties"
         },
         {
           "type": "SYMBOL",
           "name": "string"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "STRING",
-            "value": "default"
-          },
-          "named": true,
-          "value": "identifier"
         }
       ]
     },

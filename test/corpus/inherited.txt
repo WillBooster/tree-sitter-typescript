@@ -320,13 +320,15 @@ Sequence expressions in parenthesized decorators
     (class_body)))
 
 ============================================================
-Default as a module export name
+Reserved words as module export names
 ============================================================
 
 export { default } from './x';
 import { default as d } from 'm';
 export { x as default };
 export * as default from 'm';
+export { default as export } from './x';
+import { break as b } from 'm';
 
 ---
 
@@ -353,6 +355,21 @@ export * as default from 'm';
   (export_statement
     (namespace_export
       (identifier))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
     (string
       (string_fragment))))
 

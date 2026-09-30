@@ -260,9 +260,9 @@ module.exports = function defineGrammar(dialect) {
 
       export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
 
-      // The JavaScript grammar's anonymous 'default' token would leave the name or alias of `export { default }` or
-      // `import { default as d }` without a node (WillBooster/tree-sitter-javascript#24).
-      _module_export_name: ($) => choice($.identifier, $.string, alias('default', $.identifier)),
+      // Any identifier name may be exported or imported. The JavaScript grammar rejects reserved words other than
+      // `default`, for which it leaves no node (WillBooster/tree-sitter-javascript#17 and #24).
+      _module_export_name: ($) => choice(reserved('properties', $.identifier), $.string),
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 
