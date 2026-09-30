@@ -2697,6 +2697,10 @@
         "required": true,
         "types": [
           {
+            "type": "member_expression",
+            "named": true
+          },
+          {
             "type": "nested_type_identifier",
             "named": true
           },

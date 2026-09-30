@@ -296,6 +296,7 @@ module.exports = function defineGrammar(dialect) {
         choice(
           previous,
           seq('export', 'type', $.export_clause, optional($._from_clause), $._semicolon),
+          seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
         ),
@@ -748,7 +749,14 @@ module.exports = function defineGrammar(dialect) {
         prec(
           'call',
           seq(
-            field('name', choice($._type_identifier, $.nested_type_identifier)),
+            field(
+              'name',
+              choice(
+                $._type_identifier,
+                $.nested_type_identifier,
+                alias($._type_query_member_expression_in_type_annotation, $.member_expression)
+              )
+            ),
             field('type_arguments', $.type_arguments)
           )
         ),
