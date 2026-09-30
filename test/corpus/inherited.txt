@@ -514,3 +514,68 @@ for (await using u = open(), v = open(); ; ) {}
     (empty_statement)
     (statement_block)))
 
+============================================================
+Using as an identifier
+============================================================
+
+let using = 1;
+using = 2;
+using.x();
+using(1);
+using[0] = 1;
+using
+x = 1;
+for (using;;) {}
+for (using of x) {}
+using y: T = open();
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (number)))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (identifier)
+        (property_identifier))
+      (arguments)))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (number))))
+  (expression_statement
+    (assignment_expression
+      (subscript_expression
+        (identifier)
+        (number))
+      (number)))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (number)))
+  (for_statement
+    (identifier)
+    (empty_statement)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (type_identifier))
+      (call_expression
+        (identifier)
+        (arguments)))))

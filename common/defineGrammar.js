@@ -342,8 +342,24 @@ module.exports = function defineGrammar(dialect) {
           field('body', $.statement)
         ),
 
+      // ECMAScript binds only identifiers in a using declaration, so `using [a] = b` assigns to a subscript of a
+      // variable named `using`.
+      using_declaration: ($) =>
+        seq(
+          field('kind', choice('using', seq('await', 'using'))),
+          commaSep1(alias($._using_declarator, $.variable_declarator)),
+          $._semicolon
+        ),
+
       _for_using_declaration: ($) =>
-        seq(field('kind', choice('using', seq('await', 'using'))), commaSep1($.variable_declarator), ';'),
+        seq(
+          field('kind', choice('using', seq('await', 'using'))),
+          commaSep1(alias($._using_declarator, $.variable_declarator)),
+          ';'
+        ),
+
+      _using_declarator: ($) =>
+        seq(field('name', $.identifier), field('type', optional($.type_annotation)), optional($._initializer)),
 
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
@@ -1084,6 +1100,7 @@ module.exports = function defineGrammar(dialect) {
           'object',
           'new',
           'readonly',
+          'using',
           previous
         ),
     },
