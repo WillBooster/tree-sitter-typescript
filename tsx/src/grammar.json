@@ -3196,13 +3196,17 @@
             "type": "FIELD",
             "name": "property",
             "content": {
-              "type": "ALIAS",
+              "type": "RESERVED",
               "content": {
-                "type": "SYMBOL",
-                "name": "identifier"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "identifier"
+                },
+                "named": true,
+                "value": "property_identifier"
               },
-              "named": true,
-              "value": "property_identifier"
+              "context_name": "properties"
             }
           }
         ]
@@ -8760,8 +8764,12 @@
             "type": "FIELD",
             "name": "name",
             "content": {
-              "type": "SYMBOL",
-              "name": "_type_identifier"
+              "type": "RESERVED",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_identifier"
+              },
+              "context_name": "properties"
             }
           }
         ]
@@ -9657,6 +9665,10 @@
               {
                 "type": "STRING",
                 "value": "import"
+              },
+              {
+                "type": "STRING",
+                "value": "function"
               }
             ]
           },

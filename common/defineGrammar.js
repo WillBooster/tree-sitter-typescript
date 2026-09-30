@@ -518,10 +518,25 @@ module.exports = function defineGrammar(dialect) {
 
       import_alias: ($) => seq('import', $.identifier, '=', choice($.identifier, $.nested_identifier), $._semicolon),
 
+      // A qualified name may end in any identifier name, as a member expression may.
+      nested_identifier: ($) =>
+        prec(
+          'member',
+          seq(
+            field('object', choice($.identifier, alias($.nested_identifier, $.member_expression))),
+            '.',
+            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+          )
+        ),
+
       nested_type_identifier: ($) =>
         prec(
           'member',
-          seq(field('module', choice($.identifier, $.nested_identifier)), '.', field('name', $._type_identifier))
+          seq(
+            field('module', choice($.identifier, $.nested_identifier)),
+            '.',
+            field('name', reserved('properties', $._type_identifier))
+          )
         ),
 
       interface_declaration: ($) =>
@@ -662,7 +677,8 @@ module.exports = function defineGrammar(dialect) {
               'const',
               'unique',
               'abstract',
-              'import'
+              'import',
+              'function'
             ),
             $.identifier
           ),

@@ -217,6 +217,40 @@ latex`\unicode \xerxes`;
         (string_fragment)))))
 
 ============================================================
+Reserved words at the end of qualified names
+============================================================
+
+type T = A.default;
+let x: A.B.delete<C>;
+import D = A.export;
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (identifier)
+      (type_identifier)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (generic_type
+          (nested_type_identifier
+            (nested_identifier
+              (identifier)
+              (property_identifier))
+            (type_identifier))
+          (type_arguments
+            (type_identifier))))))
+  (import_alias
+    (identifier)
+    (nested_identifier
+      (identifier)
+      (property_identifier))))
+
+============================================================
 Using declarations
 ============================================================
 
