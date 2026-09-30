@@ -116,9 +116,6 @@ static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comme
     return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
 }
 
-/**
- * @param after_block_arrow Whether an arrow function's block body has just ended.
- */
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
                                      bool *scanned_comment) {
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
