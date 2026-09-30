@@ -35,7 +35,8 @@ for (const grammar of ['typescript', 'tsx']) {
     // must take about ten times as long (quadratic recovery would take a hundred times). The check compares the CPU
     // time of this process, since other test files run in parallel and slow down the wall-clock time of one parse
     // more than another's, and takes the fastest of a few parses.
-    test('recovers from an error on each of 10,000 lines in linear time', () => {
+    // The seven parses take under 1 s here but over 5 s, Vitest's default timeout, on a busy CI runner.
+    test('recovers from an error on each of 10,000 lines in linear time', { timeout: 60_000 }, () => {
       parseErrors(parser, 1000);
       const ratio = fastestParse(parser, 10_000) / fastestParse(parser, 1000);
       expect(ratio).toBeLessThan(30);
