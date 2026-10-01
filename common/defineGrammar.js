@@ -248,13 +248,7 @@ module.exports = function defineGrammar(dialect) {
               )
             )
           ),
-          prec(
-            'template_call',
-            seq(
-              field('function', choice($.primary_expression, alias($._argumentless_new_expression, $.new_expression))),
-              field('arguments', $.template_string)
-            )
-          ),
+          prec('template_call', seq(field('function', $.primary_expression), field('arguments', $.template_string))),
           prec(
             'member',
             seq(
@@ -266,15 +260,14 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      // As in ECMAScript, a `new` with arguments is a member-level (primary) expression and one without them is not, so a
-      // member access, a call, or a further argument list binds to the nearest `new` with arguments: `new new A().b`
-      // constructs `new A().b`, and `new new A()(2)` constructs `new A()`.
+      // tree-sitter-javascript's two forms of `new`, with type arguments; its 'member' and 'new' precedences group nested
+      // `new` as ECMAScript does (`new new A().b` constructs `new A().b`), and both forms are primary expressions.
       new_expression: ($) =>
         prec(
           'new',
           seq(
             'new',
-            field('constructor', $._new_constructor),
+            field('constructor', $.primary_expression),
             field('type_arguments', optional($.type_arguments)),
             field('arguments', $.arguments)
           )
@@ -283,11 +276,8 @@ module.exports = function defineGrammar(dialect) {
       _argumentless_new_expression: ($) =>
         prec.right(
           'new',
-          seq('new', field('constructor', $._new_constructor), field('type_arguments', optional($.type_arguments)))
+          seq('new', field('constructor', $.primary_expression), field('type_arguments', optional($.type_arguments)))
         ),
-
-      _new_constructor: ($) =>
-        prec('new', choice($.primary_expression, alias($._argumentless_new_expression, $.new_expression))),
 
       assignment_expression: ($) =>
         prec.right(
@@ -299,20 +289,13 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
-      primary_expression: ($, previous) => choice(previous, $.non_null_expression, $.new_expression),
+      primary_expression: ($, previous) => choice(previous, $.non_null_expression),
 
       // If the dialect is regular typescript, we exclude JSX expressions and
       // include type assertions. If the dialect is TSX, we do the opposite.
       expression: ($, previous) => {
-        const choices = [
-          $.as_expression,
-          $.satisfies_expression,
-          $.instantiation_expression,
-          $.internal_module,
-          alias($._argumentless_new_expression, $.new_expression),
-        ];
-        // A `new` with arguments is a primary expression (see new_expression).
-        const members = previous.members.filter((member) => member.name !== 'new_expression');
+        const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
+        const members = previous.members;
 
         if (dialect === 'typescript') {
           choices.push($.type_assertion);

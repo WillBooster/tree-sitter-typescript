@@ -105,7 +105,7 @@ cargo test
 `script/tree-sitter` (also `bun run tree-sitter`) runs the tree-sitter CLI of WillBooster/tree-sitter at the runtime
 version locked in `Cargo.lock`, so the parsers are generated, built, tested, and fuzzed with the generator and the
 runtime this package ships. The first run downloads that CLI from its GitHub Release into `.tmp/`, or builds it with
-`cargo` (which needs `cmake`) when the download fails or the release has no binary that runs here.
+`cargo` (with the `cmake` that `mise.toml` pins) when the download fails or the release has no binary that runs here.
 
 `bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
 `tsx/src/` and builds both Wasm files. `bun run test` runs:
