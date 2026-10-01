@@ -43,14 +43,13 @@
     "verify-full": "bun wb verify --full"
   },
   "devDependencies": {
-    "@semantic-release/exec": "7.1.0",
     "@tsconfig/bun": "1.0.11",
     "@types/bun": "1.4.2",
     "@vitest/browser-playwright": "5.0.1",
     "@willbooster/oxfmt-config": "1.2.2",
     "@willbooster/oxlint-config": "1.4.8",
     "@willbooster/tree-sitter-javascript": "1.0.3",
-    "@willbooster/wb": "22.11.5",
+    "@willbooster/wb": "22.13.0",
     "@willbooster/web-tree-sitter": "1.0.7",
     "conventional-changelog-conventionalcommits": "10.4.0",
     "lefthook": "2.1.14",
