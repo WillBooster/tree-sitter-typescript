@@ -71,11 +71,14 @@ jobs:
           persist-credentials: false
       - run: |
           mkdir -p .tmp/fuzz-seeds
-          awk -v dir=.tmp/fuzz-seeds '
-            state != 2 && /^=+$/ { if (++state == 2) file = sprintf("%s/%d", dir, ++n); next }
-            state == 2 && /^---+$/ { state = 0; close(file); next }
-            state == 2 { print > file }
-          ' $(find test/corpus -name '*.txt' | LC_ALL=C sort)
+          # Perl keeps NUL bytes in the inputs, which some awk implementations drop.
+          perl -e 'my $dir = shift; my ($state, $n, $out) = (0, 0);
+            while (<>) {
+              if ($state != 2 && /^=+$/) { if (++$state == 2) { open $out, ">", "$dir/" . ++$n or die $! } next }
+              if ($state == 2 && /^-{3,}$/) { $state = 0; close $out; next }
+              print $out $_ if $state == 2;
+            }
+          ' .tmp/fuzz-seeds $(find test/corpus -name '*.txt' | LC_ALL=C sort)
       - name: Build the fuzzer
         run: |
           jq '.. | select((.type? == "STRING" or (.type? == "ALIAS" and .named? == false)) and .value? != "") | .value' \
