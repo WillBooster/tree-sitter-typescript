@@ -222,6 +222,10 @@
         "named": true
       },
       {
+        "type": "new_expression",
+        "named": true
+      },
+      {
         "type": "non_null_expression",
         "named": true
       },
@@ -3111,10 +3115,6 @@
       "required": false,
       "types": [
         {
-          "type": "new_expression",
-          "named": true
-        },
-        {
           "type": "primary_expression",
           "named": true
         }
@@ -4057,7 +4057,7 @@
       "required": true,
       "types": [
         {
-          "type": "expression",
+          "type": "primary_expression",
           "named": true
         }
       ]
