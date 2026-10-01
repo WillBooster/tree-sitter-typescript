@@ -7,7 +7,6 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-rm -rf javascript/queries
 mkdir -p javascript/queries
 for file in highlights.scm highlights-jsx.scm injections.scm locals.scm tags.scm; do
   cp "node_modules/@willbooster/tree-sitter-javascript/queries/$file" javascript/queries/
