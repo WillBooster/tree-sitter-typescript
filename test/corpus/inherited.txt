@@ -514,3 +514,175 @@ for (await using u = open(), v = open(); ; ) {}
     (empty_statement)
     (statement_block)))
 
+============================================================
+Using as an identifier
+============================================================
+
+let using = 1;
+using = 2;
+using.x();
+using(1);
+using[0] = 1;
+using
+x = 1;
+for (using;;) {}
+for (using of x) {}
+using y: T = open();
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (number)))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (identifier)
+        (property_identifier))
+      (arguments)))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (number))))
+  (expression_statement
+    (assignment_expression
+      (subscript_expression
+        (identifier)
+        (number))
+      (number)))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (number)))
+  (for_statement
+    (identifier)
+    (empty_statement)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (type_identifier))
+      (call_expression
+        (identifier)
+        (arguments)))))
+
+============================================================
+Using declarations of variables named of, as, or satisfies
+============================================================
+
+using of = 0;
+using as = 1;
+using satisfies = 2;
+for (using of = 0; ; ) {}
+for (using as = 1; ; ) {}
+x = using as T;
+
+---
+
+(program
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (using_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
+  (for_statement
+    (using_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (as_expression
+        (identifier)
+        (type_identifier)))))
+
+============================================================
+Contextual keywords as binding names in declarations and for heads
+============================================================
+
+for (using as of items) {}
+for (await using satisfies of items) {}
+for (let as of items) {}
+for (using [a] of items) {}
+for (const as = 1; ; ) {}
+for (var satisfies of items) {}
+let as = 1;
+const satisfies = 2;
+var as!: number;
+
+---
+
+(program
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (for_in_statement
+    (subscript_expression
+      (identifier)
+      (identifier))
+    (identifier)
+    (statement_block))
+  (for_statement
+    (lexical_declaration
+      (variable_declarator
+        (identifier)
+        (number)))
+    (empty_statement)
+    (statement_block))
+  (for_in_statement
+    (identifier)
+    (identifier)
+    (statement_block))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (variable_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (predefined_type)))))

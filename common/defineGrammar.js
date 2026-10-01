@@ -59,6 +59,9 @@ module.exports = function defineGrammar(dialect) {
 
     conflicts: ($, previous) => [
       ...previous,
+      [$.primary_expression, $.using_declaration],
+      [$.primary_expression, $._for_header, $._for_using_declaration],
+      [$._for_header, $._binding_identifier],
       [$.expression, $.call_expression, $.instantiation_expression],
 
       // This appears to be necessary to parse a parenthesized class expression
@@ -338,19 +341,60 @@ module.exports = function defineGrammar(dialect) {
           field('body', $.statement)
         ),
 
+      // ECMAScript binds only identifiers in a using declaration, so `using [a] = b` assigns to a subscript of a
+      // variable named `using`.
+      using_declaration: ($) =>
+        seq(
+          field('kind', choice('using', seq('await', 'using'))),
+          commaSep1(alias($._using_declarator, $.variable_declarator)),
+          $._semicolon
+        ),
+
       _for_using_declaration: ($) =>
-        seq(field('kind', choice('using', seq('await', 'using'))), commaSep1($.variable_declarator), ';'),
+        seq(
+          field('kind', choice('using', seq('await', 'using'))),
+          commaSep1(alias($._using_declarator, $.variable_declarator)),
+          ';'
+        ),
+
+      _using_declarator: ($) =>
+        seq(field('name', $._binding_identifier), field('type', optional($.type_annotation)), optional($._initializer)),
+
+      // After a declaration keyword that may also be an identifier (`let`, `using`), the lexer reads `of`, `as`, and
+      // `satisfies` as the keywords that could follow that identifier, and every declaration shares that lexer state.
+      _binding_identifier: ($) => choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier)),
+
+      _for_header: ($) =>
+        seq(
+          '(',
+          choice(
+            field('left', choice($._lhs_expression, $.parenthesized_expression)),
+            seq(
+              field('kind', 'var'),
+              field('left', choice($._binding_identifier, $._destructuring_pattern)),
+              optional($._initializer)
+            ),
+            seq(
+              field('kind', choice('let', 'const')),
+              field('left', choice($._binding_identifier, $._destructuring_pattern))
+            ),
+            seq(field('kind', choice('using', seq('await', 'using'))), field('left', $._binding_identifier))
+          ),
+          field('operator', choice('in', 'of')),
+          field('right', $._expressions),
+          ')'
+        ),
 
       non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
 
       variable_declarator: ($) =>
         choice(
           seq(
-            field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
+            field('name', choice($._binding_identifier, $._destructuring_pattern)),
             field('type', optional($.type_annotation)),
             optional($._initializer)
           ),
-          prec('declaration', seq(field('name', $.identifier), '!', field('type', $.type_annotation)))
+          prec('declaration', seq(field('name', $._binding_identifier), '!', field('type', $.type_annotation)))
         ),
 
       method_signature: ($) =>
@@ -1088,6 +1132,7 @@ module.exports = function defineGrammar(dialect) {
           'object',
           'new',
           'readonly',
+          'using',
           previous
         ),
     },
