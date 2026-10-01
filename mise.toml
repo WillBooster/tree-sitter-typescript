@@ -1,3 +1,8 @@
 [tools]
 node = "24.21.0"
 bun = "1.4.2"
+
+[env]
+# The tree-sitter CLI otherwise caches compiled parsers by language name in a directory shared by every checkout and
+# reuses one newer than the sources, so another checkout's parser could be used instead of this one's.
+TREE_SITTER_LIBDIR = "{{config_root}}/.tmp/tree-sitter-lib"
