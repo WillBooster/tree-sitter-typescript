@@ -260,9 +260,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      // As in ECMAScript, a `new` with arguments is a member-level (primary) expression and one without them is not, so a
-      // member access, a call, or a further argument list binds to the nearest `new` with arguments: `new new A().b`
-      // constructs `new A().b`, and `new new A()(2)` constructs `new A()`.
+      // tree-sitter-javascript's two forms of `new`, with type arguments; its 'member' and 'new' precedences group nested
+      // `new` as ECMAScript does (`new new A().b` constructs `new A().b`), and both forms are primary expressions.
       new_expression: ($) =>
         prec(
           'new',
