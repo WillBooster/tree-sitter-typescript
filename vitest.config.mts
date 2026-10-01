@@ -1,8 +1,8 @@
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
-// wbfy declares the `vitest/globals` types in tsconfig.json, so both projects provide the globals at run time for the type
-// check to agree with them.
+// tsconfig.json declares the `vitest/globals` types, so both projects provide the globals at run time for the type check
+// to agree with them.
 export default defineConfig({
   test: {
     projects: [
