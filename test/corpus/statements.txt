@@ -208,3 +208,152 @@ g(() => {} /* c */, 1);
           (statement_block))
         (comment)
         (number)))))
+
+============================================================
+Line breaks in class members and declarations with types
+============================================================
+
+class A {
+  static
+  foo() {}
+  get
+  x() { return 1 }
+  a
+  *b() {}
+  c
+  ?: number
+  d:
+    | 'x'
+    | 'y'
+  static
+}
+declare const e:
+  | 'x'
+  | 'y'
+let f
+(g)
+let h
+  : number = 1
+export { i, type J }
+@(k)(l) class M {}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block
+          (return_statement
+            (number))))
+      (public_field_definition
+        (property_identifier))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (union_type
+            (union_type
+              (literal_type
+                (string
+                  (string_fragment))))
+            (literal_type
+              (string
+                (string_fragment))))))
+      (public_field_definition
+        (property_identifier))))
+  (ambient_declaration
+    (lexical_declaration
+      (variable_declarator
+        (identifier)
+        (type_annotation
+          (union_type
+            (union_type
+              (literal_type
+                (string
+                  (string_fragment))))
+            (literal_type
+              (string
+                (string_fragment))))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)))
+  (expression_statement
+    (parenthesized_expression
+      (identifier)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (predefined_type))
+      (number)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))
+      (export_specifier
+        (identifier))))
+  (class_declaration
+    (decorator
+      (call_expression
+        (parenthesized_expression
+          (identifier))
+        (arguments
+          (identifier))))
+    (type_identifier)
+    (class_body)))
+
+============================================================
+Line breaks after return, yield, and declarations without initializers
+============================================================
+
+function* g() {
+  return
+  [a]
+  yield
+  (b)
+}
+let e
+/f/.test(e)
+
+---
+
+(program
+  (generator_function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (return_statement)
+      (expression_statement
+        (array
+          (identifier)))
+      (expression_statement
+        (yield_expression))
+      (expression_statement
+        (parenthesized_expression
+          (identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (regex
+          (regex_pattern))
+        (property_identifier))
+      (arguments
+        (identifier)))))
