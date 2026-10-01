@@ -4,9 +4,11 @@ import path from 'node:path';
 
 import { expect, test } from 'vitest';
 
-import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 
 import treeSitterJson from '../../tree-sitter.json';
+
+import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Root = path.join(import.meta.dirname, '../..');
 const JavaScriptQueries = path.join(Root, 'node_modules/@willbooster/tree-sitter-javascript/queries');
@@ -20,7 +22,7 @@ const queryPaths = (grammar: (typeof treeSitterJson.grammars)[number], kind: (ty
 // concatenated, so a node type that a grammar change removes must fail here rather than in them.
 for (const grammar of treeSitterJson.grammars) {
   test(`compiles the queries of ${grammar.name}`, async () => {
-    const language = await Language.load(path.join(Root, `tree-sitter-${grammar.path}.wasm`));
+    const language = await loadCurrentWasmBuild(grammar.path);
     for (const kind of QueryKinds) {
       const source = queryPaths(grammar, kind)
         .map((file) => fs.readFileSync(path.join(Root, file), 'utf8'))
