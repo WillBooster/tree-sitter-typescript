@@ -1,36 +1,15 @@
 import { describe, expect, test } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
+import { Parser } from '@willbooster/web-tree-sitter';
 
-import { Language, Parser } from '@willbooster/web-tree-sitter';
+import { loadCurrentWasmBuild } from './wasmBuild';
 
-const Root = path.join(import.meta.dirname, '../..');
 await Parser.init();
 
 for (const grammar of ['typescript', 'tsx']) {
-  // The Wasm builds are the ones the package ships.
-  const wasmPath = path.join(Root, `tree-sitter-${grammar}.wasm`);
   const parser = new Parser();
-  parser.setLanguage(await Language.load(wasmPath));
+  parser.setLanguage(await loadCurrentWasmBuild(grammar));
 
   describe(grammar, () => {
-    // Only `bun run build/ci` rebuilds the Wasm build, so a check against a stale one would pass after a source
-    // edit that brings the slowdown back.
-    test('uses a Wasm build built from the current parser', () => {
-      // src/parser.c is generated from the grammar, so an edit to the grammar alone also makes the Wasm build stale.
-      const sources = [
-        'common/defineGrammar.js',
-        'common/scanner.h',
-        `${grammar}/grammar.js`,
-        `${grammar}/src/parser.c`,
-        `${grammar}/src/scanner.c`,
-      ].map((name) => fs.statSync(path.join(Root, name)).mtimeMs);
-      expect(
-        Math.max(...sources) > fs.statSync(wasmPath).mtimeMs,
-        `common/ or ${grammar}/ changed after the Wasm build was built; run \`bun run build/ci\``
-      ).toBe(false);
-    });
-
     // Consumers parse files being edited, so recovering from many errors must stay linear: ten times the lines
     // must take about ten times as long (quadratic recovery would take a hundred times). The check compares the CPU
     // time of this test file's process (see `pool` in vitest.config.mts), since other test files run in parallel and
