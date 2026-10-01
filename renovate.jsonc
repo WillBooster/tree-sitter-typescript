@@ -16,12 +16,5 @@
       "matchPackageNames": ["willbooster-tree-sitter"],
       "minimumReleaseAge": "0 days",
     },
-    {
-      // The preset pins every dependency, but an exact requirement in a published crate's manifest stops its
-      // dependents from resolving any other version of that crate. Renovate's default for Cargo keeps the ranges and
-      // updates Cargo.lock, which holds the tested versions.
-      "matchManagers": ["cargo"],
-      "rangeStrategy": "auto",
-    },
   ],
 }
