@@ -21,17 +21,59 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'new',
 ];
 
+// Every primary expression but a `new` without arguments reduces to `_type_arguments_target` before
+// `primary_expression`, so the JavaScript grammar's precedences and conflicts for `primary_expression` take effect only
+// on `_type_arguments_target`.
+function withTypeArgumentsTarget($, lists) {
+  return lists.map((list) =>
+    list.map((entry) =>
+      entry.type === 'SYMBOL' && entry.name === 'primary_expression' ? $._type_arguments_target : entry
+    )
+  );
+}
+
+// Dynamic precedences for the readings of `<` and `>` that GLR keeps where TypeScript's parser, which tries type
+// arguments first and keeps them only before what may follow them (see `scan_type_arguments_end` in scanner.h), reads
+// one way. Comparisons have 0.
+const DYNAMIC_PRECEDENCE = {
+  // The type arguments of a call, a tagged template, or a `new`: they also outweigh comparisons that contain
+  // instantiation expressions (`f<A<B> | C>(x)`) and an extends clause's type arguments in a misreading
+  // (`class C extends f<A<B>, D>(x) {}`).
+  TYPE_ARGUMENTS: 3,
+  // An extends clause's type arguments, which TypeScript also gives the clause where an instantiation expression could
+  // take them (`class C extends B<T>` before a line break and `{`).
+  EXTENDS_TYPE_ARGUMENTS: 2,
+  // An instantiation expression before a line break, which comparisons could continue (`a<B>` before a line break and
+  // `c`).
+  INSTANTIATION_AT_LINE_BREAK: 1,
+  // An instantiation expression elsewhere, so that comparisons containing it lose to an enclosing generic call.
+  INSTANTIATION: -1,
+  // A leading `|` or `&` in a type, which TypeScript allows only at the start of a type: `a < b || c > (d)` compares
+  // rather than calling `a` with `b | | c`.
+  LEADING_TYPE_OPERATOR: -4,
+};
+
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
     name: dialect,
 
-    externals: ($, previous) => [...previous, $._function_signature_automatic_semicolon, $.__error_recovery],
+    externals: ($, previous) => [
+      ...previous,
+      $._function_signature_automatic_semicolon,
+      $._type_arguments_end,
+      $._type_arguments_end_at_line_break,
+      $._new_type_arguments_end,
+      $.__error_recovery,
+    ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
 
     precedences: ($, previous) => [
-      ...previous,
+      ...withTypeArgumentsTarget($, previous),
       ['call', 'instantiation', 'unary', 'binary', $.await_expression, $.arrow_function],
+      // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
+      // expression (`<T>a<B>` before a line break and `[0]`).
+      ['member', 'unary'],
       ['extends', 'instantiation'],
       ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
       [
@@ -43,67 +85,67 @@ module.exports = function defineGrammar(dialect) {
         $.type_predicate,
         $.readonly_type,
       ],
-      [$.mapped_type_clause, $.primary_expression],
-      [$.accessibility_modifier, $.primary_expression],
+      [$.mapped_type_clause, $._type_arguments_target],
+      [$.accessibility_modifier, $._type_arguments_target],
       ['unary_void', $.expression],
-      [$.extends_clause, $.primary_expression],
+      [$.extends_clause, $._type_arguments_target],
       ['unary', 'assign'],
       ['declaration', $.expression],
       [$.predefined_type, $.unary_expression],
       [$.type, $.flow_maybe_type],
       [$.tuple_type, $.array_type, $.pattern, $.type],
       [$.readonly_type, $.pattern],
-      [$.readonly_type, $.primary_expression],
+      [$.readonly_type, $._type_arguments_target],
       [$.type_query, $.subscript_expression, $.expression],
       [$.type_query, $._type_query_subscript_expression],
       [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
+      // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
+      [$.nested_identifier, $.nested_type_identifier],
       [$.as_expression, $.satisfies_expression, $.primary_type],
       [$._type_query_member_expression, $.member_expression],
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
-      [$._type_query_member_expression, $.primary_expression],
+      [$._type_query_member_expression, $._type_arguments_target],
       [$._type_query_subscript_expression, $.subscript_expression],
-      [$._type_query_subscript_expression, $.primary_expression],
-      [$._type_query_call_expression, $.primary_expression],
-      [$._type_query_instantiation_expression, $.primary_expression],
-      [$.type_query, $.primary_expression],
-      [$.override_modifier, $.primary_expression],
+      [$._type_query_subscript_expression, $._type_arguments_target],
+      [$._type_query_call_expression, $._type_arguments_target],
+      [$._type_query_instantiation_expression, $._type_arguments_target],
+      [$.type_query, $._type_arguments_target],
+      [$.override_modifier, $._type_arguments_target],
       [$.decorator_call_expression, $.decorator],
       [$.literal_type, $.pattern],
       [$.predefined_type, $.pattern],
       [$.call_expression, $._type_query_call_expression],
       [$.call_expression, $._type_query_call_expression_in_type_annotation],
-      [$.new_expression, $.primary_expression],
-      [$.meta_property, $.primary_expression],
+      [$.new_expression, $._type_arguments_target],
+      [$.meta_property, $._type_arguments_target],
       [$.construct_signature, $._property_name],
     ],
 
     conflicts: ($, previous) => [
-      ...previous,
-      [$.primary_expression, $.using_declaration],
-      [$.primary_expression, $._for_header, $._for_using_declaration],
+      ...withTypeArgumentsTarget($, previous),
+      [$._type_arguments_target, $.using_declaration],
+      [$._type_arguments_target, $._for_header, $._for_using_declaration],
       [$._for_header, $._binding_identifier],
-      [$.expression, $.call_expression, $.instantiation_expression],
       [$._field_name, $._property_name],
       [$._property_name, $.public_field_definition],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
 
-      [$.nested_identifier, $.nested_type_identifier, $.primary_expression],
-      [$.nested_identifier, $.nested_type_identifier],
+      [$.nested_identifier, $.nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
       [$._call_signature, $.constructor_type],
 
-      [$.primary_expression, $._parameter_name],
-      [$.primary_expression, $._parameter_name, $.primary_type],
-      [$.primary_expression, $.literal_type],
-      [$.primary_expression, $.literal_type, $.rest_pattern],
-      [$.primary_expression, $.predefined_type, $.rest_pattern],
-      [$.primary_expression, $.primary_type],
-      [$.primary_expression, $.generic_type],
-      [$.primary_expression, $.predefined_type],
-      [$.primary_expression, $.pattern, $.primary_type],
+      [$._type_arguments_target, $._parameter_name],
+      [$._type_arguments_target, $._parameter_name, $.primary_type],
+      [$._type_arguments_target, $.literal_type],
+      [$._type_arguments_target, $.literal_type, $.rest_pattern],
+      [$._type_arguments_target, $.predefined_type, $.rest_pattern],
+      [$._type_arguments_target, $.primary_type],
+      [$._type_arguments_target, $.generic_type],
+      [$._type_arguments_target, $.predefined_type],
+      [$._type_arguments_target, $.pattern, $.primary_type],
       [$._parameter_name, $.primary_type],
       [$.pattern, $.primary_type],
 
@@ -112,7 +154,7 @@ module.exports = function defineGrammar(dialect) {
       [$._tuple_label, $.index_type_query],
       [$._tuple_label, $.readonly_type],
       [$._tuple_label, $.predefined_type],
-      [$.rest_pattern, $.primary_type, $.primary_expression],
+      [$.rest_pattern, $.primary_type, $._type_arguments_target],
 
       [$.object, $.object_type],
       [$.object, $.object_pattern, $.object_type],
@@ -131,6 +173,14 @@ module.exports = function defineGrammar(dialect) {
             [$.jsx_opening_element, $.type_parameter],
             [$.jsx_namespace_name, $.primary_type],
           ]),
+      [
+        $.primary_expression,
+        $.call_expression,
+        $._argumentless_new_expression,
+        $.new_expression,
+        $.instantiation_expression,
+      ],
+      [$.primary_expression, $.call_expression, $.instantiation_expression],
     ],
 
     inline: ($, previous) => [
@@ -234,15 +284,15 @@ module.exports = function defineGrammar(dialect) {
         choice(
           prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
           // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
-          // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call, hence the dynamic
-          // precedence. A tag with type arguments is parsed like a generic call. Optional type arguments in the
-          // `template_call` alternative below would make the parser commit to a tagged template at the `<` of `f<T>(x)`.
+          // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call. A tag with type arguments
+          // is parsed like a generic call. Optional type arguments in the `template_call` alternative below would make
+          // the parser commit to a tagged template at the `<` of `f<T>(x)`.
           prec.dynamic(
-            1,
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
             prec(
               'generic_call',
               seq(
-                field('function', $.primary_expression),
+                field('function', $._type_arguments_target),
                 field('type_arguments', $.type_arguments),
                 field('arguments', choice($.arguments, $.template_string))
               )
@@ -260,23 +310,37 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      // tree-sitter-javascript's two forms of `new`, with type arguments; its 'member' and 'new' precedences group nested
-      // `new` as ECMAScript does (`new new A().b` constructs `new A().b`), and both forms are primary expressions.
-      new_expression: ($) =>
-        prec(
-          'new',
-          seq(
-            'new',
-            field('constructor', $.primary_expression),
-            field('type_arguments', optional($.type_arguments)),
-            field('arguments', $.arguments)
+      new_expression: ($, previous) =>
+        choice(
+          previous,
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            prec(
+              'new',
+              seq(
+                'new',
+                field('constructor', $._type_arguments_target),
+                field('type_arguments', $.type_arguments),
+                field('arguments', $.arguments)
+              )
+            )
           )
         ),
 
-      _argumentless_new_expression: ($) =>
-        prec.right(
-          'new',
-          seq('new', field('constructor', $.primary_expression), field('type_arguments', optional($.type_arguments)))
+      // TypeScript reads `new A<B>c` as comparisons, but `new A<B>` before a line break and `c` as a `new` with type
+      // arguments, which also take precedence over an extends clause's (`class C extends new A<B>, D {}`).
+      _argumentless_new_expression: ($, previous) =>
+        choice(
+          previous,
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            seq(
+              'new',
+              field('constructor', $._type_arguments_target),
+              field('type_arguments', $.type_arguments),
+              $._new_type_arguments_end
+            )
+          )
         ),
 
       assignment_expression: ($) =>
@@ -289,7 +353,17 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
-      primary_expression: ($, previous) => choice(previous, $.non_null_expression),
+      primary_expression: ($) =>
+        choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
+
+      // The primary expressions that type arguments in an expression may follow: TypeScript gives the type arguments
+      // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.
+      _type_arguments_target: ($) => {
+        const members = JavaScript.grammar.rules.primary_expression.members.filter(
+          (member) => member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression'
+        );
+        return choice(...members, $.non_null_expression);
+      },
 
       // If the dialect is regular typescript, we exclude JSX expressions and
       // include type assertions. If the dialect is TSX, we do the opposite.
@@ -568,8 +642,17 @@ module.exports = function defineGrammar(dialect) {
 
       satisfies_expression: ($) => prec.left('binary', seq($.expression, 'satisfies', $.type)),
 
-      instantiation_expression: ($) =>
-        prec.dynamic(-1, prec('instantiation', seq($.primary_expression, field('type_arguments', $.type_arguments)))),
+      instantiation_expression: ($) => {
+        const instantiation = (end) =>
+          prec('instantiation', seq($._type_arguments_target, field('type_arguments', $.type_arguments), end));
+        return choice(
+          prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.INSTANTIATION_AT_LINE_BREAK,
+            instantiation($._type_arguments_end_at_line_break)
+          )
+        );
+      },
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
@@ -578,7 +661,16 @@ module.exports = function defineGrammar(dialect) {
       extends_clause: ($) => seq('extends', commaSep1($._extends_clause_single)),
 
       _extends_clause_single: ($) =>
-        prec('extends', seq(field('value', $.expression), field('type_arguments', optional($.type_arguments)))),
+        prec(
+          'extends',
+          choice(
+            field('value', $.expression),
+            prec.dynamic(
+              DYNAMIC_PRECEDENCE.EXTENDS_TYPE_ARGUMENTS,
+              seq(field('value', $.expression), field('type_arguments', $.type_arguments))
+            )
+          )
+        ),
 
       implements_clause: ($) => seq('implements', commaSep1($.type)),
 
@@ -1112,10 +1204,14 @@ module.exports = function defineGrammar(dialect) {
       tuple_type: ($) => seq('[', commaSep($._tuple_type_member), optional(','), ']'),
       readonly_type: ($) => seq('readonly', $.type),
 
-      // TypeScript allows a leading `|` or `&` only at the start of a type, so `a < b || c > (d)` compares instead of
-      // calling `a` with `b | | c`. The negative dynamic precedence outweighs that of the generic call.
-      union_type: ($) => prec.left(choice(seq($.type, '|', $.type), prec.dynamic(-2, seq('|', $.type)))),
-      intersection_type: ($) => prec.left(choice(seq($.type, '&', $.type), prec.dynamic(-2, seq('&', $.type)))),
+      union_type: ($) =>
+        prec.left(
+          choice(seq($.type, '|', $.type), prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq('|', $.type)))
+        ),
+      intersection_type: ($) =>
+        prec.left(
+          choice(seq($.type, '&', $.type), prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq('&', $.type)))
+        ),
 
       function_type: ($) =>
         prec.left(
