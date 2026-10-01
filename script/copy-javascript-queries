@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+# Copies the queries of @willbooster/tree-sitter-javascript, which this grammar extends, into javascript/queries/: the
+# published tree-sitter.json can reference only files inside this package. They stay out of queries/, every file of
+# which `tree-sitter test` compiles against the TypeScript grammar, since highlights-jsx.scm applies only to TSX.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+mkdir -p javascript/queries
+for file in highlights.scm highlights-jsx.scm injections.scm locals.scm tags.scm; do
+  cp "node_modules/@willbooster/tree-sitter-javascript/queries/$file" javascript/queries/
+done
