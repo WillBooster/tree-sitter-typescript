@@ -419,3 +419,49 @@ class A {
         (number))
       (public_field_definition
         (property_identifier)))))
+
+============================================================
+Fields named get, set, or static before a decorated member
+============================================================
+
+class A {
+  @dec get
+  @dec x
+  static
+  @dec y
+  set
+  @dec z
+  get
+  w() {}
+}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block)))))

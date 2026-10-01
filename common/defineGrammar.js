@@ -20,8 +20,6 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'object',
   'new',
 ];
-// The JavaScript grammar's contextual keywords other than the member modifiers `get`, `set`, and `static`.
-const JAVASCRIPT_CONTEXTUAL_KEYWORDS = ['async', 'await', 'export', 'let', 'using'];
 
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
@@ -210,20 +208,8 @@ module.exports = function defineGrammar(dialect) {
       _field_annotations: ($) =>
         choice(seq(choice('?', '!'), field('type', optional($.type_annotation))), field('type', $.type_annotation)),
 
-      _field_name: ($) =>
-        reserved(
-          'properties',
-          choice(
-            alias(
-              choice($.identifier, ...TYPESCRIPT_CONTEXTUAL_KEYWORDS, ...JAVASCRIPT_CONTEXTUAL_KEYWORDS),
-              $.property_identifier
-            ),
-            $.private_property_identifier,
-            $.string,
-            $.number,
-            $.computed_property_name
-          )
-        ),
+      _field_name: ($, previous) =>
+        choice(previous, alias(choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS), $.property_identifier)),
 
       // override original catch_clause, add optional type annotation
       catch_clause: ($) =>

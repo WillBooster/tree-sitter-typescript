@@ -179,8 +179,8 @@ typedef enum {
     LINE_BREAK_AFTER_BINDING_NAME,
     // After a class field name without an initializer: only what may follow a member's name continues it.
     LINE_BREAK_AFTER_FIELD_NAME,
-    // After `static` at the start of a class member: a line break continues the member unless a `}` or the end of input
-    // follows, which leaves a field named `static`.
+    // After `static` at the start of a class member: a line break continues the member unless a `}`, an `@`, or the end
+    // of input follows, which leaves a field named `static`.
     LINE_BREAK_AFTER_MODIFIER_WORD,
     // After `get` or `set` at the start of a class member: as after `static`, except that a `*` also ends the field,
     // since an accessor cannot be a generator.
@@ -282,12 +282,14 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                 default:
                     return true;
             }
+        // A decorator cannot follow a modifier, so an `@` also ends a field named by the word.
         case LINE_BREAK_AFTER_MODIFIER_WORD:
-            return !before_slash && (lexer->lookahead == '}' || lexer->eof(lexer));
+            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
         case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
             return before_slash || !scan_word(lexer, "with");
         case LINE_BREAK_AFTER_ACCESSOR_WORD:
-            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '*' || lexer->eof(lexer));
+            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '*' || lexer->lookahead == '@' ||
+                                     lexer->eof(lexer));
         default:
             break;
     }

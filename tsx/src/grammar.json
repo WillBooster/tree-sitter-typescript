@@ -8153,127 +8153,142 @@
       ]
     },
     "_field_name": {
-      "type": "RESERVED",
-      "content": {
-        "type": "CHOICE",
-        "members": [
-          {
-            "type": "ALIAS",
-            "content": {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "identifier"
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "RESERVED",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "identifier"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "async"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "await"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "export"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "let"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "using"
+                    }
+                  ]
                 },
-                {
-                  "type": "STRING",
-                  "value": "declare"
-                },
-                {
-                  "type": "STRING",
-                  "value": "namespace"
-                },
-                {
-                  "type": "STRING",
-                  "value": "type"
-                },
-                {
-                  "type": "STRING",
-                  "value": "public"
-                },
-                {
-                  "type": "STRING",
-                  "value": "private"
-                },
-                {
-                  "type": "STRING",
-                  "value": "protected"
-                },
-                {
-                  "type": "STRING",
-                  "value": "override"
-                },
-                {
-                  "type": "STRING",
-                  "value": "readonly"
-                },
-                {
-                  "type": "STRING",
-                  "value": "module"
-                },
-                {
-                  "type": "STRING",
-                  "value": "any"
-                },
-                {
-                  "type": "STRING",
-                  "value": "number"
-                },
-                {
-                  "type": "STRING",
-                  "value": "boolean"
-                },
-                {
-                  "type": "STRING",
-                  "value": "string"
-                },
-                {
-                  "type": "STRING",
-                  "value": "symbol"
-                },
-                {
-                  "type": "STRING",
-                  "value": "object"
-                },
-                {
-                  "type": "STRING",
-                  "value": "new"
-                },
-                {
-                  "type": "STRING",
-                  "value": "async"
-                },
-                {
-                  "type": "STRING",
-                  "value": "await"
-                },
-                {
-                  "type": "STRING",
-                  "value": "export"
-                },
-                {
-                  "type": "STRING",
-                  "value": "let"
-                },
-                {
-                  "type": "STRING",
-                  "value": "using"
-                }
-              ]
-            },
-            "named": true,
-            "value": "property_identifier"
+                "named": true,
+                "value": "property_identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "private_property_identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "string"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "number"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "computed_property_name"
+              }
+            ]
           },
-          {
-            "type": "SYMBOL",
-            "name": "private_property_identifier"
+          "context_name": "properties"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "declare"
+              },
+              {
+                "type": "STRING",
+                "value": "namespace"
+              },
+              {
+                "type": "STRING",
+                "value": "type"
+              },
+              {
+                "type": "STRING",
+                "value": "public"
+              },
+              {
+                "type": "STRING",
+                "value": "private"
+              },
+              {
+                "type": "STRING",
+                "value": "protected"
+              },
+              {
+                "type": "STRING",
+                "value": "override"
+              },
+              {
+                "type": "STRING",
+                "value": "readonly"
+              },
+              {
+                "type": "STRING",
+                "value": "module"
+              },
+              {
+                "type": "STRING",
+                "value": "any"
+              },
+              {
+                "type": "STRING",
+                "value": "number"
+              },
+              {
+                "type": "STRING",
+                "value": "boolean"
+              },
+              {
+                "type": "STRING",
+                "value": "string"
+              },
+              {
+                "type": "STRING",
+                "value": "symbol"
+              },
+              {
+                "type": "STRING",
+                "value": "object"
+              },
+              {
+                "type": "STRING",
+                "value": "new"
+              }
+            ]
           },
-          {
-            "type": "SYMBOL",
-            "name": "string"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "number"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "computed_property_name"
-          }
-        ]
-      },
-      "context_name": "properties"
+          "named": true,
+          "value": "property_identifier"
+        }
+      ]
     },
     "_property_name": {
       "type": "RESERVED",
