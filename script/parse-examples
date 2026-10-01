@@ -51,11 +51,11 @@ for grammar_and_extension in typescript:ts tsx:tsx; do
   grammar=${grammar_and_extension%:*}
   find examples -type f -name "*.${grammar_and_extension#*:}" -print | LC_ALL=C sort > "$tmp/files"
   # `parse --grammar-path` would recompile the parser for every file.
-  bun run tree-sitter build -o "$tmp/$grammar.parser" "$grammar"
+  script/tree-sitter build -o "$tmp/$grammar.parser" "$grammar"
   # The CLI exits non-zero whenever a file fails, so the output decides success. `--time` makes it print
   # a line for each file, including files that exceed `--timeout` (30 s), which bounds a runaway parse. The
   # largest example (8 MB) takes about 1 s on Apple silicon and over 2 s on GitHub's Intel macOS runners.
-  bun run tree-sitter parse --lib-path "$tmp/$grammar.parser" --lang-name "$grammar" -q -s --time --timeout 30000000 \
+  script/tree-sitter parse --lib-path "$tmp/$grammar.parser" --lang-name "$grammar" -q -s --time --timeout 30000000 \
     --paths "$tmp/files" > "$tmp/$grammar" || true
   if ! grep -q '^Total parses' "$tmp/$grammar"; then
     cat "$tmp/$grammar" >&2
