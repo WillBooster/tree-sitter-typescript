@@ -1208,6 +1208,23 @@ x!!.y;
       (property_identifier))))
 
 =======================================
+Non-null assertion on a type assertion
+:language(typescript)
+=======================================
+
+<T>x!;
+
+---
+
+(program
+  (expression_statement
+    (type_assertion
+      (type_arguments
+        (type_identifier))
+      (non_null_expression
+        (identifier)))))
+
+=======================================
 Type query and index type query types
 =======================================
 
