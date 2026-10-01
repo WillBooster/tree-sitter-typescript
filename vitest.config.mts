@@ -1,12 +1,15 @@
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
+// wbfy declares the `vitest/globals` types in tsconfig.json, so both projects provide the globals at run time for the type
+// check to agree with them.
 export default defineConfig({
   test: {
     projects: [
       {
         test: {
           name: 'node',
+          globals: true,
           include: ['test/unit/**/*.test.ts'],
           exclude: ['test/unit/browser/**'],
           // test/unit/performance.test.ts times parses in process CPU time, which counts only that test file while
@@ -17,6 +20,7 @@ export default defineConfig({
       {
         test: {
           name: 'browser',
+          globals: true,
           include: ['test/unit/browser/**/*.test.ts'],
           browser: {
             enabled: true,
