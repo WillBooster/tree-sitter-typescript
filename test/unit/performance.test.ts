@@ -33,8 +33,8 @@ for (const grammar of ['typescript', 'tsx']) {
 
     // Consumers parse files being edited, so recovering from many errors must stay linear: ten times the lines
     // must take about ten times as long (quadratic recovery would take a hundred times). The check compares the CPU
-    // time of this process, since other test files run in parallel and slow down the wall-clock time of one parse
-    // more than another's, and takes the fastest of a few parses.
+    // time of this test file's process (see `pool` in vitest.config.mts), since other test files run in parallel and
+    // slow down the wall-clock time of one parse more than another's, and takes the fastest of a few parses.
     // The seven parses take under 1 s here but over 5 s, Vitest's default timeout, on a busy CI runner.
     test('recovers from an error on each of 10,000 lines in linear time', { timeout: 60_000 }, () => {
       parseErrors(parser, 1000);
