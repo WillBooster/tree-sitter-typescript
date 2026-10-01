@@ -4311,7 +4311,7 @@
               "members": [
                 {
                   "type": "PREC_DYNAMIC",
-                  "value": 2,
+                  "value": 3,
                   "content": {
                     "type": "SYMBOL",
                     "name": "arguments"
@@ -7894,8 +7894,12 @@
       ]
     },
     "_nested_new_expression": {
-      "type": "SYMBOL",
-      "name": "new_expression"
+      "type": "PREC_DYNAMIC",
+      "value": -1,
+      "content": {
+        "type": "SYMBOL",
+        "name": "new_expression"
+      }
     },
     "_jsx_start_opening_element": {
       "type": "SEQ",

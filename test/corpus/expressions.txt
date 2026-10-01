@@ -873,6 +873,7 @@ new new Thing;
 new new A<T>()<U>(x);
 new new A().b(2);
 new new A()[0](2);
+new new A().b;
 a?.1:.2;
 b ? .5 : c;
 
@@ -923,6 +924,13 @@ b ? .5 : c;
         (number))
       (arguments
         (number))))
+  (expression_statement
+    (new_expression
+      (member_expression
+        (new_expression
+          (identifier)
+          (arguments))
+        (property_identifier))))
   (expression_statement
     (ternary_expression
       (identifier)
