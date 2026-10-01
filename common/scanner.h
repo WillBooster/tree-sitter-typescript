@@ -1,8 +1,6 @@
 #include "tree_sitter/alloc.h"
 #include "tree_sitter/parser.h"
 
-#include <wctype.h>
-
 enum TokenType {
     AUTOMATIC_SEMICOLON,
     TEMPLATE_CHARS,
@@ -14,6 +12,11 @@ enum TokenType {
     JSX_TEXT,
     ARROW_FUNCTION_BLOCK_END,
     ARROW_FUNCTION_BLOCK_CONTINUATION,
+    LINE_BREAK_ENDS_STATEMENT,
+    LINE_BREAK_AFTER_BINDING,
+    LINE_BREAK_AFTER_FIELD,
+    LINE_BREAK_AFTER_MODIFIER,
+    LINE_BREAK_BEFORE_ATTRIBUTES,
     FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON,
     ERROR_RECOVERY,
 };
@@ -49,11 +52,12 @@ static bool scan_template_chars(TSLexer *lexer) {
     lexer->result_symbol = TEMPLATE_CHARS;
     for (bool has_content = false;; has_content = true) {
         lexer->mark_end(lexer);
+        if (lexer->eof(lexer)) {
+            return false;
+        }
         switch (lexer->lookahead) {
             case '`':
                 return has_content;
-            case '\0':
-                return false;
             case '$':
                 advance(lexer);
                 if (lexer->lookahead == '{') {
@@ -77,12 +81,27 @@ static inline bool is_whitespace(int32_t c) {
            c == 0x2028 || c == 0x2029 || c == 0x202F || c == 0x205F || c == 0x2060 || c == 0x3000 || c == 0xFEFF;
 }
 
+static inline bool is_ascii_letter(int32_t c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
+
+static inline bool is_ascii_digit(int32_t c) { return c >= '0' && c <= '9'; }
+
 // Counts the characters the grammar's identifiers may continue with (a backslash starts a `\u` escape), with every
 // character from U+007F on other than whitespace, which suffices to tell `in` and `instanceof` from the identifiers they
 // start.
 static inline bool is_identifier_part(int32_t c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '$' ||
-           c == '\\' || (c >= 0x7F && !is_whitespace(c));
+    return is_ascii_letter(c) || is_ascii_digit(c) || c == '_' || c == '$' || c == '\\' ||
+           (c >= 0x7F && !is_whitespace(c));
+}
+
+// Consumes the lookahead while it matches `word`, and returns whether the whole word matched and ends there.
+static bool scan_word(TSLexer *lexer, const char *word) {
+    for (; *word; word++) {
+        if (lexer->lookahead != *word) {
+            return false;
+        }
+        skip(lexer);
+    }
+    return !is_identifier_part(lexer->lookahead);
 }
 
 typedef enum {
@@ -96,7 +115,7 @@ typedef enum {
 static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
     skip(lexer);
     if (lexer->lookahead == '/') {
-        while (lexer->lookahead != 0 && !is_line_terminator(lexer->lookahead)) {
+        while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
             skip(lexer);
         }
         *scanned_comment = true;
@@ -107,7 +126,7 @@ static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
     }
     skip(lexer);
     bool saw_line_terminator = false;
-    while (lexer->lookahead != 0) {
+    while (!lexer->eof(lexer)) {
         if (lexer->lookahead == '*') {
             skip(lexer);
             if (lexer->lookahead == '/') {
@@ -149,14 +168,38 @@ static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comme
     return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
 }
 
+// What a line break after the preceding token means, told by the sentinel external tokens that the grammar allows
+// only at these positions; the scanner never emits them.
+typedef enum {
+    // Decided by the characters that follow.
+    LINE_BREAK_BY_NEXT_TOKEN,
+    // After `return`, `yield`, `break`, `continue`, or `debugger`, which nothing on the next line can continue.
+    LINE_BREAK_ENDS,
+    // After a declared name without an initializer: only `=`, `,`, or a type annotation continues the declaration.
+    LINE_BREAK_AFTER_BINDING_NAME,
+    // After a class field name without an initializer: only what may follow a member's name continues it.
+    LINE_BREAK_AFTER_FIELD_NAME,
+    // After `static` at the start of a class member: a line break continues the member unless a `}`, an `@`, or the end
+    // of input follows, which leaves a field named `static`.
+    LINE_BREAK_AFTER_MODIFIER_WORD,
+    // After `get` or `set` at the start of a class member: as after `static`, except that a `*` also ends the field,
+    // since an accessor cannot be a generator.
+    LINE_BREAK_AFTER_ACCESSOR_WORD,
+    // After the source of an import or re-export: only the `with` of its attributes continues it.
+    LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES,
+} LineBreakRule;
+
+static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
+                                  LineBreakRule rule, bool *scanned_comment);
+
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
-                                     bool *scanned_comment) {
+                                     LineBreakRule rule, bool *scanned_comment) {
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
     lexer->mark_end(lexer);
 
     // A line terminator, also one inside a block comment, separates statements.
     for (bool at_line_break = false; !at_line_break;) {
-        if (lexer->lookahead == 0 || lexer->is_at_included_range_start(lexer)) {
+        if (lexer->eof(lexer) || lexer->is_at_included_range_start(lexer)) {
             return true;
         }
         if (lexer->lookahead == '}') {
@@ -189,11 +232,68 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
         }
     }
 
+    return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_comment);
+}
+
+static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
+                                  LineBreakRule rule, bool *scanned_comment) {
     if (after_block_arrow) {
         return ends_statement_after_block_arrow(lexer, scanned_comment);
     }
 
-    if (!scan_whitespace_and_comments(lexer, scanned_comment)) {
+    bool before_slash = !scan_whitespace_and_comments(lexer, scanned_comment);
+    // A `;` at the start of the next line ends the statement itself.
+    if (!before_slash && lexer->lookahead == ';') {
+        return false;
+    }
+    switch (rule) {
+        case LINE_BREAK_ENDS:
+            // A token that can start a statement starts the next one; any other token is left to the rules below,
+            // which keep a bare `yield` continued by an enclosing `,` or `:`, and `yield` as a script's identifier
+            // continued by an operator.
+            switch (lexer->lookahead) {
+                case '`':
+                case '[':
+                case '(':
+                case '+':
+                case '-':
+                case '<':
+                    return true;
+                default:
+                    if (before_slash) {
+                        return true;
+                    }
+                    break;
+            }
+            break;
+        case LINE_BREAK_AFTER_BINDING_NAME:
+            // A type annotation may also follow on the next line.
+            return before_slash || (lexer->lookahead != '=' && lexer->lookahead != ',' && lexer->lookahead != ':');
+        case LINE_BREAK_AFTER_FIELD_NAME:
+            // Besides an initializer and a method's parameters, a `?`, a type annotation, or a method's type
+            // parameters may follow on the next line; a `!` must stay on the name's line.
+            switch (lexer->lookahead) {
+                case '=':
+                case '(':
+                case '<':
+                case '?':
+                case ':':
+                    return before_slash;
+                default:
+                    return true;
+            }
+        // A decorator cannot follow a modifier, so an `@` also ends a field named by the word.
+        case LINE_BREAK_AFTER_MODIFIER_WORD:
+            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
+        case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
+            return before_slash || !scan_word(lexer, "with");
+        case LINE_BREAK_AFTER_ACCESSOR_WORD:
+            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '*' || lexer->lookahead == '@' ||
+                                     lexer->eof(lexer));
+        default:
+            break;
+    }
+    if (before_slash) {
         return false;
     }
 
@@ -217,7 +317,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
         // Insert a semicolon before a decimal literal such as `.5`, but not before a member access.
         case '.':
             skip(lexer);
-            return iswdigit(lexer->lookahead);
+            return is_ascii_digit(lexer->lookahead);
 
         case '{':
             if (valid_symbols[FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON]) {
@@ -312,7 +412,7 @@ static bool scan_ternary_qmark(TSLexer *lexer) {
 
         if (lexer->lookahead == '.') {
             advance(lexer);
-            if (iswdigit(lexer->lookahead)) {
+            if (is_ascii_digit(lexer->lookahead)) {
                 return true;
             }
             return false;
@@ -348,7 +448,7 @@ static bool scan_closing_comment(TSLexer *lexer) {
         return false;
     }
 
-    while (lexer->lookahead != 0 && !is_line_terminator(lexer->lookahead)) {
+    while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
         advance(lexer);
     }
 
@@ -357,10 +457,6 @@ static bool scan_closing_comment(TSLexer *lexer) {
 
     return true;
 }
-
-static inline bool is_ascii_letter(int32_t c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
-
-static inline bool is_ascii_digit(int32_t c) { return c >= '0' && c <= '9'; }
 
 static inline bool is_hex_digit(int32_t c) { return is_ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
 
@@ -400,8 +496,10 @@ static bool scan_jsx_text(TSLexer *lexer) {
     lexer->result_symbol = JSX_TEXT;
     for (;;) {
         lexer->mark_end(lexer);
+        if (lexer->eof(lexer)) {
+            return saw_text;
+        }
         switch (lexer->lookahead) {
-            case 0:
             case '<':
             case '>':
             case '{':
@@ -476,7 +574,19 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         valid_symbols[ARROW_FUNCTION_BLOCK_END]) {
         bool after_block_arrow = valid_symbols[ARROW_FUNCTION_BLOCK_END];
         bool scanned_comment = false;
-        bool ret = scan_automatic_semicolon(lexer, valid_symbols, after_block_arrow, &scanned_comment);
+        LineBreakRule rule = LINE_BREAK_BY_NEXT_TOKEN;
+        if (valid_symbols[LINE_BREAK_ENDS_STATEMENT]) {
+            rule = LINE_BREAK_ENDS;
+        } else if (valid_symbols[LINE_BREAK_AFTER_BINDING]) {
+            rule = LINE_BREAK_AFTER_BINDING_NAME;
+        } else if (valid_symbols[LINE_BREAK_AFTER_MODIFIER]) {
+            rule = valid_symbols[LINE_BREAK_AFTER_FIELD] ? LINE_BREAK_AFTER_ACCESSOR_WORD : LINE_BREAK_AFTER_MODIFIER_WORD;
+        } else if (valid_symbols[LINE_BREAK_AFTER_FIELD]) {
+            rule = LINE_BREAK_AFTER_FIELD_NAME;
+        } else if (valid_symbols[LINE_BREAK_BEFORE_ATTRIBUTES]) {
+            rule = LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES;
+        }
+        bool ret = scan_automatic_semicolon(lexer, valid_symbols, after_block_arrow, rule, &scanned_comment);
         if (ret && after_block_arrow) {
             lexer->result_symbol = ARROW_FUNCTION_BLOCK_END;
             scanner->automatic_semicolon_pending = true;
