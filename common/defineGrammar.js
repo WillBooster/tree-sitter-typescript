@@ -1,6 +1,26 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
+// Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
+const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'declare',
+  'namespace',
+  'type',
+  'public',
+  'private',
+  'protected',
+  'override',
+  'readonly',
+  'module',
+  'any',
+  'number',
+  'boolean',
+  'string',
+  'symbol',
+  'object',
+  'new',
+];
+
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
     name: dialect,
@@ -63,6 +83,8 @@ module.exports = function defineGrammar(dialect) {
       [$.primary_expression, $._for_header, $._for_using_declaration],
       [$._for_header, $._binding_identifier],
       [$.expression, $.call_expression, $.instantiation_expression],
+      [$._field_name, $._property_name],
+      [$._property_name, $.public_field_definition],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
@@ -118,6 +140,9 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
+      // A field named `get`, `set`, or `static` is told apart from a member that the word modifies by the line-break
+      // sentinels allowed right after the name, as in the JavaScript grammar's field_definition. They are not allowed
+      // after a type annotation, which may continue on the next line.
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
@@ -128,16 +153,63 @@ module.exports = function defineGrammar(dialect) {
             )
           ),
           choice(
-            seq(optional('static'), optional($.override_modifier), optional('readonly')),
-            seq(optional('abstract'), optional('readonly')),
-            seq(optional('readonly'), optional('abstract')),
-            optional('accessor')
-          ),
-          field('name', $._property_name),
-          optional(choice('?', '!')),
-          field('type', optional($.type_annotation)),
-          optional($._initializer)
+            seq(
+              choice(
+                seq(optional('static'), optional($.override_modifier), optional('readonly')),
+                seq(optional('abstract'), optional('readonly')),
+                seq(optional('readonly'), optional('abstract')),
+                optional('accessor')
+              ),
+              choice(
+                seq(
+                  field('name', $._field_name),
+                  choice(
+                    optional(choice($._initializer, $._line_break_after_field)),
+                    seq($._field_annotations, optional($._initializer))
+                  )
+                ),
+                // A line break after `get` or `set` continues a getter or setter. Allowing both sentinels here tells
+                // the scanner that a `*` on the next line cannot continue the member, unlike after `static`.
+                seq(
+                  field('name', alias(choice('get', 'set'), $.property_identifier)),
+                  choice(
+                    optional(choice($._initializer, $._line_break_after_modifier, $._line_break_after_field)),
+                    seq($._field_annotations, optional($._initializer))
+                  )
+                )
+              )
+            ),
+            // A line break after a leading `static` continues a static member.
+            seq(
+              field('name', alias('static', $.property_identifier)),
+              choice(
+                optional(choice($._initializer, $._line_break_after_modifier)),
+                seq($._field_annotations, optional($._initializer))
+              )
+            ),
+            // After a modifier, `static` is a field name, which a line break ends.
+            seq(
+              choice(
+                seq('static', optional($.override_modifier), optional('readonly')),
+                seq($.override_modifier, optional('readonly')),
+                seq('readonly', optional('abstract')),
+                seq('abstract', optional('readonly')),
+                'accessor'
+              ),
+              field('name', alias('static', $.property_identifier)),
+              choice(
+                optional(choice($._initializer, $._line_break_after_field)),
+                seq($._field_annotations, optional($._initializer))
+              )
+            )
+          )
         ),
+
+      _field_annotations: ($) =>
+        choice(seq(choice('?', '!'), field('type', optional($.type_annotation))), field('type', $.type_annotation)),
+
+      _field_name: ($, previous) =>
+        choice(previous, alias(choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS), $.property_identifier)),
 
       // override original catch_clause, add optional type annotation
       catch_clause: ($) =>
@@ -271,15 +343,6 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      // Any identifier name may name a JSX attribute, such as `class` in `<div class="x" />`, which the JavaScript
-      // grammar's reserved words reject (WillBooster/tree-sitter-javascript#25).
-      _jsx_attribute_name: ($) =>
-        choice(
-          alias($.jsx_identifier, $.property_identifier),
-          alias(reserved('properties', $.identifier), $.property_identifier),
-          $.jsx_namespace_name
-        ),
-
       // This rule is only referenced by expression when the dialect is 'tsx'
       jsx_opening_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '>')),
 
@@ -288,9 +351,7 @@ module.exports = function defineGrammar(dialect) {
 
       export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
 
-      // Any identifier name may be exported or imported. The JavaScript grammar rejects reserved words other than
-      // `default`, for which it leaves no node (WillBooster/tree-sitter-javascript#17 and #24).
-      _module_export_name: ($) => choice(reserved('properties', $.identifier), $.string),
+      _local_export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 
@@ -321,7 +382,7 @@ module.exports = function defineGrammar(dialect) {
           'import',
           optional(choice('type', 'typeof')),
           choice(seq($.import_clause, $._from_clause), $.import_require_clause, field('source', $.string)),
-          optional($.import_attribute),
+          optional(choice($.import_attribute, $._line_break_before_attributes)),
           $._semicolon
         ),
 
@@ -332,33 +393,6 @@ module.exports = function defineGrammar(dialect) {
           seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
-        ),
-
-      // The JavaScript grammar leaves `await (x).y` ambiguous with a call of an identifier named `await`, and GLR keeps
-      // the call; TypeScript and V8 read the operator (WillBooster/tree-sitter-javascript#23).
-      await_expression: ($) => prec.dynamic(2, prec('unary_void', seq('await', $.expression))),
-
-      // The JavaScript grammar's for header takes no `using` declaration, although ECMAScript allows one.
-      for_statement: ($) =>
-        seq(
-          'for',
-          '(',
-          choice(
-            field(
-              'initializer',
-              choice(
-                alias($.for_lexical_declaration, $.lexical_declaration),
-                alias($.for_variable_declaration, $.variable_declaration),
-                alias($._for_using_declaration, $.using_declaration)
-              )
-            ),
-            seq(field('initializer', $._expressions), ';'),
-            field('initializer', $.empty_statement)
-          ),
-          field('condition', choice(seq($._expressions, ';'), $.empty_statement)),
-          field('increment', optional($._expressions)),
-          ')',
-          field('body', $.statement)
         ),
 
       // ECMAScript binds only identifiers in a using declaration, so `using [a] = b` assigns to a subscript of a
@@ -412,8 +446,11 @@ module.exports = function defineGrammar(dialect) {
         choice(
           seq(
             field('name', choice($._binding_identifier, $._destructuring_pattern)),
-            field('type', optional($.type_annotation)),
-            optional($._initializer)
+            // The line-break sentinel applies only right after the name: a type may continue on the next line.
+            choice(
+              optional(choice($._initializer, $._line_break_after_binding)),
+              seq(field('type', $.type_annotation), optional($._initializer))
+            )
           ),
           prec('declaration', seq(field('name', $._binding_identifier), '!', field('type', $.type_annotation)))
         ),
@@ -471,25 +508,20 @@ module.exports = function defineGrammar(dialect) {
         prec(
           'call',
           seq(
-            field('function', choice($.identifier, alias($.decorator_member_expression, $.member_expression))),
+            field(
+              'function',
+              choice(
+                $.identifier,
+                alias($.decorator_member_expression, $.member_expression),
+                alias($.decorator_parenthesized_expression, $.parenthesized_expression)
+              )
+            ),
             optional(field('type_arguments', $.type_arguments)),
             field('arguments', $.arguments)
           )
         ),
 
       decorator_parenthesized_expression: ($) => seq('(', $._expressions, ')'),
-
-      // A decorator's member name may be any identifier name, as a member expression's may, which the JavaScript
-      // grammar's reserved words reject.
-      decorator_member_expression: ($) =>
-        prec(
-          'member',
-          seq(
-            field('object', choice($.identifier, alias($.decorator_member_expression, $.member_expression))),
-            '.',
-            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
-          )
-        ),
 
       class_body: ($) =>
         seq(
@@ -529,7 +561,7 @@ module.exports = function defineGrammar(dialect) {
             field('name', $._property_name),
             optional('?'),
             $._call_signature,
-            field('body', $.statement_block)
+            field('body', alias($._class_member_body, $.statement_block))
           )
         ),
 
@@ -633,17 +665,6 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       import_alias: ($) => seq('import', $.identifier, '=', choice($.identifier, $.nested_identifier), $._semicolon),
-
-      // A qualified name may end in any identifier name, as a member expression may.
-      nested_identifier: ($) =>
-        prec(
-          'member',
-          seq(
-            field('object', choice($.identifier, alias($.nested_identifier, $.member_expression))),
-            '.',
-            field('property', reserved('properties', alias($.identifier, $.property_identifier)))
-          )
-        ),
 
       nested_type_identifier: ($) =>
         prec(
@@ -1127,29 +1148,7 @@ module.exports = function defineGrammar(dialect) {
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
       _type_identifier: ($) => alias(reserved('properties', $.identifier), $.type_identifier),
 
-      _reserved_identifier: (_, previous) =>
-        choice(
-          'declare',
-          'namespace',
-          'type',
-          'public',
-          'private',
-          'protected',
-          'override',
-          'readonly',
-          'module',
-          'any',
-          'number',
-          'boolean',
-          'string',
-          'symbol',
-          'export',
-          'object',
-          'new',
-          'readonly',
-          'using',
-          previous
-        ),
+      _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
   });
 };

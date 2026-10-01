@@ -208,3 +208,381 @@ g(() => {} /* c */, 1);
           (statement_block))
         (comment)
         (number)))))
+
+============================================================
+Line breaks in class members and declarations with types
+============================================================
+
+class A {
+  static
+  foo() {}
+  get
+  x() { return 1 }
+  a
+  *b() {}
+  c
+  ?: number
+  d:
+    | 'x'
+    | 'y'
+  static
+}
+declare const e:
+  | 'x'
+  | 'y'
+let f
+(g)
+let h
+  : number = 1
+export { i, type J }
+@(k)(l) class M {}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block
+          (return_statement
+            (number))))
+      (public_field_definition
+        (property_identifier))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (union_type
+            (union_type
+              (literal_type
+                (string
+                  (string_fragment))))
+            (literal_type
+              (string
+                (string_fragment))))))
+      (public_field_definition
+        (property_identifier))))
+  (ambient_declaration
+    (lexical_declaration
+      (variable_declarator
+        (identifier)
+        (type_annotation
+          (union_type
+            (union_type
+              (literal_type
+                (string
+                  (string_fragment))))
+            (literal_type
+              (string
+                (string_fragment))))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)))
+  (expression_statement
+    (parenthesized_expression
+      (identifier)))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (predefined_type))
+      (number)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))
+      (export_specifier
+        (identifier))))
+  (class_declaration
+    (decorator
+      (call_expression
+        (parenthesized_expression
+          (identifier))
+        (arguments
+          (identifier))))
+    (type_identifier)
+    (class_body)))
+
+============================================================
+Line breaks after return, yield, and declarations without initializers
+============================================================
+
+function* g() {
+  return
+  [a]
+  yield
+  (b)
+}
+let e
+/f/.test(e)
+
+---
+
+(program
+  (generator_function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (return_statement)
+      (expression_statement
+        (array
+          (identifier)))
+      (expression_statement
+        (yield_expression))
+      (expression_statement
+        (parenthesized_expression
+          (identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)))
+  (expression_statement
+    (call_expression
+      (member_expression
+        (regex
+          (regex_pattern))
+        (property_identifier))
+      (arguments
+        (identifier)))))
+
+============================================================
+Fields named static after modifiers and across line breaks
+============================================================
+
+class A {
+  readonly static: number;
+  static readonly static = 1;
+  static static;
+  override static = 2;
+  abstract static: string;
+  accessor static = 3;
+  public static
+  foo() {}
+  static
+  bar = 1
+  readonly static
+  baz = 2
+  static
+}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (override_modifier)
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (method_definition
+        (accessibility_modifier)
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier)))))
+
+============================================================
+Fields named get, set, or static before a decorated member
+============================================================
+
+class A {
+  @dec get
+  @dec x
+  static
+  @dec y
+  set
+  @dec z
+  get
+  w() {}
+}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (decorator
+          (identifier))
+        (property_identifier))
+      (method_definition
+        (property_identifier)
+        (formal_parameters)
+        (statement_block)))))
+
+============================================================
+Line breaks before import attributes and after break, continue, and debugger
+============================================================
+
+import a from "m"
+with { type: "json" }
+export { b } from "n"
+with { type: "json" }
+foo: for (;;) {
+  break
+  foo
+  continue
+  foo
+  debugger
+  [c]
+}
+
+---
+
+(program
+  (import_statement
+    (import_clause
+      (identifier))
+    (string
+      (string_fragment))
+    (import_attribute
+      (object
+        (pair
+          (property_identifier)
+          (string
+            (string_fragment))))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment))
+    (import_attribute
+      (object
+        (pair
+          (property_identifier)
+          (string
+            (string_fragment))))))
+  (labeled_statement
+    (statement_identifier)
+    (for_statement
+      (empty_statement)
+      (empty_statement)
+      (statement_block
+        (break_statement)
+        (expression_statement
+          (identifier))
+        (continue_statement)
+        (expression_statement
+          (identifier))
+        (debugger_statement)
+        (expression_statement
+          (array
+            (identifier)))))))
+
+============================================================
+Line breaks before import attributes and after break, continue, and debugger in TSX
+:language(tsx)
+============================================================
+
+import a from "m"
+with { type: "json" }
+export { b } from "n"
+with { type: "json" }
+foo: for (;;) {
+  break
+  foo
+  continue
+  foo
+  debugger
+  [c]
+}
+
+---
+
+(program
+  (import_statement
+    (import_clause
+      (identifier))
+    (string
+      (string_fragment))
+    (import_attribute
+      (object
+        (pair
+          (property_identifier)
+          (string
+            (string_fragment))))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment))
+    (import_attribute
+      (object
+        (pair
+          (property_identifier)
+          (string
+            (string_fragment))))))
+  (labeled_statement
+    (statement_identifier)
+    (for_statement
+      (empty_statement)
+      (empty_statement)
+      (statement_block
+        (break_statement)
+        (expression_statement
+          (identifier))
+        (continue_statement)
+        (expression_statement
+          (identifier))
+        (debugger_statement)
+        (expression_statement
+          (array
+            (identifier)))))))
