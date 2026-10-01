@@ -4282,7 +4282,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "new_expression"
+                  "name": "_nested_new_expression"
                 }
               ]
             }
@@ -4311,7 +4311,7 @@
               "members": [
                 {
                   "type": "PREC_DYNAMIC",
-                  "value": 1,
+                  "value": 2,
                   "content": {
                     "type": "SYMBOL",
                     "name": "arguments"
@@ -7892,6 +7892,10 @@
           ]
         }
       ]
+    },
+    "_nested_new_expression": {
+      "type": "SYMBOL",
+      "name": "new_expression"
     },
     "_jsx_start_opening_element": {
       "type": "SEQ",
@@ -11960,6 +11964,20 @@
     [
       "expression",
       "call_expression",
+      "instantiation_expression"
+    ],
+    [
+      "expression",
+      "_nested_new_expression"
+    ],
+    [
+      "call_expression",
+      "_nested_new_expression"
+    ],
+    [
+      "expression",
+      "call_expression",
+      "_nested_new_expression",
       "instantiation_expression"
     ],
     [

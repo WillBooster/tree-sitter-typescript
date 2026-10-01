@@ -63,6 +63,9 @@ module.exports = function defineGrammar(dialect) {
       [$.primary_expression, $._for_header, $._for_using_declaration],
       [$._for_header, $._binding_identifier],
       [$.expression, $.call_expression, $.instantiation_expression],
+      [$.expression, $._nested_new_expression],
+      [$.call_expression, $._nested_new_expression],
+      [$.expression, $.call_expression, $._nested_new_expression, $.instantiation_expression],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
@@ -199,11 +202,19 @@ module.exports = function defineGrammar(dialect) {
           'new',
           seq(
             'new',
-            field('constructor', choice($.primary_expression, $.new_expression)),
+            field('constructor', choice($.primary_expression, $._nested_new_expression)),
             field('type_arguments', optional($.type_arguments)),
-            field('arguments', optional(prec.dynamic(1, $.arguments)))
+            field('arguments', optional(prec.dynamic(2, $.arguments)))
           )
         ),
+
+      // A `new` with arguments is a member-level expression, so `new new A().b(2)` constructs `new A().b` and
+      // `new new A()(2)` constructs `new A()`. The constructor reaches a `new_expression` through this rule, whose
+      // conflict with `expression` keeps both readings open, and the dynamic precedence of 2 on a `new`'s arguments
+      // prefers the reading in which every `new` takes the argument list that follows it (also over a generic call's 1).
+      // Without it, the JavaScript grammar's precedence of `new` over `expression` would end the outer `new` before a
+      // member access.
+      _nested_new_expression: ($) => $.new_expression,
 
       assignment_expression: ($) =>
         prec.right(
