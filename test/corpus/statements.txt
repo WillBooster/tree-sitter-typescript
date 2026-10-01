@@ -357,3 +357,65 @@ let e
         (property_identifier))
       (arguments
         (identifier)))))
+
+============================================================
+Fields named static after modifiers and across line breaks
+============================================================
+
+class A {
+  readonly static: number;
+  static readonly static = 1;
+  static static;
+  override static = 2;
+  abstract static: string;
+  accessor static = 3;
+  public static
+  foo() {}
+  static
+  bar = 1
+  readonly static
+  baz = 2
+  static
+}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (override_modifier)
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (method_definition
+        (accessibility_modifier)
+        (property_identifier)
+        (formal_parameters)
+        (statement_block))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier))
+      (public_field_definition
+        (property_identifier)
+        (number))
+      (public_field_definition
+        (property_identifier)))))

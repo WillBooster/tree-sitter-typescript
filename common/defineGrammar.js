@@ -181,7 +181,7 @@ module.exports = function defineGrammar(dialect) {
                 )
               )
             ),
-            // A line break after a leading `static` continues a static member; after `static static`, it ends the field.
+            // A line break after a leading `static` continues a static member.
             seq(
               field('name', alias('static', $.property_identifier)),
               choice(
@@ -189,8 +189,15 @@ module.exports = function defineGrammar(dialect) {
                 seq($._field_annotations, optional($._initializer))
               )
             ),
+            // After a modifier, `static` is a field name, which a line break ends.
             seq(
-              'static',
+              choice(
+                seq('static', optional($.override_modifier), optional('readonly')),
+                seq($.override_modifier, optional('readonly')),
+                seq('readonly', optional('abstract')),
+                seq('abstract', optional('readonly')),
+                'accessor'
+              ),
               field('name', alias('static', $.property_identifier)),
               choice(
                 optional(choice($._initializer, $._line_break_after_field)),
