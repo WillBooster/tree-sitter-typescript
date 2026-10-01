@@ -35,7 +35,12 @@ if [[ ! -x $cli ]]; then
       tar -xzf "$staging/cli.tar.gz" -C "$staging" && "$staging/tree-sitter" --version > /dev/null; then
       mv "$staging/tree-sitter" "$cli"
     else
-      # Like the release's binary, the build has the `wasm` feature, which `tree-sitter test --wasm` needs.
+      # Like the release's binary, the build has the `wasm` feature, which `tree-sitter test --wasm` needs and whose
+      # wasmtime build script runs cmake, failing with an assertion that does not name it.
+      if ! command -v cmake > /dev/null || ! cmake --version > /dev/null 2>&1; then
+        echo "No tree-sitter CLI $version that runs here could be downloaded, and building it needs cmake, which is missing." >&2
+        exit 1
+      fi
       cargo install --quiet --locked --features wasm --root "$staging/root" \
         --git https://github.com/WillBooster/tree-sitter --tag "v$version" tree-sitter-cli >&2
       mv "$staging/root/bin/tree-sitter" "$cli"
