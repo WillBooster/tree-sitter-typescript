@@ -63,9 +63,6 @@ module.exports = function defineGrammar(dialect) {
       [$.primary_expression, $._for_header, $._for_using_declaration],
       [$._for_header, $._binding_identifier],
       [$.expression, $.call_expression, $.instantiation_expression],
-      [$.expression, $._nested_new_expression],
-      [$.call_expression, $._nested_new_expression],
-      [$.expression, $.call_expression, $._nested_new_expression, $.instantiation_expression],
 
       // This appears to be necessary to parse a parenthesized class expression
       [$.class],
@@ -173,7 +170,7 @@ module.exports = function defineGrammar(dialect) {
             prec(
               'generic_call',
               seq(
-                field('function', choice($.primary_expression, $.new_expression)),
+                field('function', $.primary_expression),
                 field('type_arguments', $.type_arguments),
                 field('arguments', choice($.arguments, $.template_string))
               )
@@ -182,7 +179,7 @@ module.exports = function defineGrammar(dialect) {
           prec(
             'template_call',
             seq(
-              field('function', choice($.primary_expression, $.new_expression)),
+              field('function', choice($.primary_expression, alias($._argumentless_new_expression, $.new_expression))),
               field('arguments', $.template_string)
             )
           ),
@@ -197,25 +194,28 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      // As in ECMAScript, a `new` with arguments is a member-level (primary) expression and one without them is not, so a
+      // member access, a call, or a further argument list binds to the nearest `new` with arguments: `new new A().b`
+      // constructs `new A().b`, and `new new A()(2)` constructs `new A()`.
       new_expression: ($) =>
-        prec.right(
+        prec(
           'new',
           seq(
             'new',
-            field('constructor', choice($.primary_expression, $._nested_new_expression)),
+            field('constructor', $._new_constructor),
             field('type_arguments', optional($.type_arguments)),
-            field('arguments', optional(prec.dynamic(3, $.arguments)))
+            field('arguments', $.arguments)
           )
         ),
 
-      // A `new` with arguments is a member-level expression, so `new new A().b` constructs `new A().b` and
-      // `new new A()(2)` constructs `new A()`. The constructor reaches a `new_expression` through this rule, whose
-      // conflict with `expression` keeps both readings open. A `new`'s arguments carry a dynamic precedence of 3, which
-      // prefers the reading in which every `new` takes the argument list that follows it (also over a generic call's 1),
-      // and this rule one of -1, which prefers a member access inside the outer constructor when the outer `new` has no
-      // arguments. Without it, the JavaScript grammar's precedence of `new` over `expression` would end the outer `new`
-      // before a member access.
-      _nested_new_expression: ($) => prec.dynamic(-1, $.new_expression),
+      _argumentless_new_expression: ($) =>
+        prec.right(
+          'new',
+          seq('new', field('constructor', $._new_constructor), field('type_arguments', optional($.type_arguments)))
+        ),
+
+      _new_constructor: ($) =>
+        prec('new', choice($.primary_expression, alias($._argumentless_new_expression, $.new_expression))),
 
       assignment_expression: ($) =>
         prec.right(
@@ -227,18 +227,26 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
-      primary_expression: ($, previous) => choice(previous, $.non_null_expression),
+      primary_expression: ($, previous) => choice(previous, $.non_null_expression, $.new_expression),
 
       // If the dialect is regular typescript, we exclude JSX expressions and
       // include type assertions. If the dialect is TSX, we do the opposite.
       expression: ($, previous) => {
-        const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
+        const choices = [
+          $.as_expression,
+          $.satisfies_expression,
+          $.instantiation_expression,
+          $.internal_module,
+          alias($._argumentless_new_expression, $.new_expression),
+        ];
+        // A `new` with arguments is a primary expression (see new_expression).
+        const members = previous.members.filter((member) => member.name !== 'new_expression');
 
         if (dialect === 'typescript') {
           choices.push($.type_assertion);
-          choices.push(...previous.members.filter((member) => member.name !== '_jsx_element'));
+          choices.push(...members.filter((member) => member.name !== '_jsx_element'));
         } else if (dialect === 'tsx') {
-          choices.push(...previous.members);
+          choices.push(...members);
         } else {
           throw new Error(`Unknown dialect ${dialect}`);
         }
@@ -545,13 +553,7 @@ module.exports = function defineGrammar(dialect) {
       satisfies_expression: ($) => prec.left('binary', seq($.expression, 'satisfies', $.type)),
 
       instantiation_expression: ($) =>
-        prec.dynamic(
-          -1,
-          prec(
-            'instantiation',
-            seq(choice($.primary_expression, $.new_expression), field('type_arguments', $.type_arguments))
-          )
-        ),
+        prec.dynamic(-1, prec('instantiation', seq($.primary_expression, field('type_arguments', $.type_arguments)))),
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
