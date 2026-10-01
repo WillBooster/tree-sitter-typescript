@@ -124,8 +124,8 @@ cargo test
   since the Wasm tests run on @willbooster/web-tree-sitter and the Rust tests and the fuzzing on the
   willbooster-tree-sitter crate.
 
-The tests and `script/parse-examples` compile the parsers into `.tmp/tree-sitter-lib` instead of the CLI's cache shared
-by every checkout; `script/fuzz-corpus` builds a parser of its own per run in `.tmp/fuzz` and deletes it afterwards.
+The tests compile the parsers into `.tmp/tree-sitter-lib` instead of the CLI's cache shared by every checkout;
+`script/parse-examples` and `script/fuzz-corpus` build a parser of their own per run and delete it afterwards.
 
 CI also runs these tests on Linux arm64 and macOS, where the Rust binding compiles the parsers natively, and fuzzes
 both parsers with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).

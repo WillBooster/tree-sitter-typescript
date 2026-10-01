@@ -38,9 +38,6 @@ clone() {
 }
 
 cd "$(dirname "$0")/.."
-# Even with --lib-path, the CLI compiles the grammar in the current directory into its parser cache, which is shared by
-# every checkout and reused when newer than the sources, so this checkout uses a cache of its own.
-export TREE_SITTER_LIBDIR=$PWD/.tmp/tree-sitter-lib
 
 clone desktop https://github.com/desktop/desktop f2686bcec9239a9f8c5d53e2e90bc3a4dd02059f
 clone redux https://github.com/reduxjs/redux 431c09612275e198e452b4de4bb6b41f5859bc0c
