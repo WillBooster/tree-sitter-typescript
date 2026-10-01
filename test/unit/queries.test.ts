@@ -32,21 +32,33 @@ for (const grammar of treeSitterJson.grammars) {
   });
 }
 
-// The package's tree-sitter.json can reference only files inside the package: a dependency's directory is not at a fixed
-// path relative to it after an install.
-test('publishes every query file that tree-sitter.json references', () => {
-  const [pack] = JSON.parse(
-    execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: Root, encoding: 'utf8' })
-  ) as [{ files: { path: string }[] }];
-  const published = new Set(pack.files.map((file) => file.path));
-  for (const grammar of treeSitterJson.grammars) {
-    for (const kind of QueryKinds) {
-      for (const file of queryPaths(grammar, kind)) {
-        expect(published, file).toContain(file);
+// The packages' tree-sitter.json can reference only files inside the package: a dependency's directory is not at a
+// fixed path relative to it after an install.
+const listPublishedFiles = {
+  npm: (): string[] => {
+    const [pack] = JSON.parse(
+      execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: Root, encoding: 'utf8' })
+    ) as [{ files: { path: string }[] }];
+    return pack.files.map((file) => file.path);
+  },
+  crate: (): string[] =>
+    execFileSync('cargo', ['package', '--list', '--allow-dirty'], { cwd: Root, encoding: 'utf8' }).split('\n'),
+};
+for (const [packageKind, listFiles] of Object.entries(listPublishedFiles)) {
+  // On a fresh runner, cargo first installs the toolchain that rust-toolchain.toml pins.
+  const options = { timeout: 300_000 };
+  test(`publishes every query file that tree-sitter.json references in the ${packageKind} package`, options, () => {
+    const published = new Set(listFiles());
+    expect(published).toContain('tree-sitter.json');
+    for (const grammar of treeSitterJson.grammars) {
+      for (const kind of QueryKinds) {
+        for (const file of queryPaths(grammar, kind)) {
+          expect(published, file).toContain(file);
+        }
       }
     }
-  }
-});
+  });
+}
 
 // javascript/queries/ copies the JavaScript grammar's queries, which this grammar extends.
 test('keeps javascript/queries/ identical to the queries of @willbooster/tree-sitter-javascript', () => {

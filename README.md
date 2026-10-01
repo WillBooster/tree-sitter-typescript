@@ -88,6 +88,8 @@ parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?;
 // or `tree_sitter_typescript::LANGUAGE_TSX` for TSX
 ```
 
+The crate ships the same `tree-sitter.json` and query files as the npm package.
+
 ## Development
 
 ```sh
@@ -119,8 +121,9 @@ cargo test
   linear time with each grammar, since consumers parse files while they are being edited. It loads the Wasm builds
   through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers;
 - a check (`test/unit/queries.test.ts`) that the queries `tree-sitter.json` lists compile against each grammar, are
-  published, and that `javascript/queries/` matches the queries of the installed @willbooster/tree-sitter-javascript;
-  after updating that dependency, `script/copy-javascript-queries` refreshes the copies;
+  published in the npm package and the crate, and that `javascript/queries/` matches the queries of the installed
+  @willbooster/tree-sitter-javascript; after updating that dependency, `script/copy-javascript-queries` refreshes the
+  copies;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
   (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`).
