@@ -113,15 +113,19 @@ cargo test
   `.tsx` files with the `tsx` grammar. The first run clones the repositories. The example repositories are pinned to
   commits in `script/parse-examples`. After a grammar change or a moved pin alters that list, `script/parse-examples`
   rewrites it; review its diff before committing;
-- a performance check (`test/unit/performance.test.ts`) that recovering from an error on each of 10,000 lines takes
-  linear time with each grammar, since consumers parse files while they are being edited. It loads the Wasm builds
-  through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers;
+- a performance check (`test/unit/performance.test.ts`) that recovering from an error on each of 20,000 lines takes
+  linear time with each grammar, measured in the parsing thread's CPU time, since consumers parse files while they are
+  being edited. It loads the Wasm builds through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after
+  regenerating the parsers;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
   (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`);
 - a check (`test/unit/runtimeVersion.test.ts`) that `package.json` and `Cargo.lock` lock the same runtime version,
   since the Wasm tests run on @willbooster/web-tree-sitter and the Rust tests and the fuzzing on the
   willbooster-tree-sitter crate.
+
+The tests and `script/parse-examples` compile the parsers into `.tmp/tree-sitter-lib` instead of the CLI's cache shared
+by every checkout; `script/fuzz-corpus` builds a parser of its own per run in `.tmp/fuzz` and deletes it afterwards.
 
 CI also runs these tests on Linux arm64 and macOS, where the Rust binding compiles the parsers natively, and fuzzes
 both parsers with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).
