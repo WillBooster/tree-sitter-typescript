@@ -863,3 +863,53 @@ a ? function(){ return true } : b;
           (return_statement
             (true))))
       (identifier))))
+
+============================================================
+Nested new expressions and conditionals with decimal branches
+============================================================
+
+new new module.Klass(1)("two");
+new new Thing;
+new new A<T>()<U>(x);
+a?.1:.2;
+b ? .5 : c;
+
+---
+
+(program
+  (expression_statement
+    (new_expression
+      (new_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (arguments
+          (number)))
+      (arguments
+        (string
+          (string_fragment)))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (identifier))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments))
+      (type_arguments
+        (type_identifier))
+      (arguments
+        (identifier))))
+  (expression_statement
+    (ternary_expression
+      (identifier)
+      (number)
+      (number)))
+  (expression_statement
+    (ternary_expression
+      (identifier)
+      (number)
+      (identifier))))

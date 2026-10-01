@@ -289,8 +289,9 @@ static bool scan_ternary_qmark(TSLexer *lexer) {
     if (lexer->lookahead == '?') {
         advance(lexer);
 
-        /* Optional chaining. */
-        if (lexer->lookahead == '?' || lexer->lookahead == '.') {
+        // `??` is an operator; `?.` is optional chaining unless a digit follows, as in `a?.1:.2`, which the check
+        // below tells apart.
+        if (lexer->lookahead == '?') {
             return false;
         }
 
