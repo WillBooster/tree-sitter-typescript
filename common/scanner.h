@@ -21,7 +21,7 @@ enum TokenType {
     LINE_BREAK_BEFORE_ATTRIBUTES,
     FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON,
     TYPE_ARGUMENTS_END,
-    TYPE_ARGUMENTS_END_AT_LINE_BREAK,
+    TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
     NEW_TYPE_ARGUMENTS_END,
     ERROR_RECOVERY,
 };
@@ -565,8 +565,8 @@ static const char *const WORDS_ENDING_TYPE_ARGUMENTS[] = {
 typedef enum {
     TYPE_ARGUMENTS_REJECTED,
     TYPE_ARGUMENTS_KEPT,
-    // Kept only because a line break precedes the next token, which then could also continue comparisons.
-    TYPE_ARGUMENTS_KEPT_AT_LINE_BREAK,
+    // Kept before a token that may start an expression, which comparisons could then read as their right operand.
+    TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION,
 } TypeArgumentsEnd;
 
 // Decides, after the `>` of type arguments in an expression, whether TypeScript keeps them as type arguments rather
@@ -591,7 +591,7 @@ static bool scan_type_arguments_end(TSLexer *lexer, const bool *valid_symbols) {
         lexer->result_symbol = NEW_TYPE_ARGUMENTS_END;
     } else {
         lexer->result_symbol =
-            end == TYPE_ARGUMENTS_KEPT_AT_LINE_BREAK ? TYPE_ARGUMENTS_END_AT_LINE_BREAK : TYPE_ARGUMENTS_END;
+            end == TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION ? TYPE_ARGUMENTS_END_BEFORE_EXPRESSION : TYPE_ARGUMENTS_END;
     }
     return true;
 }
@@ -610,18 +610,19 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
             bool scanned_comment = false;
             CommentResult result = skip_comment(lexer, &scanned_comment);
             if (result == NO_COMMENT) {
-                // A `/=` starts a regex, and a `/` is a division.
-                if (lexer->lookahead != '=') {
-                    return TYPE_ARGUMENTS_KEPT;
+                // TypeScript reads a `/` as a division, which keeps the type arguments, and a `/=` as the start of a
+                // regex, which keeps them only after a line break. Either may also start a regex that comparisons read.
+                if (lexer->lookahead != '=' || line_break) {
+                    return TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION;
                 }
-                return line_break ? TYPE_ARGUMENTS_KEPT_AT_LINE_BREAK : TYPE_ARGUMENTS_REJECTED;
+                return TYPE_ARGUMENTS_REJECTED;
             }
             line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
         } else {
             break;
         }
     }
-    TypeArgumentsEnd before_expression = line_break ? TYPE_ARGUMENTS_KEPT_AT_LINE_BREAK : TYPE_ARGUMENTS_REJECTED;
+    TypeArgumentsEnd before_expression = line_break ? TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION : TYPE_ARGUMENTS_REJECTED;
 
     switch (lexer->lookahead) {
         case '(':
@@ -722,7 +723,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return true;
     }
 
-    if (valid_symbols[TYPE_ARGUMENTS_END] || valid_symbols[TYPE_ARGUMENTS_END_AT_LINE_BREAK] ||
+    if (valid_symbols[TYPE_ARGUMENTS_END] || valid_symbols[TYPE_ARGUMENTS_END_BEFORE_EXPRESSION] ||
         valid_symbols[NEW_TYPE_ARGUMENTS_END]) {
         return scan_type_arguments_end(lexer, valid_symbols);
     }

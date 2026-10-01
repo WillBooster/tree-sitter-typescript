@@ -43,9 +43,10 @@ const DYNAMIC_PRECEDENCE = {
   // An extends clause's type arguments, which TypeScript also gives the clause where an instantiation expression could
   // take them (`class C extends B<T>` before a line break and `{`).
   EXTENDS_TYPE_ARGUMENTS: 2,
-  // An instantiation expression before a line break, which comparisons could continue (`a<B>` before a line break and
-  // `c`).
-  INSTANTIATION_AT_LINE_BREAK: 1,
+  // An instantiation expression whose type arguments TypeScript keeps before what may start an expression, which
+  // comparisons could then read as their right operand: after a line break (`a<B>` before a line break and `c`) or
+  // before a `/`.
+  INSTANTIATION_BEFORE_EXPRESSION: 1,
   // An instantiation expression elsewhere, so that comparisons containing it lose to an enclosing generic call.
   INSTANTIATION: -1,
   // A leading `|` or `&` in a type, which TypeScript allows only at the start of a type: `a < b || c > (d)` compares
@@ -61,7 +62,7 @@ module.exports = function defineGrammar(dialect) {
       ...previous,
       $._function_signature_automatic_semicolon,
       $._type_arguments_end,
-      $._type_arguments_end_at_line_break,
+      $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
       $.__error_recovery,
     ],
@@ -648,8 +649,8 @@ module.exports = function defineGrammar(dialect) {
         return choice(
           prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
           prec.dynamic(
-            DYNAMIC_PRECEDENCE.INSTANTIATION_AT_LINE_BREAK,
-            instantiation($._type_arguments_end_at_line_break)
+            DYNAMIC_PRECEDENCE.INSTANTIATION_BEFORE_EXPRESSION,
+            instantiation($._type_arguments_end_before_expression)
           )
         );
       },

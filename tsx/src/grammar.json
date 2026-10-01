@@ -9713,7 +9713,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_type_arguments_end_at_line_break"
+                  "name": "_type_arguments_end_before_expression"
                 }
               ]
             }
@@ -14036,7 +14036,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_type_arguments_end_at_line_break"
+      "name": "_type_arguments_end_before_expression"
     },
     {
       "type": "SYMBOL",
