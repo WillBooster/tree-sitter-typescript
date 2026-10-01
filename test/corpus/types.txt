@@ -1178,7 +1178,10 @@ let score: (string: string, query: string) => number
 Non-null assertion operator
 =======================================
 
-const repository = foo++!
+const repository = foo!;
+a + b!;
+-x!;
+x!!.y;
 
 ---
 
@@ -1187,8 +1190,22 @@ const repository = foo++!
     (variable_declarator
       (identifier)
       (non_null_expression
-        (update_expression
-          (identifier))))))
+        (identifier))))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (non_null_expression
+        (identifier))))
+  (expression_statement
+    (unary_expression
+      (non_null_expression
+        (identifier))))
+  (expression_statement
+    (member_expression
+      (non_null_expression
+        (non_null_expression
+          (identifier)))
+      (property_identifier))))
 
 =======================================
 Type query and index type query types

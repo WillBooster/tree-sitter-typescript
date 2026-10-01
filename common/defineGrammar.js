@@ -405,7 +405,8 @@ module.exports = function defineGrammar(dialect) {
           ')'
         ),
 
-      non_null_expression: ($) => prec.left('unary', seq($.expression, '!')),
+      // TypeScript parses a postfix `!` as part of a member access chain, so `new A!()` constructs `A!`.
+      non_null_expression: ($) => prec('member', seq($.primary_expression, '!')),
 
       variable_declarator: ($) =>
         choice(

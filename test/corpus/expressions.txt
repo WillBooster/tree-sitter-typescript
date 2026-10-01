@@ -963,3 +963,41 @@ b ? .5 : c;
       (identifier)
       (number)
       (identifier))))
+
+============================================================
+Non-null assertions in constructors
+============================================================
+
+new A!();
+new A!;
+new new A()!();
+new A.b!.c();
+
+---
+
+(program
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (identifier))
+      (arguments)))
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (identifier))))
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (new_expression
+          (identifier)
+          (arguments)))
+      (arguments)))
+  (expression_statement
+    (new_expression
+      (member_expression
+        (non_null_expression
+          (member_expression
+            (identifier)
+            (property_identifier)))
+        (property_identifier))
+      (arguments))))

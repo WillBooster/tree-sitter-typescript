@@ -8195,14 +8195,14 @@
       ]
     },
     "non_null_expression": {
-      "type": "PREC_LEFT",
-      "value": "unary",
+      "type": "PREC",
+      "value": "member",
       "content": {
         "type": "SEQ",
         "members": [
           {
             "type": "SYMBOL",
-            "name": "expression"
+            "name": "primary_expression"
           },
           {
             "type": "STRING",
