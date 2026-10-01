@@ -106,8 +106,8 @@ cargo test
 - an incremental-parsing check (`test/unit/incremental.test.ts`): `script/fuzz-corpus` runs `tree-sitter fuzz`, which
   edits each corpus case of each grammar at random, reparses it, undoes the edits, and reparses again, on the
   WillBooster/tree-sitter runtime version locked in `Cargo.lock` (the first run downloads that CLI from its GitHub
-  Release, or builds it with `cargo` when the release has no binary for the platform). `TREE_SITTER_SEED`,
-  `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
+  Release, or builds it with `cargo` when the download fails or the release has no binary that runs here).
+  `TREE_SITTER_SEED`, `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
 - a check that the real-world files in `examples/`, the checked-in ones and those of the cloned repositories, fail to
   parse exactly as listed in `script/known-failures.txt`. `.ts` files are parsed with the `typescript` grammar and
   `.tsx` files with the `tsx` grammar. The first run clones the repositories. The example repositories are pinned to

@@ -4,7 +4,8 @@
 # random, reparses it incrementally, undoes the edits, and reparses again. The CLI comes from WillBooster/tree-sitter at
 # the willbooster-tree-sitter version in Cargo.lock, since the runtime embedded in the upstream CLI never finishes
 # recovering from some edited cases. The first run downloads that CLI into .tmp/ from the GitHub Release of the version,
-# or builds it when the release has no binary for this platform, which takes several minutes.
+# or builds it when the download fails or the release has no binary that runs here, which takes over 10 minutes on
+# GitHub's Intel macOS runner.
 
 set -euo pipefail
 
