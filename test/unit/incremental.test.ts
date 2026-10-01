@@ -6,8 +6,9 @@ import { testCommand } from './run.js';
 // again: the changed ranges must cover every change and the final tree must match the corpus. The CLI
 // exits zero even when a case fails or no corpus is found, so its output decides: it must list the cases
 // it fuzzed and print no failure summary. TREE_SITTER_SEED, TREE_SITTER_ITERATIONS,
-// and TREE_SITTER_EDITS explore further locally. The first test downloads the CLI, or builds it when its release has no
-// binary for the platform, which takes over 10 minutes on GitHub's Intel macOS runner.
+// and TREE_SITTER_EDITS explore further locally. The first test downloads the CLI. The timeout leaves room for building
+// it instead when its release has no binary that runs on the platform, which would take over 10 minutes on GitHub's
+// Intel macOS runner.
 for (const grammar of ['typescript', 'tsx']) {
   testCommand(
     `reparses the ${grammar} corpus consistently after random edits`,
