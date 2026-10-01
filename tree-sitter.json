@@ -8,13 +8,10 @@
       "path": "typescript",
       "external-files": ["common/scanner.h"],
       "file-types": ["ts"],
-      "highlights": [
-        "queries/highlights.scm",
-        "node_modules/@willbooster/tree-sitter-javascript/queries/highlights.scm"
-      ],
-      "injections": "node_modules/@willbooster/tree-sitter-javascript/queries/injections.scm",
-      "locals": ["queries/locals.scm", "node_modules/@willbooster/tree-sitter-javascript/queries/locals.scm"],
-      "tags": ["queries/tags.scm", "node_modules/@willbooster/tree-sitter-javascript/queries/tags.scm"],
+      "highlights": ["queries/highlights.scm", "queries/javascript/highlights.scm"],
+      "injections": "queries/javascript/injections.scm",
+      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
+      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -26,12 +23,12 @@
       "file-types": ["tsx"],
       "highlights": [
         "queries/highlights.scm",
-        "node_modules/@willbooster/tree-sitter-javascript/queries/highlights-jsx.scm",
-        "node_modules/@willbooster/tree-sitter-javascript/queries/highlights.scm"
+        "queries/javascript/highlights-jsx.scm",
+        "queries/javascript/highlights.scm"
       ],
-      "injections": "node_modules/@willbooster/tree-sitter-javascript/queries/injections.scm",
-      "locals": "node_modules/@willbooster/tree-sitter-javascript/queries/locals.scm",
-      "tags": ["queries/tags.scm", "node_modules/@willbooster/tree-sitter-javascript/queries/tags.scm"],
+      "injections": "queries/javascript/injections.scm",
+      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
+      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -43,12 +40,12 @@
       "file-types": ["js"],
       "highlights": [
         "queries/highlights.scm",
-        "node_modules/@willbooster/tree-sitter-javascript/queries/highlights-jsx.scm",
-        "node_modules/@willbooster/tree-sitter-javascript/queries/highlights.scm"
+        "queries/javascript/highlights-jsx.scm",
+        "queries/javascript/highlights.scm"
       ],
-      "injections": "node_modules/@willbooster/tree-sitter-javascript/queries/injections.scm",
-      "locals": "node_modules/@willbooster/tree-sitter-javascript/queries/locals.scm",
-      "tags": ["queries/tags.scm", "node_modules/@willbooster/tree-sitter-javascript/queries/tags.scm"],
+      "injections": "queries/javascript/injections.scm",
+      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
+      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
       "content-regex": "@flow"
     }
   ],
