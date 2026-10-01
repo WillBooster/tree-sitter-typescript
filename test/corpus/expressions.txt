@@ -863,3 +863,141 @@ a ? function(){ return true } : b;
           (return_statement
             (true))))
       (identifier))))
+
+============================================================
+Nested new expressions and conditionals with decimal branches
+============================================================
+
+new new module.Klass(1)("two");
+new new Thing;
+new new A<T>()<U>(x);
+new new A().b(2);
+new new A()[0](2);
+new new A().b;
+new new new A().b;
+new new new A().b(1)(2);
+a?.1:.2;
+b ? .5 : c;
+
+---
+
+(program
+  (expression_statement
+    (new_expression
+      (new_expression
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (arguments
+          (number)))
+      (arguments
+        (string
+          (string_fragment)))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (identifier))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (arguments))
+      (type_arguments
+        (type_identifier))
+      (arguments
+        (identifier))))
+  (expression_statement
+    (new_expression
+      (member_expression
+        (new_expression
+          (identifier)
+          (arguments))
+        (property_identifier))
+      (arguments
+        (number))))
+  (expression_statement
+    (new_expression
+      (subscript_expression
+        (new_expression
+          (identifier)
+          (arguments))
+        (number))
+      (arguments
+        (number))))
+  (expression_statement
+    (new_expression
+      (member_expression
+        (new_expression
+          (identifier)
+          (arguments))
+        (property_identifier))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (member_expression
+          (new_expression
+            (identifier)
+            (arguments))
+          (property_identifier)))))
+  (expression_statement
+    (new_expression
+      (new_expression
+        (member_expression
+          (new_expression
+            (identifier)
+            (arguments))
+          (property_identifier))
+        (arguments
+          (number)))
+      (arguments
+        (number))))
+  (expression_statement
+    (ternary_expression
+      (identifier)
+      (number)
+      (number)))
+  (expression_statement
+    (ternary_expression
+      (identifier)
+      (number)
+      (identifier))))
+
+============================================================
+Non-null assertions in constructors
+============================================================
+
+new A!();
+new A!;
+new new A()!();
+new A.b!.c();
+
+---
+
+(program
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (identifier))
+      (arguments)))
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (identifier))))
+  (expression_statement
+    (new_expression
+      (non_null_expression
+        (new_expression
+          (identifier)
+          (arguments)))
+      (arguments)))
+  (expression_statement
+    (new_expression
+      (member_expression
+        (non_null_expression
+          (member_expression
+            (identifier)
+            (property_identifier)))
+        (property_identifier))
+      (arguments))))
