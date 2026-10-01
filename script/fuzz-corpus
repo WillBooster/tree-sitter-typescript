@@ -24,7 +24,8 @@ if [[ ! -x $cli/bin/tree-sitter ]]; then
   download=$cli/download
   rm -rf "$download" && mkdir -p "$download" "$cli/bin"
   # A binary that does not run here (e.g. on an older glibc than the release's build) is replaced by a build as well.
-  if [[ -n $platform ]] && curl --fail --silent --show-error --location --retry 3 \
+  # Without a speed limit, a stalled transfer would hang instead of falling back to the build.
+  if [[ -n $platform ]] && curl --fail --silent --show-error --location --retry 3 --speed-limit 1024 --speed-time 60 \
     "https://github.com/WillBooster/tree-sitter/releases/download/v$version/tree-sitter-cli-$platform.tar.gz" |
     tar -xzf - -C "$download" && "$download/tree-sitter" --version > /dev/null; then
     mv "$download/tree-sitter" "$cli/bin/tree-sitter"
