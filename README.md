@@ -102,15 +102,18 @@ script/parse-examples
 cargo test
 ```
 
+`script/tree-sitter` (also `bun run tree-sitter`) runs the tree-sitter CLI of WillBooster/tree-sitter at the runtime
+version locked in `Cargo.lock`, so the parsers are generated, built, tested, and fuzzed with the generator and the
+runtime this package ships. The first run downloads that CLI from its GitHub Release into `.tmp/`, or builds it with
+`cargo` (which needs `cmake`) when the download fails or the release has no binary that runs here.
+
 `bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
 `tsx/src/` and builds both Wasm files. `bun run test` runs:
 
 - the corpus in `test/corpus`, with the native build and with the Wasm build (the first run downloads the WASI SDK).
   Cases run with the `typescript` grammar unless they carry `:language(tsx)`;
 - an incremental-parsing check (`test/unit/incremental.test.ts`): `script/fuzz-corpus` runs `tree-sitter fuzz`, which
-  edits each corpus case of each grammar at random, reparses it, undoes the edits, and reparses again, on the
-  WillBooster/tree-sitter runtime version locked in `Cargo.lock` (the first run downloads that CLI from its GitHub
-  Release, or builds it with `cargo` when the download fails or the release has no binary that runs here).
+  edits each corpus case of each grammar at random, reparses it, undoes the edits, and reparses again.
   `TREE_SITTER_SEED`, `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
 - a check that the real-world files in `examples/`, the checked-in ones and those of the cloned repositories, fail to
   parse exactly as listed in `script/known-failures.txt`. `.ts` files are parsed with the `typescript` grammar and
@@ -129,11 +132,13 @@ cargo test
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
   (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`);
 - a check (`test/unit/runtimeVersion.test.ts`) that `package.json` and `Cargo.lock` lock the same runtime version,
-  since the Wasm tests run on @willbooster/web-tree-sitter and the Rust tests and the fuzzing on the
+  since the Wasm tests run on @willbooster/web-tree-sitter and the Rust tests, the fuzzing, and the CLI on the
   willbooster-tree-sitter crate.
 
 The tests compile the parsers into `.tmp/tree-sitter-lib` instead of the CLI's cache shared by every checkout;
 `script/parse-examples` and `script/fuzz-corpus` build a parser of their own per run and delete it afterwards.
+`mise.toml` sets `TREE_SITTER_LIBDIR` to `.tmp/tree-sitter-lib` as well, so other `tree-sitter` commands run in the
+checkout use this checkout's parsers too.
 
 CI also runs these tests on Linux arm64 and macOS, where the Rust binding compiles the parsers natively, and fuzzes
 both parsers with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).

@@ -12,6 +12,7 @@ export default defineConfig({
           globals: true,
           include: ['test/unit/**/*.test.ts'],
           exclude: ['test/unit/browser/**'],
+          globalSetup: ['test/unit/globalSetup.ts'],
         },
       },
       {
