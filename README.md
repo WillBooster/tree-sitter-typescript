@@ -5,7 +5,7 @@
 [![Test](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml)
 [![Test rust](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![wbfy](https://img.shields.io/badge/wbfy-20.26.0-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
+[![wbfy](https://img.shields.io/badge/wbfy-20.28.5-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
 [![crates.io](https://img.shields.io/crates/v/willbooster-tree-sitter-typescript.svg)](https://crates.io/crates/willbooster-tree-sitter-typescript)
 
 TypeScript and TSX grammars for [tree-sitter](https://github.com/tree-sitter/tree-sitter), forked from
@@ -118,7 +118,10 @@ cargo test
   through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
-  (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`).
+  (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`);
+- a check (`test/unit/runtimeVersion.test.ts`) that `package.json` and `Cargo.lock` lock the same runtime version,
+  since the Wasm tests run on @willbooster/web-tree-sitter and the Rust tests and the fuzzing on the
+  willbooster-tree-sitter crate.
 
 CI also runs these tests on Linux arm64 and macOS, where the Rust binding compiles the parsers natively, and fuzzes
 both parsers with libFuzzer and sanitizers (`.github/workflows/robustness.yml`).
