@@ -69,7 +69,7 @@ parser.setLanguage(await Language.load(typescript));
 
 The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`, and the
 highlighting, injection, locals, and tags queries that `tree-sitter.json` lists: this grammar's in `queries/` and, in
-`queries/javascript/`, those of the JavaScript grammar it extends.
+`javascript/queries/`, those of the JavaScript grammar it extends.
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
@@ -119,7 +119,7 @@ cargo test
   linear time with each grammar, since consumers parse files while they are being edited. It loads the Wasm builds
   through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after regenerating the parsers;
 - a check (`test/unit/queries.test.ts`) that the queries `tree-sitter.json` lists compile against each grammar, are
-  published, and that `queries/javascript/` matches the queries of the installed @willbooster/tree-sitter-javascript;
+  published, and that `javascript/queries/` matches the queries of the installed @willbooster/tree-sitter-javascript;
   after updating that dependency, `script/copy-javascript-queries` refreshes the copies;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility

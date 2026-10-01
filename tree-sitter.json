@@ -8,10 +8,10 @@
       "path": "typescript",
       "external-files": ["common/scanner.h"],
       "file-types": ["ts"],
-      "highlights": ["queries/highlights.scm", "queries/javascript/highlights.scm"],
-      "injections": "queries/javascript/injections.scm",
-      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
-      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
+      "highlights": ["queries/highlights.scm", "javascript/queries/highlights.scm"],
+      "injections": "javascript/queries/injections.scm",
+      "locals": ["queries/locals.scm", "javascript/queries/locals.scm"],
+      "tags": ["queries/tags.scm", "javascript/queries/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -23,12 +23,12 @@
       "file-types": ["tsx"],
       "highlights": [
         "queries/highlights.scm",
-        "queries/javascript/highlights-jsx.scm",
-        "queries/javascript/highlights.scm"
+        "javascript/queries/highlights-jsx.scm",
+        "javascript/queries/highlights.scm"
       ],
-      "injections": "queries/javascript/injections.scm",
-      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
-      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
+      "injections": "javascript/queries/injections.scm",
+      "locals": ["queries/locals.scm", "javascript/queries/locals.scm"],
+      "tags": ["queries/tags.scm", "javascript/queries/tags.scm"],
       "injection-regex": "^(ts|typescript)$"
     },
     {
@@ -40,12 +40,12 @@
       "file-types": ["js"],
       "highlights": [
         "queries/highlights.scm",
-        "queries/javascript/highlights-jsx.scm",
-        "queries/javascript/highlights.scm"
+        "javascript/queries/highlights-jsx.scm",
+        "javascript/queries/highlights.scm"
       ],
-      "injections": "queries/javascript/injections.scm",
-      "locals": ["queries/locals.scm", "queries/javascript/locals.scm"],
-      "tags": ["queries/tags.scm", "queries/javascript/tags.scm"],
+      "injections": "javascript/queries/injections.scm",
+      "locals": ["queries/locals.scm", "javascript/queries/locals.scm"],
+      "tags": ["queries/tags.scm", "javascript/queries/tags.scm"],
       "content-regex": "@flow"
     }
   ],

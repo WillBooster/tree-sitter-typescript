@@ -46,12 +46,12 @@ test('publishes every query file that tree-sitter.json references', () => {
   }
 });
 
-// queries/javascript/ copies the JavaScript grammar's queries, which this grammar extends.
-test('keeps queries/javascript/ identical to the queries of @willbooster/tree-sitter-javascript', () => {
-  for (const file of fs.readdirSync(path.join(Root, 'queries/javascript'))) {
+// javascript/queries/ copies the JavaScript grammar's queries, which this grammar extends.
+test('keeps javascript/queries/ identical to the queries of @willbooster/tree-sitter-javascript', () => {
+  for (const file of fs.readdirSync(path.join(Root, 'javascript/queries'))) {
     expect(
-      fs.readFileSync(path.join(Root, 'queries/javascript', file), 'utf8'),
-      `queries/javascript/${file} differs; run script/copy-javascript-queries`
+      fs.readFileSync(path.join(Root, 'javascript/queries', file), 'utf8'),
+      `javascript/queries/${file} differs; run script/copy-javascript-queries`
     ).toBe(fs.readFileSync(path.join(JavaScriptQueries, file), 'utf8'));
   }
 });
