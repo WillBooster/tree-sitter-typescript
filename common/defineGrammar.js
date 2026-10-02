@@ -4,6 +4,7 @@ const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 // Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'declare',
+  'global',
   'namespace',
   'type',
   'public',
@@ -64,6 +65,8 @@ module.exports = function defineGrammar(dialect) {
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
+      $._global_declaration_start,
+      $._global_declaration_end,
       $.__error_recovery,
     ],
 
@@ -660,7 +663,8 @@ module.exports = function defineGrammar(dialect) {
           $.enum_declaration,
           $.interface_declaration,
           $.import_alias,
-          $.ambient_declaration
+          $.ambient_declaration,
+          alias($.global_declaration, $.internal_module)
         ),
 
       type_assertion: ($) => prec.left('unary', seq($.type_arguments, $.expression)),
@@ -706,7 +710,7 @@ module.exports = function defineGrammar(dialect) {
           'declare',
           choice(
             $.declaration,
-            seq('global', $.statement_block),
+            prec(1, seq(alias($._global_declaration_start, 'global'), $.statement_block)),
             seq('module', '.', alias($.identifier, $.property_identifier), ':', $.type, $._semicolon)
           )
         ),
@@ -755,6 +759,12 @@ module.exports = function defineGrammar(dialect) {
       module: ($) => seq('module', $._module),
 
       internal_module: ($) => seq('namespace', $._module),
+
+      global_declaration: ($) =>
+        seq(
+          field('name', alias($._global_declaration_start, $.identifier)),
+          choice(field('body', $.statement_block), $._global_declaration_end)
+        ),
 
       _module: ($) =>
         prec.right(
