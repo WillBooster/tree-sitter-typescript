@@ -476,6 +476,7 @@ module.exports = function defineGrammar(dialect) {
       export_statement: ($, previous) =>
         choice(
           previous,
+          seq('export', field('declaration', alias($.global_declaration, $.internal_module))),
           seq('export', 'type', $.export_clause, optional($._from_clause), $._semicolon),
           seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
@@ -652,6 +653,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      statement: ($, previous) => choice(previous, alias($.global_declaration, $.internal_module)),
+
       declaration: ($, previous) =>
         choice(
           previous,
@@ -663,8 +666,7 @@ module.exports = function defineGrammar(dialect) {
           $.enum_declaration,
           $.interface_declaration,
           $.import_alias,
-          $.ambient_declaration,
-          alias($.global_declaration, $.internal_module)
+          $.ambient_declaration
         ),
 
       type_assertion: ($) => prec.left('unary', seq($.type_arguments, $.expression)),
@@ -710,7 +712,7 @@ module.exports = function defineGrammar(dialect) {
           'declare',
           choice(
             $.declaration,
-            prec(1, seq(alias($._global_declaration_start, 'global'), $.statement_block)),
+            seq(alias($._global_declaration_start, 'global'), choice($.statement_block, $._global_declaration_end)),
             seq('module', '.', alias($.identifier, $.property_identifier), ':', $.type, $._semicolon)
           )
         ),
