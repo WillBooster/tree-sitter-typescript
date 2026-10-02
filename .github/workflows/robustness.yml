@@ -80,14 +80,17 @@ jobs:
             print $seed $_ if $state == 2;
           ' $corpus
           # libFuzzer runs just as well without seeds, so the split itself must show that each corpus case and every NUL
-          # character reached them.
+          # character reached them. A case without its `---` line would share the next case's seed, so the `===` lines,
+          # two a case, are counted too.
           cases=$(cat $corpus | grep -a -c -E '^---+$' || true)
+          headers=$(cat $corpus | grep -a -c -E '^===+$' || true)
           seeds=$(find .tmp/fuzz-seeds -type f | wc -l)
           corpus_nuls=$(cat $corpus | tr -dc '\000' | wc -c)
           seed_nuls=$(find .tmp/fuzz-seeds -type f -exec cat {} + | tr -dc '\000' | wc -c)
-          echo "Corpus: $cases cases with $corpus_nuls NUL characters; seeds: $seeds files with $seed_nuls NUL characters"
+          echo "Corpus: $cases cases, $headers header lines, $corpus_nuls NULs; seeds: $seeds files, $seed_nuls NULs"
           test "$cases" -gt 0
           test "$seeds" -eq "$cases"
+          test "$headers" -eq $((2 * cases))
           test "$seed_nuls" -eq "$corpus_nuls"
       - name: Build the fuzzer
         run: |
