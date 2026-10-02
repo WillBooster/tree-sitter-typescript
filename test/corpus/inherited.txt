@@ -738,4 +738,3 @@ x = () => {async: b => {c: 1}};
                     (statement_identifier)
                     (expression_statement
                       (number))))))))))))
-
