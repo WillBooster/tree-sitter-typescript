@@ -320,7 +320,8 @@ module.exports = function defineGrammar(dialect) {
           prec(
             'member',
             seq(
-              field('function', $.primary_expression),
+              // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`).
+              field('function', choice($.primary_expression, $.instantiation_expression)),
               field('optional_chain', $.optional_chain),
               field('type_arguments', optional($.type_arguments)),
               field('arguments', $.arguments)

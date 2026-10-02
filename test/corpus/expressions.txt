@@ -987,6 +987,27 @@ x = g<T> /c/g;
         (identifier)))))
 
 ==================================
+Optional calls of instantiation expressions
+==================================
+
+x = f<T>?.(y);
+
+---
+
+(program
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (call_expression
+        (instantiation_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (optional_chain)
+        (arguments
+          (identifier))))))
+
+==================================
 Comparisons with a shift on the right
 ==================================
 
