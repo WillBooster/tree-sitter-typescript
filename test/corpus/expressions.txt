@@ -75,6 +75,42 @@ f(x as unknown as a.B);
             (type_identifier)))))))
 
 ==================================
+As and satisfies expressions among binary operators
+==================================
+
+x = a || b as C;
+x = a + b as C;
+x = a == b satisfies C;
+
+---
+
+(program
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (identifier)
+        (as_expression
+          (identifier)
+          (type_identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (as_expression
+        (binary_expression
+          (identifier)
+          (identifier))
+        (type_identifier))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (identifier)
+        (satisfies_expression
+          (identifier)
+          (type_identifier))))))
+
+==================================
 Satisfies expressions
 ==================================
 
