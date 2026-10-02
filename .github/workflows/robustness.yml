@@ -75,16 +75,16 @@ jobs:
           # Perl keeps the NUL characters of test/corpus/nul_characters.txt, at which some awk implementations (e.g.
           # macOS's) end a line.
           perl -ne '
-            if ($state != 2 && /^=+$/) { open $seed, ">", sprintf(".tmp/fuzz-seeds/%d", ++$n) or die $! if ++$state == 2; next }
-            if ($state == 2 && /^---+$/) { $state = 0; close $seed; next }
+            if ($state != 2 && /^=+\r?$/) { open $seed, ">", sprintf(".tmp/fuzz-seeds/%d", ++$n) or die $! if ++$state == 2; next }
+            if ($state == 2 && /^---+\r?$/) { $state = 0; close $seed; next }
             print $seed $_ if $state == 2;
           ' $corpus
           # libFuzzer runs just as well without seeds, so the split itself must show that each corpus case and every NUL
           # character reached them. A case without its `---` line would share the next case's seed, so the headers are
-          # counted too, as `===` lines around a title, which an input line of `=` lacks. Each file is counted
-          # separately, since a file may lack a final line break.
-          cases=$({ grep -a -h -c -E '^---+$' $corpus || true; } | awk '{ n += $1 } END { print n + 0 }')
-          headers=$(perl -0777 -ne '$n += () = /^={3,}\r?\n(?:[^=\r\n].*\n)+={3,}\r?$/mg; END { print $n + 0 }' $corpus)
+          # counted too, as `tree-sitter test` reads them: `===` lines around a title and attributes. Each file is
+          # counted separately, since a file may lack a final line break.
+          cases=$({ grep -a -h -c -E $'^---+\r?$' $corpus || true; } | awk '{ n += $1 } END { print n + 0 }')
+          headers=$(perl -0777 -ne '$n += () = /^={3,}\r?\n(?:(?:[^=\r\n]|\s+:).*\n)+={3,}\r?$/mg; END { print $n + 0 }' $corpus)
           seeds=$(find .tmp/fuzz-seeds -type f | wc -l)
           corpus_nuls=$(cat $corpus | tr -dc '\000' | wc -c)
           seed_nuls=$(find .tmp/fuzz-seeds -type f -exec cat {} + | tr -dc '\000' | wc -c)
