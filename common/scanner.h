@@ -1,6 +1,8 @@
 #include "tree_sitter/alloc.h"
 #include "tree_sitter/parser.h"
 
+#include <string.h>
+
 enum TokenType {
     AUTOMATIC_SEMICOLON,
     TEMPLATE_CHARS,
@@ -18,6 +20,9 @@ enum TokenType {
     LINE_BREAK_AFTER_MODIFIER,
     LINE_BREAK_BEFORE_ATTRIBUTES,
     FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON,
+    TYPE_ARGUMENTS_END,
+    TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
+    NEW_TYPE_ARGUMENTS_END,
     ERROR_RECOVERY,
 };
 
@@ -548,6 +553,157 @@ static bool scan_jsx_text(TSLexer *lexer) {
     }
 }
 
+// The reserved words that TypeScript does not read as the start of an expression: after type arguments, they end the
+// type arguments like a token that cannot start an expression, while `in`, `instanceof`, `as`, and `satisfies` end them
+// as binary operators.
+static const char *const WORDS_ENDING_TYPE_ARGUMENTS[] = {
+    "as",     "break", "case",      "catch",  "const", "continue", "debugger", "default", "do",
+    "else",   "enum",  "export",    "extends", "finally", "for",   "if",       "in",      "instanceof",
+    "return", "satisfies", "switch", "throw", "try",   "var",      "while",    "with",
+};
+
+typedef enum {
+    TYPE_ARGUMENTS_REJECTED,
+    TYPE_ARGUMENTS_KEPT,
+    // Kept before a token that may start an expression, which comparisons could then read as their right operand.
+    TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION,
+} TypeArgumentsEnd;
+
+// Decides, after the `>` of type arguments in an expression, whether TypeScript keeps them as type arguments rather
+// than reading the `<` and `>` as comparisons (`canFollowTypeArgumentsInExpression` in TypeScript's parser): a line
+// break, a binary operator, or a token that cannot start an expression must follow, and never `<`, `>`, `+`, or `-`.
+// A `(` or a template literal also keeps them, but there the grammar's call and `new` rules take the type arguments
+// instead of these tokens. TypeScript reads a `>` that `=` or `>` immediately follows as part of `>=` or `>>`, so it
+// closes no type arguments.
+//
+// After `new A<T>`, a `.` or `[` continues the constructor (`new A<T>\n[0]` constructs `A<T>[0]`), so the scanner then
+// ends the type arguments of an instantiation expression in the constructor rather than those of the `new`.
+static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *continues_member);
+
+static bool scan_type_arguments_end(TSLexer *lexer, const bool *valid_symbols) {
+    lexer->mark_end(lexer);
+    bool continues_member = false;
+    TypeArgumentsEnd end = scan_type_arguments_end_context(lexer, &continues_member);
+    if (end == TYPE_ARGUMENTS_REJECTED) {
+        return false;
+    }
+    if (valid_symbols[NEW_TYPE_ARGUMENTS_END] && !(continues_member && valid_symbols[TYPE_ARGUMENTS_END])) {
+        lexer->result_symbol = NEW_TYPE_ARGUMENTS_END;
+    } else {
+        lexer->result_symbol =
+            end == TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION ? TYPE_ARGUMENTS_END_BEFORE_EXPRESSION : TYPE_ARGUMENTS_END;
+    }
+    return true;
+}
+
+static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *continues_member) {
+    if (lexer->lookahead == '=' || lexer->lookahead == '>') {
+        return TYPE_ARGUMENTS_REJECTED;
+    }
+
+    bool line_break = false;
+    for (;;) {
+        if (is_whitespace(lexer->lookahead)) {
+            line_break |= is_line_terminator(lexer->lookahead);
+            skip(lexer);
+        } else if (lexer->lookahead == '/') {
+            bool scanned_comment = false;
+            CommentResult result = skip_comment(lexer, &scanned_comment);
+            if (result == NO_COMMENT) {
+                // TypeScript reads a `/` as a division, which keeps the type arguments, and a `/=` as the start of a
+                // regex, which keeps them only after a line break. Either may also start a regex that comparisons read.
+                if (lexer->lookahead != '=' || line_break) {
+                    return TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION;
+                }
+                return TYPE_ARGUMENTS_REJECTED;
+            }
+            line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
+        } else {
+            break;
+        }
+    }
+    TypeArgumentsEnd before_expression = line_break ? TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION : TYPE_ARGUMENTS_REJECTED;
+
+    switch (lexer->lookahead) {
+        case '(':
+        case '`':
+        case '>':
+            return TYPE_ARGUMENTS_REJECTED;
+        case '<':
+            skip(lexer);
+            return lexer->lookahead == '<' || lexer->lookahead == '=' ? TYPE_ARGUMENTS_KEPT : TYPE_ARGUMENTS_REJECTED;
+        case '+':
+        case '-': {
+            int32_t sign = lexer->lookahead;
+            skip(lexer);
+            // `++` and `--` start an expression, `+=` and `-=` cannot.
+            if (lexer->lookahead == '=') {
+                return TYPE_ARGUMENTS_KEPT;
+            }
+            return lexer->lookahead == sign ? before_expression : TYPE_ARGUMENTS_REJECTED;
+        }
+        case '.':
+            skip(lexer);
+            if (lexer->lookahead == '.') {
+                return TYPE_ARGUMENTS_KEPT;
+            }
+            // `.5` is a number.
+            if (is_ascii_digit(lexer->lookahead)) {
+                return before_expression;
+            }
+            *continues_member = true;
+            return TYPE_ARGUMENTS_KEPT;
+        case '[':
+            *continues_member = true;
+            return before_expression;
+        case '!':
+            skip(lexer);
+            return lexer->lookahead == '=' ? TYPE_ARGUMENTS_KEPT : before_expression;
+        case '{':
+        case '~':
+        case '\'':
+        case '"':
+        case '#':
+        case '@':
+            return before_expression;
+        default:
+            break;
+    }
+    if (lexer->eof(lexer) || !is_identifier_part(lexer->lookahead)) {
+        return TYPE_ARGUMENTS_KEPT;
+    }
+    if (is_ascii_digit(lexer->lookahead)) {
+        return before_expression;
+    }
+
+    char word[16];
+    unsigned length = 0;
+    while (lexer->lookahead >= 'a' && lexer->lookahead <= 'z' && length < sizeof(word) - 1) {
+        word[length++] = (char)lexer->lookahead;
+        skip(lexer);
+    }
+    word[length] = '\0';
+    if (length == 0 || is_identifier_part(lexer->lookahead)) {
+        return before_expression;
+    }
+    if (strcmp(word, "import") == 0) {
+        // `import` starts an expression only as `import(...)`, `import.meta`, or `import<T>` (an error TypeScript
+        // recovers from).
+        bool scanned_comment = false;
+        if (scan_whitespace_and_comments(lexer, &scanned_comment) &&
+            (lexer->lookahead == '(' || lexer->lookahead == '.' || lexer->lookahead == '<')) {
+            return before_expression;
+        }
+        return TYPE_ARGUMENTS_KEPT;
+    }
+    for (unsigned i = 0; i < sizeof(WORDS_ENDING_TYPE_ARGUMENTS) / sizeof(WORDS_ENDING_TYPE_ARGUMENTS[0]); i++) {
+        if (strcmp(word, WORDS_ENDING_TYPE_ARGUMENTS[i]) == 0) {
+            return TYPE_ARGUMENTS_KEPT;
+        }
+    }
+    return before_expression;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
@@ -565,6 +721,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             valid_symbols[AUTOMATIC_SEMICOLON] ? AUTOMATIC_SEMICOLON : ARROW_FUNCTION_BLOCK_CONTINUATION;
         lexer->mark_end(lexer);
         return true;
+    }
+
+    if (valid_symbols[TYPE_ARGUMENTS_END] || valid_symbols[TYPE_ARGUMENTS_END_BEFORE_EXPRESSION] ||
+        valid_symbols[NEW_TYPE_ARGUMENTS_END]) {
+        return scan_type_arguments_end(lexer, valid_symbols);
     }
 
     if (valid_symbols[JSX_TEXT] && scan_jsx_text(lexer)) {

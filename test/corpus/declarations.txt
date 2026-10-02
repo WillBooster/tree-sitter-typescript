@@ -1326,6 +1326,37 @@ class D extends A<
     (class_body)))
 
 =======================================
+Classes with extensions before a line break
+=======================================
+
+class A extends B<C>
+{}
+
+class D extends new E<F>
+{}
+
+---
+
+(program
+  (class_declaration
+    (type_identifier)
+    (class_heritage
+      (extends_clause
+        (identifier)
+        (type_arguments
+          (type_identifier))))
+    (class_body))
+  (class_declaration
+    (type_identifier)
+    (class_heritage
+      (extends_clause
+        (new_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))))
+    (class_body)))
+
+=======================================
 Classes with extensions
 =======================================
 

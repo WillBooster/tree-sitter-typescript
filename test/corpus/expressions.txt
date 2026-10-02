@@ -45,6 +45,36 @@ T as {} & { [t: T]: T } & { [g: G]: G }
               (type_identifier))))))))
 
 ==================================
+As expressions with qualified type names
+==================================
+
+x as a.b.C;
+f(x as unknown as a.B);
+
+---
+
+(program
+  (expression_statement
+    (as_expression
+      (identifier)
+      (nested_type_identifier
+        (nested_identifier
+          (identifier)
+          (property_identifier))
+        (type_identifier))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments
+        (as_expression
+          (as_expression
+            (identifier)
+            (predefined_type))
+          (nested_type_identifier
+            (identifier)
+            (type_identifier)))))))
+
+==================================
 Satisfies expressions
 ==================================
 
@@ -589,6 +619,338 @@ new Foo()<T>;
         (type_identifier)))))
 
 ==================================
+Type arguments of a new without arguments
+==================================
+
+new new A<T>[0]();
+const w = () => new A<T>!(1);
+x = new A<B>c;
+x = new A<B> + c;
+x = new A<B> * c;
+x = new A<B>;
+x = new A<B>
+c;
+x = new A<B>
+[0];
+x = new A<B>`c`;
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (new_expression
+          (new_expression
+            (identifier)))
+        (identifier))
+      (call_expression
+        (array
+          (number))
+        (arguments))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (binary_expression
+          (binary_expression
+            (new_expression
+              (identifier))
+            (identifier))
+          (unary_expression
+            (parenthesized_expression
+              (number)))))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (new_expression
+            (identifier))
+          (identifier))
+        (identifier))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (new_expression
+            (identifier))
+          (identifier))
+        (unary_expression
+          (identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (new_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (identifier))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (subscript_expression
+          (instantiation_expression
+            (identifier)
+            (type_arguments
+              (type_identifier)))
+          (number)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (call_expression
+          (identifier)
+          (type_arguments
+            (type_identifier))
+          (template_string
+            (string_fragment)))))))
+
+==================================
+Type arguments of a new without arguments in TSX
+:language(tsx)
+==================================
+
+new new A<T>[0]();
+const w = () => new A<T>!(1);
+x = new A<B>c;
+x = new A<B> + c;
+x = new A<B> * c;
+x = new A<B>;
+x = new A<B>
+c;
+x = new A<B>
+[0];
+x = new A<B>`c`;
+
+---
+
+(program
+  (expression_statement
+    (binary_expression
+      (binary_expression
+        (new_expression
+          (new_expression
+            (identifier)))
+        (identifier))
+      (call_expression
+        (array
+          (number))
+        (arguments))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters)
+        (binary_expression
+          (binary_expression
+            (new_expression
+              (identifier))
+            (identifier))
+          (unary_expression
+            (parenthesized_expression
+              (number)))))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (new_expression
+            (identifier))
+          (identifier))
+        (identifier))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (new_expression
+            (identifier))
+          (identifier))
+        (unary_expression
+          (identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (new_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (identifier))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (subscript_expression
+          (instantiation_expression
+            (identifier)
+            (type_arguments
+              (type_identifier)))
+          (number)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (call_expression
+          (identifier)
+          (type_arguments
+            (type_identifier))
+          (template_string
+            (string_fragment)))))))
+
+==================================
+Instantiation expressions before a line break or a slash
+==================================
+
+const f = g<T>
+h();
+x = g<T>
+[0];
+x = a < b || c >
+d;
+x = g<T> /c/g;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (instantiation_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (subscript_expression
+        (instantiation_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (number))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (identifier)
+          (identifier))
+        (binary_expression
+          (identifier)
+          (identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (instantiation_expression
+            (identifier)
+            (type_arguments
+              (type_identifier)))
+          (identifier))
+        (identifier)))))
+
+==================================
+Instantiation expressions before a line break or a slash in TSX
+:language(tsx)
+==================================
+
+const f = g<T>
+h();
+x = g<T>
+[0];
+x = a < b || c >
+d;
+x = g<T> /c/g;
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (instantiation_expression
+        (identifier)
+        (type_arguments
+          (type_identifier)))))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (subscript_expression
+        (instantiation_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (number))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (identifier)
+          (identifier))
+        (binary_expression
+          (identifier)
+          (identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (binary_expression
+        (binary_expression
+          (instantiation_expression
+            (identifier)
+            (type_arguments
+              (type_identifier)))
+          (identifier))
+        (identifier)))))
+
+==================================
 Comparisons with a shift on the right
 ==================================
 
@@ -804,6 +1166,8 @@ Type assertions
 
 <A>b;
 <C<D>>e.f;
+<A>b<C>
+[0];
 
 ---
 
@@ -817,7 +1181,14 @@ Type assertions
       (type_arguments (type_identifier))))
     (member_expression
       (identifier)
-      (property_identifier)))))
+      (property_identifier))))
+  (expression_statement (type_assertion
+    (type_arguments (type_identifier))
+    (subscript_expression
+      (instantiation_expression
+        (identifier)
+        (type_arguments (type_identifier)))
+      (number)))))
 
 ==========================================================
 Type arguments in JSX
@@ -833,12 +1204,18 @@ Type arguments in JSX
 (program
   (expression_statement
     (jsx_element
-      (jsx_opening_element (identifier) (type_arguments (type_identifier)))
+      (jsx_opening_element
+        (identifier)
+        (type_arguments
+          (type_identifier)))
       (jsx_text)
-      (jsx_closing_element (identifier))))
+      (jsx_closing_element
+        (identifier))))
   (expression_statement
     (jsx_self_closing_element
-       (identifier) (type_arguments (type_identifier))))
+      (identifier)
+      (type_arguments
+        (type_identifier))))
   (expression_statement
     (jsx_element
       (jsx_opening_element)
