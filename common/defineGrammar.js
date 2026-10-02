@@ -77,6 +77,23 @@ module.exports = function defineGrammar(dialect) {
       ['member', 'unary'],
       ['extends', 'instantiation'],
       ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
+      // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
+      // `==`, `&`, `&&`, `||`, and `??`.
+      [
+        'binary_exp',
+        'binary_times',
+        'binary_plus',
+        'binary_shift',
+        'binary_relation',
+        'binary',
+        'binary_equality',
+        'bitwise_and',
+        'bitwise_xor',
+        'bitwise_or',
+        'logical_and',
+        'logical_or',
+        'ternary',
+      ],
       [
         $.intersection_type,
         $.union_type,
