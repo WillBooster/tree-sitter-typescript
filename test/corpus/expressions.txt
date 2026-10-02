@@ -300,13 +300,13 @@ if ( foo ) {
 Objects with reserved words as keys
 ====================================
 
-{
+x = {
   public: true,
   private: true,
   readonly: true
 };
 
-{
+x = {
   readonly: 1,
   abstract: 1,
   static: 1
@@ -316,27 +316,31 @@ Objects with reserved words as keys
 
 (program
   (expression_statement
-    (object
-      (pair
-        key: (property_identifier)
-        value: (true))
-      (pair
-        key: (property_identifier)
-        value: (true))
-      (pair
-        key: (property_identifier)
-        value: (true))))
+    (assignment_expression
+      left: (identifier)
+      right: (object
+        (pair
+          key: (property_identifier)
+          value: (true))
+        (pair
+          key: (property_identifier)
+          value: (true))
+        (pair
+          key: (property_identifier)
+          value: (true)))))
   (expression_statement
-    (object
-      (pair
-        key: (property_identifier)
-        value: (number))
-      (pair
-        key: (property_identifier)
-        value: (number))
-      (pair
-        key: (property_identifier)
-        value: (number)))))
+    (assignment_expression
+      left: (identifier)
+      right: (object
+        (pair
+          key: (property_identifier)
+          value: (number))
+        (pair
+          key: (property_identifier)
+          value: (number))
+        (pair
+          key: (property_identifier)
+          value: (number))))))
 
 ====================================
 Assignment to non-null LHS
