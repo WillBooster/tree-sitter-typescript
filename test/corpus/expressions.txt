@@ -991,6 +991,7 @@ Optional calls, subscripts, and member accesses of instantiation expressions
 ==================================
 
 x = f<T>?.(y);
+x = f<T>?.<U>(y);
 x = f<T>?.[0];
 x = f<T>?.y;
 
@@ -1006,6 +1007,19 @@ x = f<T>?.y;
           (type_arguments
             (type_identifier)))
         (optional_chain)
+        (arguments
+          (identifier)))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (call_expression
+        (instantiation_expression
+          (identifier)
+          (type_arguments
+            (type_identifier)))
+        (optional_chain)
+        (type_arguments
+          (type_identifier))
         (arguments
           (identifier)))))
   (expression_statement
