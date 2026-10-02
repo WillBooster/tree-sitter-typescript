@@ -567,6 +567,8 @@ typedef enum {
     TYPE_ARGUMENTS_KEPT,
     // Kept before a token that may start an expression, which comparisons could then read as their right operand.
     TYPE_ARGUMENTS_KEPT_BEFORE_EXPRESSION,
+    // An HTML-like comment, an extra, comes first: the scanner has consumed it.
+    TYPE_ARGUMENTS_BEFORE_HTML_COMMENT,
 } TypeArgumentsEnd;
 
 // Decides, after the `>` of type arguments in an expression, whether TypeScript keeps them as type arguments rather
@@ -578,14 +580,25 @@ typedef enum {
 //
 // After `new A<T>`, a `.` or `[` continues the constructor (`new A<T>\n[0]` constructs `A<T>[0]`), so the scanner then
 // ends the type arguments of an instantiation expression in the constructor rather than those of the `new`.
-static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *continues_member);
+static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool html_comment_valid,
+                                                        bool *continues_member);
 
 static bool scan_type_arguments_end(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool continues_member = false;
-    TypeArgumentsEnd end = scan_type_arguments_end_context(lexer, &continues_member);
+    bool html_comment_valid = valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
+                              !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN];
+    TypeArgumentsEnd end = scan_type_arguments_end_context(lexer, html_comment_valid, &continues_member);
     if (end == TYPE_ARGUMENTS_REJECTED) {
         return false;
+    }
+    if (end == TYPE_ARGUMENTS_BEFORE_HTML_COMMENT) {
+        while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+            advance(lexer);
+        }
+        lexer->result_symbol = HTML_COMMENT;
+        lexer->mark_end(lexer);
+        return true;
     }
     if (valid_symbols[NEW_TYPE_ARGUMENTS_END] && !(continues_member && valid_symbols[TYPE_ARGUMENTS_END])) {
         lexer->result_symbol = NEW_TYPE_ARGUMENTS_END;
@@ -596,7 +609,8 @@ static bool scan_type_arguments_end(TSLexer *lexer, const bool *valid_symbols) {
     return true;
 }
 
-static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *continues_member) {
+static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool html_comment_valid,
+                                                        bool *continues_member) {
     if (lexer->lookahead == '=' || lexer->lookahead == '>') {
         return TYPE_ARGUMENTS_REJECTED;
     }
@@ -629,18 +643,37 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
         case '`':
         case '>':
             return TYPE_ARGUMENTS_REJECTED;
+        // The characters of an HTML-like comment (`<!--` or `-->`) are advanced over rather than skipped, so that the
+        // comment token includes them.
         case '<':
-            skip(lexer);
-            return lexer->lookahead == '<' || lexer->lookahead == '=' ? TYPE_ARGUMENTS_KEPT : TYPE_ARGUMENTS_REJECTED;
+            advance(lexer);
+            if (lexer->lookahead == '<' || lexer->lookahead == '=') {
+                return TYPE_ARGUMENTS_KEPT;
+            }
+            if (html_comment_valid && lexer->lookahead == '!') {
+                advance(lexer);
+                if (lexer->lookahead == '-') {
+                    advance(lexer);
+                    if (lexer->lookahead == '-') {
+                        return TYPE_ARGUMENTS_BEFORE_HTML_COMMENT;
+                    }
+                }
+            }
+            return TYPE_ARGUMENTS_REJECTED;
         case '+':
         case '-': {
             int32_t sign = lexer->lookahead;
-            skip(lexer);
+            advance(lexer);
             // `++` and `--` start an expression, `+=` and `-=` cannot.
             if (lexer->lookahead == '=') {
                 return TYPE_ARGUMENTS_KEPT;
             }
-            return lexer->lookahead == sign ? before_expression : TYPE_ARGUMENTS_REJECTED;
+            if (lexer->lookahead != sign) {
+                return TYPE_ARGUMENTS_REJECTED;
+            }
+            advance(lexer);
+            return html_comment_valid && sign == '-' && lexer->lookahead == '>' ? TYPE_ARGUMENTS_BEFORE_HTML_COMMENT
+                                                                                : before_expression;
         }
         case '.':
             skip(lexer);

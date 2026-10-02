@@ -633,6 +633,8 @@ c;
 x = new A<B>
 [0];
 x = new A<B>`c`;
+x = new A<B> <!-- c -->
+;
 
 ---
 
@@ -724,7 +726,15 @@ x = new A<B>`c`;
           (type_arguments
             (type_identifier))
           (template_string
-            (string_fragment)))))))
+            (string_fragment))))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (html_comment)))))
 
 ==================================
 Type arguments of a new without arguments in TSX
@@ -742,6 +752,8 @@ c;
 x = new A<B>
 [0];
 x = new A<B>`c`;
+x = new A<B> <!-- c -->
+;
 
 ---
 
@@ -833,7 +845,15 @@ x = new A<B>`c`;
           (type_arguments
             (type_identifier))
           (template_string
-            (string_fragment)))))))
+            (string_fragment))))))
+  (expression_statement
+    (assignment_expression
+      (identifier)
+      (new_expression
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (html_comment)))))
 
 ==================================
 Instantiation expressions before a line break or a slash
