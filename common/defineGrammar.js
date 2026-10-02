@@ -199,6 +199,7 @@ module.exports = function defineGrammar(dialect) {
         $.instantiation_expression,
       ],
       [$.primary_expression, $.call_expression, $.instantiation_expression],
+      [$.expression, $.call_expression],
     ],
 
     inline: ($, previous) => [
@@ -320,12 +321,19 @@ module.exports = function defineGrammar(dialect) {
           prec(
             'member',
             seq(
-              // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`).
-              field('function', choice($.primary_expression, $.instantiation_expression)),
+              field('function', $.primary_expression),
               field('optional_chain', $.optional_chain),
               field('type_arguments', optional($.type_arguments)),
               field('arguments', $.arguments)
             )
+          ),
+          // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`). Without
+          // a precedence, GLR also keeps the reading in which it is the object of `?.[0]` or `?.x`.
+          seq(
+            field('function', $.instantiation_expression),
+            field('optional_chain', $.optional_chain),
+            field('type_arguments', optional($.type_arguments)),
+            field('arguments', $.arguments)
           )
         ),
 
