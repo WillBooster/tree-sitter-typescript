@@ -435,7 +435,7 @@ module.exports = function defineGrammar(dialect) {
               'property',
               choice(
                 reserved('properties', alias($.identifier, $.property_identifier)),
-                alias('out', $.property_identifier)
+                alias(choice('in', 'out'), $.property_identifier)
               )
             )
           )
@@ -949,7 +949,7 @@ module.exports = function defineGrammar(dialect) {
           field('arguments', $.arguments)
         ),
 
-      asserts: ($) => seq('asserts', choice($.type_predicate, $.identifier, $.this)),
+      asserts: ($) => seq('asserts', choice($.type_predicate, $.identifier, alias('out', $.identifier), $.this)),
 
       asserts_annotation: ($) => seq(seq(':', $.asserts)),
 

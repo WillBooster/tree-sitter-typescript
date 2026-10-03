@@ -3663,8 +3663,17 @@
                 {
                   "type": "ALIAS",
                   "content": {
-                    "type": "STRING",
-                    "value": "out"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "STRING",
+                        "value": "in"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "out"
+                      }
+                    ]
                   },
                   "named": true,
                   "value": "property_identifier"
@@ -11141,6 +11150,15 @@
             {
               "type": "SYMBOL",
               "name": "identifier"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "STRING",
+                "value": "out"
+              },
+              "named": true,
+              "value": "identifier"
             },
             {
               "type": "SYMBOL",

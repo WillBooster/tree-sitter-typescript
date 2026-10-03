@@ -2910,3 +2910,98 @@ type DeclaredOut = out;
   (type_alias_declaration
     (type_identifier)
     (type_identifier)))
+
+================================================================================
+Variance keywords inside qualified types and assertion targets
+:language(typescript)
+:language(tsx)
+================================================================================
+
+type M = a.in.T;
+type N = a.b.in.T;
+type O = a.in.T<X>;
+function g(out: any): asserts out {}
+const h = (out: any): asserts out => {};
+class C { g(out: any): asserts out {} }
+function isOut(out: unknown): asserts out is string {}
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (nested_type_identifier
+        (nested_identifier
+          (identifier)
+          (property_identifier))
+        (type_identifier))
+      (type_arguments
+        (type_identifier))))
+  (function_declaration
+    (identifier)
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type))))
+    (asserts_annotation
+      (asserts
+        (identifier)))
+    (statement_block))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (predefined_type))))
+        (asserts_annotation
+          (asserts
+            (identifier)))
+        (statement_block))))
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (predefined_type))))
+        (asserts_annotation
+          (asserts
+            (identifier)))
+        (statement_block))))
+  (function_declaration
+    (identifier)
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type))))
+    (asserts_annotation
+      (asserts
+        (type_predicate
+          (identifier)
+          (predefined_type))))
+    (statement_block)))
