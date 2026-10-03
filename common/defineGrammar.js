@@ -3,6 +3,7 @@ const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 // Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'accessor',
   'declare',
   'global',
   'namespace',
@@ -233,7 +234,8 @@ module.exports = function defineGrammar(dialect) {
                 seq(optional('static'), optional($.override_modifier), optional('readonly')),
                 seq(optional('abstract'), optional('readonly')),
                 seq(optional('readonly'), optional('abstract')),
-                optional('accessor')
+                seq(optional('static'), optional($.override_modifier), 'accessor'),
+                seq('abstract', 'accessor')
               ),
               choice(
                 seq(
@@ -269,7 +271,8 @@ module.exports = function defineGrammar(dialect) {
                 seq($.override_modifier, optional('readonly')),
                 seq('readonly', optional('abstract')),
                 seq('abstract', optional('readonly')),
-                'accessor'
+                seq(optional('static'), optional($.override_modifier), 'accessor'),
+                seq('abstract', 'accessor')
               ),
               field('name', alias('static', $.property_identifier)),
               choice(

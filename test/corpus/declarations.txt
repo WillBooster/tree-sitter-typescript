@@ -1790,3 +1790,102 @@ namespace out.Deep {}
         (identifier)
         (property_identifier))
       (statement_block))))
+
+================================================================================
+Auto-accessor modifiers and contextual member names
+================================================================================
+
+class Method { accessor() { return 1; } }
+class Field { accessor: number = 1; }
+class StaticField { static accessor = 1; }
+class Base { accessor value = 1; }
+class Derived extends Base { override accessor value = 2; }
+abstract class Abstract { abstract accessor value: number; }
+class Modifiers {
+  public static accessor value = 1;
+  static accessor #privateValue = 1;
+  accessor static = 2;
+  static accessor accessor = 3;
+  static accessor static = 4;
+}
+class Lines {
+  accessor
+  value = 1;
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (method_definition
+        name: (property_identifier)
+        parameters: (formal_parameters)
+        body: (statement_block
+          (return_statement
+            (number))))))
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type))
+        value: (number))))
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        value: (number))))
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        value: (number))))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (extends_clause
+        value: (identifier)))
+    body: (class_body
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier)
+        value: (number))))
+  (abstract_class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))))
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        (accessibility_modifier)
+        name: (property_identifier)
+        value: (number))
+      (public_field_definition
+        name: (private_property_identifier)
+        value: (number))
+      (public_field_definition
+        name: (property_identifier)
+        value: (number))
+      (public_field_definition
+        name: (property_identifier)
+        value: (number))
+      (public_field_definition
+        name: (property_identifier)
+        value: (number))))
+  (class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier))
+      (public_field_definition
+        name: (property_identifier)
+        value: (number)))))
