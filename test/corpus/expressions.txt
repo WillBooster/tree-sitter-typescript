@@ -1475,3 +1475,154 @@ new A.b!.c();
             (property_identifier)))
         (property_identifier))
       (arguments))))
+
+================================================================================
+Variance words in JSX names
+:language(tsx)
+================================================================================
+
+const a = <out />;
+const b = <in />;
+const c = <out.Deep.Inner />;
+const d = <div><out key={1} /></div>;
+const e = <in>hi</in>;
+const f = <out:x {...props} />;
+const g = <in.Deep.Inner />;
+const h = <out.in />;
+const i = <out<out> in={1} out={2} />;
+
+--------------------------------------------------------------------------------
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (member_expression
+          (member_expression
+            (identifier)
+            (property_identifier))
+          (property_identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_element
+        (jsx_opening_element
+          (identifier))
+        (jsx_self_closing_element
+          (identifier)
+          (jsx_attribute
+            (property_identifier)
+            (jsx_expression
+              (number))))
+        (jsx_closing_element
+          (identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_element
+        (jsx_opening_element
+          (identifier))
+        (jsx_text)
+        (jsx_closing_element
+          (identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (jsx_namespace_name
+          (identifier)
+          (identifier))
+        (jsx_expression
+          (spread_element
+            (identifier))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (member_expression
+          (member_expression
+            (identifier)
+            (property_identifier))
+          (property_identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (member_expression
+          (identifier)
+          (property_identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (jsx_self_closing_element
+        (identifier)
+        (type_arguments
+          (type_identifier))
+        (jsx_attribute
+          (property_identifier)
+          (jsx_expression
+            (number)))
+        (jsx_attribute
+          (property_identifier)
+          (jsx_expression
+            (number)))))))
+
+================================================================================
+Variance words in type assertions
+:language(typescript)
+================================================================================
+
+type out = any;
+let a = <out>z;
+let b = <out[]>z;
+let c = <out.T>z;
+let d = <in>z;
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (predefined_type))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (type_identifier))
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (array_type
+            (type_identifier)))
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (nested_type_identifier
+            (identifier)
+            (type_identifier)))
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (type_identifier))
+        (identifier)))))

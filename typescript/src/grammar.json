@@ -3619,17 +3619,8 @@
                 {
                   "type": "ALIAS",
                   "content": {
-                    "type": "CHOICE",
-                    "members": [
-                      {
-                        "type": "STRING",
-                        "value": "in"
-                      },
-                      {
-                        "type": "STRING",
-                        "value": "out"
-                      }
-                    ]
+                    "type": "STRING",
+                    "value": "out"
                   },
                   "named": true,
                   "value": "identifier"
@@ -3672,17 +3663,8 @@
                 {
                   "type": "ALIAS",
                   "content": {
-                    "type": "CHOICE",
-                    "members": [
-                      {
-                        "type": "STRING",
-                        "value": "in"
-                      },
-                      {
-                        "type": "STRING",
-                        "value": "out"
-                      }
-                    ]
+                    "type": "STRING",
+                    "value": "out"
                   },
                   "named": true,
                   "value": "property_identifier"
@@ -3714,21 +3696,35 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "_jsx_identifier"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_jsx_identifier"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "nested_identifier"
+              },
+              "named": true,
+              "value": "member_expression"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "jsx_namespace_name"
+            }
+          ]
         },
         {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "nested_identifier"
+            "name": "_jsx_in_nested_identifier"
           },
           "named": true,
           "value": "member_expression"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "jsx_namespace_name"
         }
       ]
     },
@@ -9316,6 +9312,86 @@
         }
       ]
     },
+    "_jsx_in_nested_identifier": {
+      "type": "PREC",
+      "value": "member",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "FIELD",
+            "name": "object",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "in"
+                  },
+                  "named": true,
+                  "value": "identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_jsx_in_nested_identifier"
+                  },
+                  "named": true,
+                  "value": "member_expression"
+                }
+              ]
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "."
+          },
+          {
+            "type": "FIELD",
+            "name": "property",
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "RESERVED",
+                  "content": {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "identifier"
+                    },
+                    "named": true,
+                    "value": "property_identifier"
+                  },
+                  "context_name": "properties"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "STRING",
+                        "value": "in"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "out"
+                      }
+                    ]
+                  },
+                  "named": true,
+                  "value": "property_identifier"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
     "_jsx_start_opening_element": {
       "type": "SEQ",
       "members": [
@@ -9367,6 +9443,15 @@
                                 "content": {
                                   "type": "SYMBOL",
                                   "name": "nested_identifier"
+                                },
+                                "named": true,
+                                "value": "member_expression"
+                              },
+                              {
+                                "type": "ALIAS",
+                                "content": {
+                                  "type": "SYMBOL",
+                                  "name": "_jsx_in_nested_identifier"
                                 },
                                 "named": true,
                                 "value": "member_expression"
@@ -10324,6 +10409,15 @@
                 {
                   "type": "SYMBOL",
                   "name": "identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "out"
+                  },
+                  "named": true,
+                  "value": "identifier"
                 },
                 {
                   "type": "SYMBOL",
@@ -11415,6 +11509,15 @@
         {
           "type": "SYMBOL",
           "name": "_type_identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "in"
+          },
+          "named": true,
+          "value": "type_identifier"
         },
         {
           "type": "SYMBOL",
@@ -13263,10 +13366,6 @@
               "name": "identifier"
             },
             "context_name": "properties"
-          },
-          {
-            "type": "STRING",
-            "value": "in"
           },
           {
             "type": "STRING",
