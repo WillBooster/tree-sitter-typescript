@@ -3,6 +3,10 @@
   "extends": ["github>WillBooster/willbooster-configs:renovate.jsonc"],
   "packageRules": [
     {
+      "matchPackageNames": ["typescript-reference"],
+      "allowedVersions": "5.9.x",
+    },
+    {
       // The Wasm tests run on @willbooster/web-tree-sitter, and the Rust tests, the fuzz job, and the CLI that
       // script/tree-sitter runs on willbooster-tree-sitter, the same runtime, so they are updated together.
       "matchPackageNames": ["@willbooster/web-tree-sitter", "willbooster-tree-sitter"],

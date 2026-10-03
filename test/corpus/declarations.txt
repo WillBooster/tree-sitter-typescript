@@ -1498,3 +1498,253 @@ class Bar extends Foo {
         name: (property_identifier)
         parameters: (formal_parameters)
         body: (statement_block)))))
+
+==================================
+Global augmentations and identifiers
+:language(typescript)
+:language(tsx)
+==================================
+
+global {}
+global
+{}
+global /* split
+*/ {}
+global // split
+{}
+declare module "m" {
+  global {
+    interface Window {}
+  }
+}
+global
+value
+class C extends global {}
+const global = 1;
+global();
+export default global
+foo()
+export default global
+export const a = 1;
+export global {}
+declare global
+bar()
+declare
++global
+{}
+declare
+-global
+{}
+declare global {}
+declare
+global {}
+global;
+global
+number
+global
+()
+value
+global {}
+global
+export class D {}
+global
+veryLongIdentifierName
+global
+π
+declare global {
+  interface Window {}
+}
+
+global
+\u006eumber
+global
+\u{006e}umber
+global
+num\u0062er
+global
+constructo\u0072
+global
+\u0064efer
+global
+\u0061name
+\u0067lobal {}
+
+---
+
+(program
+  (internal_module
+    (identifier)
+    (statement_block))
+  (internal_module
+    (identifier)
+    (statement_block))
+  (internal_module
+    (identifier)
+    (comment)
+    (statement_block))
+  (internal_module
+    (identifier)
+    (comment)
+    (statement_block))
+  (ambient_declaration
+    (module
+      (string
+        (string_fragment))
+      (statement_block
+        (internal_module
+          (identifier)
+          (statement_block
+            (interface_declaration
+              (type_identifier)
+              (interface_body)))))))
+  (internal_module
+    (identifier))
+  (expression_statement
+    (identifier))
+  (class_declaration
+    (type_identifier)
+    (class_heritage
+      (extends_clause
+        (identifier)))
+    (class_body))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (number)))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (export_statement
+    (identifier))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (export_statement
+    (identifier))
+  (export_statement
+    (lexical_declaration
+      (variable_declarator
+        (identifier)
+        (number))))
+  (export_statement
+    (internal_module
+      (identifier)
+      (statement_block)))
+  (ambient_declaration)
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (identifier)))
+  (statement_block)
+  (expression_statement
+    (binary_expression
+      (identifier)
+      (identifier)))
+  (statement_block)
+  (ambient_declaration
+    (statement_block))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier)
+    (statement_block))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (call_expression
+      (identifier)
+      (arguments)))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier)
+    (statement_block))
+  (internal_module
+    (identifier))
+  (export_statement
+    (class_declaration
+      (type_identifier)
+      (class_body)))
+  (internal_module
+    (identifier))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier))
+  (expression_statement
+    (identifier))
+  (ambient_declaration
+    (statement_block
+      (interface_declaration
+        (type_identifier)
+        (interface_body))))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier)
+    (statement_block)))
+
+==================================
+HTML comments with global lookahead
+:language(typescript)
+:language(tsx)
+==================================
+
+<!-- opening
+value;
+--> closing
+value;
+{ <!-- hi
+}
+function comments() {
+<!-- comment
+}
+
+---
+
+(program
+  (html_comment)
+  (expression_statement
+    (identifier))
+  (html_comment)
+  (expression_statement
+    (identifier))
+  (statement_block
+    (html_comment))
+  (function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (html_comment))))

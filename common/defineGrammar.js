@@ -4,6 +4,7 @@ const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 // Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'declare',
+  'global',
   'namespace',
   'type',
   'public',
@@ -64,6 +65,8 @@ module.exports = function defineGrammar(dialect) {
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
+      $._global_declaration_start,
+      $._global_declaration_end,
       $.__error_recovery,
     ],
 
@@ -473,6 +476,7 @@ module.exports = function defineGrammar(dialect) {
       export_statement: ($, previous) =>
         choice(
           previous,
+          seq('export', field('declaration', alias($.global_declaration, $.internal_module))),
           seq('export', 'type', $.export_clause, optional($._from_clause), $._semicolon),
           seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
@@ -649,6 +653,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
+      statement: ($, previous) => choice(previous, alias($.global_declaration, $.internal_module)),
+
       declaration: ($, previous) =>
         choice(
           previous,
@@ -706,7 +712,7 @@ module.exports = function defineGrammar(dialect) {
           'declare',
           choice(
             $.declaration,
-            seq('global', $.statement_block),
+            seq(alias($._global_declaration_start, 'global'), choice($.statement_block, $._global_declaration_end)),
             seq('module', '.', alias($.identifier, $.property_identifier), ':', $.type, $._semicolon)
           )
         ),
@@ -755,6 +761,12 @@ module.exports = function defineGrammar(dialect) {
       module: ($) => seq('module', $._module),
 
       internal_module: ($) => seq('namespace', $._module),
+
+      global_declaration: ($) =>
+        seq(
+          field('name', alias($._global_declaration_start, $.identifier)),
+          choice(field('body', $.statement_block), $._global_declaration_end)
+        ),
 
       _module: ($) =>
         prec.right(

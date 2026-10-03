@@ -108,7 +108,12 @@ runtime this package ships. The first run downloads that CLI from its GitHub Rel
 `cargo` (with the `cmake` that `mise.toml` pins) when the download fails or the release has no binary that runs here.
 
 `bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
-`tsx/src/` and builds both Wasm files. `bun run test` runs:
+`tsx/src/` and builds both Wasm files. It also refreshes `common/typeScriptKeywords.h` from the pinned
+`typescript-reference` API (TypeScript 5.9.3), which supplies the global-augmentation lookahead vocabulary.
+The native TypeScript package remains the type checker. Run `bun run generate-keywords` after changing the reference;
+verification checks the committed header with `bun run check-keywords`.
+
+`bun run test` runs:
 
 - the corpus in `test/corpus`, with the native build and with the Wasm build (the first run downloads the WASI SDK).
   Cases run with the `typescript` grammar unless they carry `:language(tsx)`;

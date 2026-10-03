@@ -414,6 +414,10 @@
         "named": true
       },
       {
+        "type": "internal_module",
+        "named": true
+      },
+      {
         "type": "labeled_statement",
         "named": true
       },
@@ -647,7 +651,7 @@
     "fields": {},
     "children": {
       "multiple": true,
-      "required": true,
+      "required": false,
       "types": [
         {
           "type": "declaration",

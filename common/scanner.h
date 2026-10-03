@@ -2,6 +2,7 @@
 #include "tree_sitter/parser.h"
 
 #include <string.h>
+#include "typeScriptKeywords.h"
 
 enum TokenType {
     AUTOMATIC_SEMICOLON,
@@ -23,6 +24,8 @@ enum TokenType {
     TYPE_ARGUMENTS_END,
     TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
     NEW_TYPE_ARGUMENTS_END,
+    GLOBAL_DECLARATION_START,
+    GLOBAL_DECLARATION_END,
     ERROR_RECOVERY,
 };
 
@@ -117,11 +120,11 @@ typedef enum {
 
 // Skips the comment that the `/` at the lookahead starts, if any. A line comment ends before its line terminator, which
 // the caller then sees; a block comment reports whether it contains one, since it then separates lines as well.
-static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
-    skip(lexer);
+static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment, bool skip_input) {
+    lexer->advance(lexer, skip_input);
     if (lexer->lookahead == '/') {
         while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
-            skip(lexer);
+            lexer->advance(lexer, skip_input);
         }
         *scanned_comment = true;
         return COMMENT;
@@ -129,18 +132,18 @@ static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
     if (lexer->lookahead != '*') {
         return NO_COMMENT;
     }
-    skip(lexer);
+    lexer->advance(lexer, skip_input);
     bool saw_line_terminator = false;
     while (!lexer->eof(lexer)) {
         if (lexer->lookahead == '*') {
-            skip(lexer);
+            lexer->advance(lexer, skip_input);
             if (lexer->lookahead == '/') {
-                skip(lexer);
+                lexer->advance(lexer, skip_input);
                 break;
             }
         } else {
             saw_line_terminator |= is_line_terminator(lexer->lookahead);
-            skip(lexer);
+            lexer->advance(lexer, skip_input);
         }
     }
     *scanned_comment = true;
@@ -148,15 +151,15 @@ static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment) {
 }
 
 // Returns false at a `/` that starts no comment.
-static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) {
+static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment, bool skip_input) {
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
-            skip(lexer);
+            lexer->advance(lexer, skip_input);
         }
         if (lexer->lookahead != '/') {
             return true;
         }
-        if (skip_comment(lexer, scanned_comment) == NO_COMMENT) {
+        if (skip_comment(lexer, scanned_comment, skip_input) == NO_COMMENT) {
             return false;
         }
     }
@@ -167,7 +170,7 @@ static bool scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_comment) 
 // continues an enclosing conditional expression (`a ? b : () => {}` then `? c : d`, which V8 accepts).
 static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comment) {
     // A `/` that starts no comment starts a regex.
-    if (!scan_whitespace_and_comments(lexer, scanned_comment)) {
+    if (!scan_whitespace_and_comments(lexer, scanned_comment, true)) {
         return true;
     }
     return lexer->lookahead != ',' && lexer->lookahead != ';' && lexer->lookahead != '?';
@@ -198,7 +201,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                                   LineBreakRule rule, bool *scanned_comment);
 
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow,
-                                     LineBreakRule rule, bool *scanned_comment) {
+                                     LineBreakRule rule, bool *scanned_comment, bool *before_line_break) {
+    *before_line_break = false;
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
     lexer->mark_end(lexer);
 
@@ -224,7 +228,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             // A comment on the same line stays in the statement: the scanner runs again after it. The exceptions are a
             // block comment containing a line terminator, since the scanner cannot see that line break after it, and a
             // comment after an arrow function's block body, which would otherwise become part of the arrow function.
-            CommentResult result = skip_comment(lexer, scanned_comment);
+            CommentResult result = skip_comment(lexer, scanned_comment, true);
             if (result == NO_COMMENT || (result == COMMENT && !after_block_arrow)) {
                 return false;
             }
@@ -233,6 +237,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
             at_line_break = is_line_terminator(lexer->lookahead);
             skip(lexer);
         } else {
+            *before_line_break = true;
             return false;
         }
     }
@@ -246,7 +251,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
         return ends_statement_after_block_arrow(lexer, scanned_comment);
     }
 
-    bool before_slash = !scan_whitespace_and_comments(lexer, scanned_comment);
+    bool before_slash = !scan_whitespace_and_comments(lexer, scanned_comment, true);
     // A `;` at the start of the next line ends the statement itself.
     if (!before_slash && lexer->lookahead == ';') {
         return false;
@@ -608,7 +613,7 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
             skip(lexer);
         } else if (lexer->lookahead == '/') {
             bool scanned_comment = false;
-            CommentResult result = skip_comment(lexer, &scanned_comment);
+            CommentResult result = skip_comment(lexer, &scanned_comment, true);
             if (result == NO_COMMENT) {
                 // TypeScript reads a `/` as a division, which keeps the type arguments, and a `/=` as the start of a
                 // regex, which keeps them only after a line break. Either may also start a regex that comparisons read.
@@ -690,7 +695,7 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
         // `import` starts an expression only as `import(...)`, `import.meta`, or `import<T>` (an error TypeScript
         // recovers from).
         bool scanned_comment = false;
-        if (scan_whitespace_and_comments(lexer, &scanned_comment) &&
+        if (scan_whitespace_and_comments(lexer, &scanned_comment, true) &&
             (lexer->lookahead == '(' || lexer->lookahead == '.' || lexer->lookahead == '<')) {
             return before_expression;
         }
@@ -704,8 +709,116 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
     return before_expression;
 }
 
+static int32_t hex_digit_value(int32_t character) {
+    if (character >= '0' && character <= '9') return character - '0';
+    if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+    if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+    return -1;
+}
+
+static int32_t scan_identifier_character(TSLexer *lexer) {
+    int32_t character = lexer->lookahead;
+    advance(lexer);
+    if (character != '\\') return character;
+    if (lexer->lookahead != 'u') return -1;
+    advance(lexer);
+    bool braced = lexer->lookahead == '{';
+    if (braced) advance(lexer);
+    uint32_t value = 0;
+    unsigned digits = 0;
+    while (braced ? lexer->lookahead != '}' : digits < 4) {
+        int32_t digit = hex_digit_value(lexer->lookahead);
+        if (digit < 0 || value > 0x10FFFF / 16) return -1;
+        value = value * 16 + (uint32_t)digit;
+        if (value > 0x10FFFF) return -1;
+        digits++;
+        advance(lexer);
+    }
+    if (digits == 0) return -1;
+    if (braced) advance(lexer);
+    return (int32_t)value;
+}
+
+static bool scan_global_declaration_start(TSLexer *lexer) {
+    while (is_whitespace(lexer->lookahead)) {
+        skip(lexer);
+    }
+    const char *word = "global";
+    for (; *word; word++) {
+        if (scan_identifier_character(lexer) != *word) {
+            return false;
+        }
+    }
+    if (is_identifier_part(lexer->lookahead)) {
+        return false;
+    }
+    lexer->mark_end(lexer);
+    bool scanned_comment = false;
+    if (!scan_whitespace_and_comments(lexer, &scanned_comment, false)) {
+        return false;
+    }
+    if (lexer->lookahead == '{') {
+        lexer->result_symbol = GLOBAL_DECLARATION_START;
+        return true;
+    }
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) {
+        return false;
+    }
+    char next_word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+    unsigned length = 0;
+    while (is_identifier_part(lexer->lookahead)) {
+        int32_t character = scan_identifier_character(lexer);
+        if (!is_identifier_part(character) || character == '\\' || (length == 0 && is_ascii_digit(character))) {
+            return false;
+        }
+        if (character > 0x7F || length == sizeof(next_word) - 1) {
+            lexer->result_symbol = GLOBAL_DECLARATION_START;
+            return true;
+        }
+        next_word[length++] = (char)character;
+    }
+    // TypeScript starts a global augmentation before a brace, an Identifier token, or export,
+    // including across line breaks; contextual keyword tokens do not satisfy that lookahead.
+    for (unsigned i = 0; i < sizeof(TS_GLOBAL_KEYWORDS) / sizeof(TS_GLOBAL_KEYWORDS[0]); i++) {
+        if (strcmp(next_word, TS_GLOBAL_KEYWORDS[i]) == 0) {
+            return false;
+        }
+    }
+    lexer->result_symbol = GLOBAL_DECLARATION_START;
+    return true;
+}
+
+static bool scan_global_declaration_end(TSLexer *lexer) {
+    lexer->mark_end(lexer);
+    bool saw_line_break = false;
+    for (;;) {
+        while (is_whitespace(lexer->lookahead)) {
+            saw_line_break |= is_line_terminator(lexer->lookahead);
+            skip(lexer);
+        }
+        if (lexer->lookahead != '/') {
+            break;
+        }
+        bool scanned_comment = false;
+        CommentResult result = skip_comment(lexer, &scanned_comment, true);
+        if (result == NO_COMMENT) {
+            return false;
+        }
+        saw_line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
+    }
+    if (!saw_line_break || lexer->lookahead == '{') {
+        return false;
+    }
+    lexer->result_symbol = GLOBAL_DECLARATION_END;
+    return true;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if (valid_symbols[GLOBAL_DECLARATION_END] && !valid_symbols[ERROR_RECOVERY]) {
+        return scan_global_declaration_end(lexer);
+    }
 
     if (valid_symbols[TEMPLATE_CHARS]) {
         if (valid_symbols[AUTOMATIC_SEMICOLON]) {
@@ -748,7 +861,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         } else if (valid_symbols[LINE_BREAK_BEFORE_ATTRIBUTES]) {
             rule = LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES;
         }
-        bool ret = scan_automatic_semicolon(lexer, valid_symbols, after_block_arrow, rule, &scanned_comment);
+        bool before_line_break = false;
+        bool ret = scan_automatic_semicolon(lexer, valid_symbols, after_block_arrow, rule, &scanned_comment,
+                                            &before_line_break);
         if (ret && after_block_arrow) {
             lexer->result_symbol = ARROW_FUNCTION_BLOCK_END;
             scanner->automatic_semicolon_pending = true;
@@ -756,8 +871,27 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (!ret && !scanned_comment && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
             return scan_ternary_qmark(lexer);
         }
+        if (!ret && before_line_break && !scanned_comment && valid_symbols[GLOBAL_DECLARATION_START] &&
+            !valid_symbols[ERROR_RECOVERY]) {
+            while (is_whitespace(lexer->lookahead)) skip(lexer);
+            if (lexer->lookahead == 'g' || lexer->lookahead == '\\') {
+                return scan_global_declaration_start(lexer);
+            }
+        }
+        if (!ret && !scanned_comment && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
+            !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN] &&
+            (lexer->lookahead == '<' || lexer->lookahead == '-')) {
+            return scan_closing_comment(lexer);
+        }
         return ret;
     }
+    if (valid_symbols[GLOBAL_DECLARATION_START] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == 'g' || lexer->lookahead == '\\') {
+            return scan_global_declaration_start(lexer);
+        }
+    }
+
     if (valid_symbols[TERNARY_QMARK]) {
         return scan_ternary_qmark(lexer);
     }

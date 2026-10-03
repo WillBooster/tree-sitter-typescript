@@ -28,9 +28,11 @@
   ],
   "scripts": {
     "build-wasm": "script/tree-sitter build --wasm typescript && script/tree-sitter build --wasm tsx",
-    "build/ci": "script/tree-sitter generate typescript/grammar.js && script/tree-sitter generate tsx/grammar.js && bun run build-wasm",
-    "cleanup": "bun wb lint --fix --format",
+    "build/ci": "bun run generate-keywords && script/tree-sitter generate typescript/grammar.js && script/tree-sitter generate tsx/grammar.js && bun run build-wasm",
+    "check-keywords": "bun scripts/generateGlobalKeywords.ts --check",
+    "cleanup": "bun run check-keywords && bun wb lint --fix --format",
     "format": "bun wb lint --format",
+    "generate-keywords": "bun scripts/generateGlobalKeywords.ts",
     "lint": "bun wb lint",
     "lint-fix": "bun wb lint --fix",
     "prepare": "(bun lefthook install || true) && (test ! -f .lefthook/normalize-bun-lockfile.sh || bash .lefthook/normalize-bun-lockfile.sh)",
@@ -63,6 +65,7 @@
     "semantic-release": "25.0.9",
     "sort-package-json": "4.0.0",
     "typescript": "7.0.2",
+    "typescript-reference": "npm:typescript@5.9.3",
     "vite": "8.3.0",
     "vitest": "5.0.2",
     "wrangler": "4.135.0"
