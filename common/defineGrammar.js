@@ -1201,7 +1201,7 @@ module.exports = function defineGrammar(dialect) {
 
       type_parameter: ($) =>
         seq(
-          optional(choice('const', 'in', 'out', seq('in', 'out'))),
+          repeat(choice('const', 'in', 'out')),
           field('name', choice($._type_identifier, alias('out', $.type_identifier))),
           field('constraint', optional($.constraint)),
           field('value', optional($.default_type))
