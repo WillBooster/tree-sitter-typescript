@@ -11305,8 +11305,22 @@
           "value": "..."
         },
         {
-          "type": "SYMBOL",
-          "name": "_tuple_label"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_tuple_label"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "STRING",
+                "value": "in"
+              },
+              "named": true,
+              "value": "identifier"
+            }
+          ]
         }
       ]
     },

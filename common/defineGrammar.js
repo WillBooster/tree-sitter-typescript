@@ -972,11 +972,8 @@ module.exports = function defineGrammar(dialect) {
 
       optional_tuple_parameter: ($) => seq(field('name', $._tuple_label), '?', field('type', $.type_annotation)),
 
-      _tuple_rest_label: ($) => seq('...', $._tuple_label),
+      _tuple_rest_label: ($) => seq('...', choice($._tuple_label, alias('in', $.identifier))),
 
-      // TypeScript accepts any identifier name as a tuple label, but where a tuple member begins, the keywords that
-      // can begin a type are lexed as those keywords, so they are listed here. Keywords that are rules of their own
-      // are aliased as rules: repeating their strings would turn those rules into nodes that wrap a token.
       _tuple_label: ($) =>
         choice(
           $.identifier,

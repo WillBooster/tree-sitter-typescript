@@ -3005,3 +3005,59 @@ function isOut(out: unknown): asserts out is string {}
           (identifier)
           (predefined_type))))
     (statement_block)))
+
+================================================================================
+Reserved in as a rest tuple label
+:language(typescript)
+:language(tsx)
+================================================================================
+
+type A = [...in: string[]];
+type B = [a: string, ...in: number[]];
+type C = [...in: 1[]];
+type D = [...out: string[]];
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (literal_type
+              (number)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type)))))))
