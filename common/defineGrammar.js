@@ -430,14 +430,7 @@ module.exports = function defineGrammar(dialect) {
                 alias($.nested_identifier, $.member_expression)
               )
             ),
-            '.',
-            field(
-              'property',
-              choice(
-                reserved('properties', alias($.identifier, $.property_identifier)),
-                alias(choice('in', 'out'), $.property_identifier)
-              )
-            )
+            ...nestedIdentifierTail($)
           )
         ),
 
@@ -446,14 +439,7 @@ module.exports = function defineGrammar(dialect) {
           'member',
           seq(
             field('object', choice(alias('in', $.identifier), alias($._in_nested_identifier, $.member_expression))),
-            '.',
-            field(
-              'property',
-              choice(
-                reserved('properties', alias($.identifier, $.property_identifier)),
-                alias(choice('in', 'out'), $.property_identifier)
-              )
-            )
+            ...nestedIdentifierTail($)
           )
         ),
 
@@ -1346,6 +1332,19 @@ module.exports = function defineGrammar(dialect) {
     },
   });
 };
+
+function nestedIdentifierTail($) {
+  return [
+    '.',
+    field(
+      'property',
+      choice(
+        reserved('properties', alias($.identifier, $.property_identifier)),
+        alias(choice('in', 'out'), $.property_identifier)
+      )
+    ),
+  ];
+}
 
 /**
  * Creates a rule to match one or more of the rules separated by a comma
