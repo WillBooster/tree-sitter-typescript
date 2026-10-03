@@ -1626,3 +1626,46 @@ let d = <in>z;
         (type_arguments
           (type_identifier))
         (identifier)))))
+
+================================================================================
+Qualified variance keyword type assertions
+:language(typescript)
+================================================================================
+
+let x = <in.a>value;
+let y = <in.a.b>value;
+let z = <in<string>>value;
+
+--------------------------------------------------------------------------------
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (nested_type_identifier
+            (identifier)
+            (type_identifier)))
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (nested_type_identifier
+            (member_expression
+              (identifier)
+              (property_identifier))
+            (type_identifier)))
+        (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_assertion
+        (type_arguments
+          (generic_type
+            (type_identifier)
+            (type_arguments
+              (predefined_type))))
+        (identifier)))))

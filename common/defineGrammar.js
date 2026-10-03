@@ -19,6 +19,7 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'string',
   'symbol',
   'object',
+  'out',
   'new',
 ];
 
@@ -121,7 +122,7 @@ module.exports = function defineGrammar(dialect) {
       [$.type_query, $._type_query_subscript_expression],
       [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
       // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
-      [$.nested_identifier, $.nested_type_identifier],
+      [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
       [$.as_expression, $.satisfies_expression, $.primary_type],
       [$._type_query_member_expression, $.member_expression],
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
@@ -209,6 +210,7 @@ module.exports = function defineGrammar(dialect) {
     inline: ($, previous) => [
       ...previous.filter((rule) => !['_formal_parameter', '_call_signature'].includes(rule.name)),
       $._type_identifier,
+      $._type_reference_identifier,
       $._jsx_start_opening_element,
     ],
 
@@ -439,11 +441,11 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _jsx_in_nested_identifier: ($) =>
+      _in_nested_identifier: ($) =>
         prec(
           'member',
           seq(
-            field('object', choice(alias('in', $.identifier), alias($._jsx_in_nested_identifier, $.member_expression))),
+            field('object', choice(alias('in', $.identifier), alias($._in_nested_identifier, $.member_expression))),
             '.',
             field(
               'property',
@@ -455,7 +457,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _jsx_element_name: ($, previous) => choice(previous, alias($._jsx_in_nested_identifier, $.member_expression)),
+      _jsx_element_name: ($, previous) => choice(previous, alias($._in_nested_identifier, $.member_expression)),
 
       _jsx_start_opening_element: ($) =>
         seq(
@@ -470,7 +472,7 @@ module.exports = function defineGrammar(dialect) {
                     choice(
                       $._jsx_identifier,
                       alias($.nested_identifier, $.member_expression),
-                      alias($._jsx_in_nested_identifier, $.member_expression)
+                      alias($._in_nested_identifier, $.member_expression)
                     )
                   ),
                   field('type_arguments', optional($.type_arguments))
@@ -845,9 +847,17 @@ module.exports = function defineGrammar(dialect) {
         prec(
           'member',
           seq(
-            field('module', choice($.identifier, alias('out', $.identifier), $.nested_identifier)),
+            field(
+              'module',
+              choice(
+                $.identifier,
+                alias(choice('in', 'out'), $.identifier),
+                $.nested_identifier,
+                alias($._in_nested_identifier, $.member_expression)
+              )
+            ),
             '.',
-            field('name', $._type_identifier)
+            field('name', $._type_reference_identifier)
           )
         ),
 
@@ -982,6 +992,7 @@ module.exports = function defineGrammar(dialect) {
               'never',
               'object',
               'readonly',
+              'out',
               'keyof',
               'infer',
               'typeof',
@@ -1025,8 +1036,7 @@ module.exports = function defineGrammar(dialect) {
         choice(
           $.parenthesized_type,
           $.predefined_type,
-          $._type_identifier,
-          alias('in', $.type_identifier),
+          $._type_reference_identifier,
           $.nested_type_identifier,
           $.generic_type,
           $.object_type,
@@ -1073,7 +1083,7 @@ module.exports = function defineGrammar(dialect) {
             field(
               'name',
               choice(
-                $._type_identifier,
+                $._type_reference_identifier,
                 $.nested_type_identifier,
                 alias($._type_query_member_expression_in_type_annotation, $.member_expression)
               )
@@ -1088,6 +1098,7 @@ module.exports = function defineGrammar(dialect) {
             'name',
             choice(
               $.identifier,
+              alias('out', $.identifier),
               $.this,
               // Sometimes tree-sitter contextual lexing is not good enough to know
               // that 'object' in ':object is foo' is really an identifier and not
@@ -1331,6 +1342,8 @@ module.exports = function defineGrammar(dialect) {
       // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
       _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
+
+      _type_reference_identifier: ($) => choice($._type_identifier, alias('in', $.type_identifier)),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
