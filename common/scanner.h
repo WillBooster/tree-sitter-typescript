@@ -2,6 +2,7 @@
 #include "tree_sitter/parser.h"
 
 #include <string.h>
+#include "typeScriptKeywords.h"
 
 enum TokenType {
     AUTOMATIC_SEMICOLON,
@@ -708,16 +709,45 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
     return before_expression;
 }
 
+static int32_t hex_digit_value(int32_t character) {
+    if (character >= '0' && character <= '9') return character - '0';
+    if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+    if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+    return -1;
+}
+
+static int32_t scan_identifier_character(TSLexer *lexer) {
+    int32_t character = lexer->lookahead;
+    advance(lexer);
+    if (character != '\\') return character;
+    if (lexer->lookahead != 'u') return -1;
+    advance(lexer);
+    bool braced = lexer->lookahead == '{';
+    if (braced) advance(lexer);
+    uint32_t value = 0;
+    unsigned digits = 0;
+    while (braced ? lexer->lookahead != '}' : digits < 4) {
+        int32_t digit = hex_digit_value(lexer->lookahead);
+        if (digit < 0 || value > 0x10FFFF / 16) return -1;
+        value = value * 16 + (uint32_t)digit;
+        if (value > 0x10FFFF) return -1;
+        digits++;
+        advance(lexer);
+    }
+    if (digits == 0) return -1;
+    if (braced) advance(lexer);
+    return (int32_t)value;
+}
+
 static bool scan_global_declaration_start(TSLexer *lexer) {
     while (is_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
     const char *word = "global";
     for (; *word; word++) {
-        if (lexer->lookahead != *word) {
+        if (scan_identifier_character(lexer) != *word) {
             return false;
         }
-        advance(lexer);
     }
     if (is_identifier_part(lexer->lookahead)) {
         return false;
@@ -734,105 +764,23 @@ static bool scan_global_declaration_start(TSLexer *lexer) {
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) {
         return false;
     }
-    char next_word[16] = {0};
+    char next_word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
     unsigned length = 0;
     while (is_identifier_part(lexer->lookahead)) {
-        if (lexer->lookahead > 0x7F || length == sizeof(next_word) - 1) {
+        int32_t character = scan_identifier_character(lexer);
+        if (!is_identifier_part(character) || character == '\\' || (length == 0 && is_ascii_digit(character))) {
+            return false;
+        }
+        if (character > 0x7F || length == sizeof(next_word) - 1) {
             lexer->result_symbol = GLOBAL_DECLARATION_START;
             return true;
         }
-        next_word[length++] = (char)lexer->lookahead;
-        advance(lexer);
+        next_word[length++] = (char)character;
     }
     // TypeScript starts a global augmentation before a brace, an Identifier token, or export,
     // including across line breaks; contextual keyword tokens do not satisfy that lookahead.
-    static const char *const keywords[] = {
-        "break",
-        "case",
-        "catch",
-        "class",
-        "const",
-        "continue",
-        "debugger",
-        "default",
-        "delete",
-        "do",
-        "else",
-        "enum",
-        "extends",
-        "false",
-        "finally",
-        "for",
-        "function",
-        "if",
-        "import",
-        "in",
-        "instanceof",
-        "new",
-        "null",
-        "return",
-        "super",
-        "switch",
-        "this",
-        "throw",
-        "true",
-        "try",
-        "typeof",
-        "var",
-        "void",
-        "while",
-        "with",
-        "implements",
-        "interface",
-        "let",
-        "package",
-        "private",
-        "protected",
-        "public",
-        "static",
-        "yield",
-        "abstract",
-        "accessor",
-        "as",
-        "asserts",
-        "assert",
-        "any",
-        "async",
-        "await",
-        "boolean",
-        "constructor",
-        "declare",
-        "get",
-        "infer",
-        "intrinsic",
-        "is",
-        "keyof",
-        "module",
-        "namespace",
-        "never",
-        "out",
-        "readonly",
-        "require",
-        "number",
-        "object",
-        "satisfies",
-        "set",
-        "string",
-        "symbol",
-        "type",
-        "undefined",
-        "unique",
-        "unknown",
-        "using",
-        "from",
-        "global",
-        "bigint",
-        "override",
-        "of",
-        "defer",
-    };
-    for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
-        if (strcmp(next_word, keywords[i]) == 0) {
+    for (unsigned i = 0; i < sizeof(TS_GLOBAL_KEYWORDS) / sizeof(TS_GLOBAL_KEYWORDS[0]); i++) {
+        if (strcmp(next_word, TS_GLOBAL_KEYWORDS[i]) == 0) {
             return false;
         }
     }
@@ -925,12 +873,23 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         }
         if (!ret && before_line_break && !scanned_comment && valid_symbols[GLOBAL_DECLARATION_START] &&
             !valid_symbols[ERROR_RECOVERY]) {
-            return scan_global_declaration_start(lexer);
+            while (is_whitespace(lexer->lookahead)) skip(lexer);
+            if (lexer->lookahead == 'g' || lexer->lookahead == '\\') {
+                return scan_global_declaration_start(lexer);
+            }
+        }
+        if (!ret && !scanned_comment && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
+            !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN] &&
+            (lexer->lookahead == '<' || lexer->lookahead == '-')) {
+            return scan_closing_comment(lexer);
         }
         return ret;
     }
     if (valid_symbols[GLOBAL_DECLARATION_START] && !valid_symbols[ERROR_RECOVERY]) {
-        return scan_global_declaration_start(lexer);
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == 'g' || lexer->lookahead == '\\') {
+            return scan_global_declaration_start(lexer);
+        }
     }
 
     if (valid_symbols[TERNARY_QMARK]) {

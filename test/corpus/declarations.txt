@@ -1555,6 +1555,20 @@ declare global {
   interface Window {}
 }
 
+global
+\u006eumber
+global
+\u{006e}umber
+global
+num\u0062er
+global
+constructo\u0072
+global
+\u0064efer
+global
+\u0061name
+\u0067lobal {}
+
 ---
 
 (program
@@ -1673,4 +1687,64 @@ declare global {
     (statement_block
       (interface_declaration
         (type_identifier)
-        (interface_body)))))
+        (interface_body))))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier))
+  (expression_statement
+    (identifier))
+  (internal_module
+    (identifier)
+    (statement_block)))
+
+==================================
+HTML comments with global lookahead
+:language(typescript)
+:language(tsx)
+==================================
+
+<!-- opening
+value;
+--> closing
+value;
+{ <!-- hi
+}
+function comments() {
+<!-- comment
+}
+
+---
+
+(program
+  (html_comment)
+  (expression_statement
+    (identifier))
+  (html_comment)
+  (expression_statement
+    (identifier))
+  (statement_block
+    (html_comment))
+  (function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (html_comment))))
