@@ -1748,3 +1748,45 @@ function comments() {
     (formal_parameters)
     (statement_block
       (html_comment))))
+
+================================================================================
+Out as a namespace and import alias target
+:language(typescript)
+:language(tsx)
+================================================================================
+
+namespace out {}
+module out {}
+declare module out {}
+import x = out;
+import y = out.Member;
+namespace out.Deep {}
+
+--------------------------------------------------------------------------------
+
+(program
+  (expression_statement
+    (internal_module
+      (identifier)
+      (statement_block)))
+  (module
+    (identifier)
+    (statement_block))
+  (ambient_declaration
+    (module
+      (identifier)
+      (statement_block)))
+  (import_alias
+    (identifier)
+    (identifier))
+  (import_alias
+    (identifier)
+    (nested_identifier
+      (identifier)
+      (property_identifier)))
+  (expression_statement
+    (internal_module
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (statement_block))))

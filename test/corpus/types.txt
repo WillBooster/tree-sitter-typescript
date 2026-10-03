@@ -2565,3 +2565,509 @@ import something from 'foo.css' assert { type: 'css' }
           (property_identifier)
           (string
             (string_fragment)))))))
+
+================================================================================
+Type parameter variance annotations
+================================================================================
+
+interface Consumer<in T> { accept(value: T): void }
+interface Producer<out T> { value: T }
+interface Cell<in out T> { value: T }
+type Mapper<in T, out U> = (value: T) => U;
+class Box<out T extends object = object> { value!: T; }
+function identity<const T>(value: T): T { return value; }
+interface Names<out> { output: out }
+
+--------------------------------------------------------------------------------
+
+(program
+  (interface_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (interface_body
+      (method_signature
+        (property_identifier)
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (type_identifier))))
+        (type_annotation
+          (predefined_type)))))
+  (interface_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (interface_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (type_alias_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier))
+      (type_parameter
+        (type_identifier)))
+    (function_type
+      (formal_parameters
+        (required_parameter
+          (identifier)
+          (type_annotation
+            (type_identifier))))
+      (type_identifier)))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)
+        (constraint
+          (predefined_type))
+        (default_type
+          (predefined_type))))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (function_declaration
+    (identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (type_identifier))))
+    (type_annotation
+      (type_identifier))
+    (statement_block
+      (return_statement
+        (identifier))))
+  (interface_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (type_identifier))))))
+
+================================================================================
+Const type parameters with variance annotations
+================================================================================
+
+class K<const in out T> { value!: T }
+class L<const out T> { readonly value!: T }
+class M<const in T> { accept(value: T): void {} }
+class N<in const T> { accept(value: T): void {} }
+class O<out const T> { readonly value!: T }
+class P<in out const T> { value!: T }
+class Q<in const out T> { value!: T }
+
+--------------------------------------------------------------------------------
+
+(program
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (type_identifier))))
+        (type_annotation
+          (predefined_type))
+        (statement_block))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (type_identifier))))
+        (type_annotation
+          (predefined_type))
+        (statement_block))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (class_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (class_body
+      (public_field_definition
+        (property_identifier)
+        (type_annotation
+          (type_identifier))))))
+
+================================================================================
+Variance keyword names in type boundaries
+:language(typescript)
+:language(tsx)
+================================================================================
+
+function isOut(out: unknown): out is string { return typeof out === "string"; }
+type Callback = (out: number) => void;
+type OptionalCallback = (out?: number) => void;
+type UntypedCallback = (out) => void;
+type Index = { [out: string]: number };
+type Tuple = [out: number, out?: string, ...out: boolean[]];
+type Member = in.a;
+type NestedMember = in.a.b;
+type DeepMember = in.a.b.c;
+type Generic = in<string>;
+type NestedGeneric = in.a<string>;
+type ReservedMember = in.in;
+type ReservedGeneric = in.in<string>;
+type Argument = A<in.a>;
+type DeclaredOut = out;
+
+--------------------------------------------------------------------------------
+
+(program
+  (function_declaration
+    (identifier)
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type))))
+    (type_predicate_annotation
+      (type_predicate
+        (identifier)
+        (predefined_type)))
+    (statement_block
+      (return_statement
+        (binary_expression
+          (unary_expression
+            (identifier))
+          (string
+            (string_fragment))))))
+  (type_alias_declaration
+    (type_identifier)
+    (function_type
+      (formal_parameters
+        (required_parameter
+          (identifier)
+          (type_annotation
+            (predefined_type))))
+      (predefined_type)))
+  (type_alias_declaration
+    (type_identifier)
+    (function_type
+      (formal_parameters
+        (optional_parameter
+          (identifier)
+          (type_annotation
+            (predefined_type))))
+      (predefined_type)))
+  (type_alias_declaration
+    (type_identifier)
+    (function_type
+      (formal_parameters
+        (required_parameter
+          (identifier)))
+      (predefined_type)))
+  (type_alias_declaration
+    (type_identifier)
+    (object_type
+      (index_signature
+        (identifier)
+        (predefined_type)
+        (type_annotation
+          (predefined_type)))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (optional_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (identifier)
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (type_identifier)
+      (type_arguments
+        (predefined_type))))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (nested_type_identifier
+        (identifier)
+        (type_identifier))
+      (type_arguments
+        (predefined_type))))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (identifier)
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (nested_type_identifier
+        (identifier)
+        (type_identifier))
+      (type_arguments
+        (predefined_type))))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (type_identifier)
+      (type_arguments
+        (nested_type_identifier
+          (identifier)
+          (type_identifier)))))
+  (type_alias_declaration
+    (type_identifier)
+    (type_identifier)))
+
+================================================================================
+Variance keywords inside qualified types and assertion targets
+:language(typescript)
+:language(tsx)
+================================================================================
+
+type M = a.in.T;
+type N = a.b.in.T;
+type O = a.in.T<X>;
+function g(out: any): asserts out {}
+const h = (out: any): asserts out => {};
+class C { g(out: any): asserts out {} }
+function isOut(out: unknown): asserts out is string {}
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (identifier)
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (member_expression
+          (identifier)
+          (property_identifier))
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (generic_type
+      (nested_type_identifier
+        (nested_identifier
+          (identifier)
+          (property_identifier))
+        (type_identifier))
+      (type_arguments
+        (type_identifier))))
+  (function_declaration
+    (identifier)
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type))))
+    (asserts_annotation
+      (asserts
+        (identifier)))
+    (statement_block))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (arrow_function
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (predefined_type))))
+        (asserts_annotation
+          (asserts
+            (identifier)))
+        (statement_block))))
+  (class_declaration
+    (type_identifier)
+    (class_body
+      (method_definition
+        (property_identifier)
+        (formal_parameters
+          (required_parameter
+            (identifier)
+            (type_annotation
+              (predefined_type))))
+        (asserts_annotation
+          (asserts
+            (identifier)))
+        (statement_block))))
+  (function_declaration
+    (identifier)
+    (formal_parameters
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type))))
+    (asserts_annotation
+      (asserts
+        (type_predicate
+          (identifier)
+          (predefined_type))))
+    (statement_block)))
+
+================================================================================
+Reserved in as a rest tuple label
+:language(typescript)
+:language(tsx)
+================================================================================
+
+type A = [...in: string[]];
+type B = [a: string, ...in: number[]];
+type C = [...in: 1[]];
+type D = [...out: string[]];
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (identifier)
+        (type_annotation
+          (predefined_type)))
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (literal_type
+              (number)))))))
+  (type_alias_declaration
+    (type_identifier)
+    (tuple_type
+      (required_parameter
+        (rest_pattern
+          (identifier))
+        (type_annotation
+          (array_type
+            (predefined_type)))))))
