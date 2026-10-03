@@ -839,7 +839,7 @@ module.exports = function defineGrammar(dialect) {
                 $.identifier,
                 alias(choice('in', 'out'), $.identifier),
                 $.nested_identifier,
-                alias($._in_nested_identifier, $.member_expression)
+                alias($._in_nested_identifier, $.nested_identifier)
               )
             ),
             '.',

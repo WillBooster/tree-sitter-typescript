@@ -10474,7 +10474,7 @@
                     "name": "_in_nested_identifier"
                   },
                   "named": true,
-                  "value": "member_expression"
+                  "value": "nested_identifier"
                 }
               ]
             }

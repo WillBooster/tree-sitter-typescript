@@ -3838,10 +3838,6 @@
             "named": true
           },
           {
-            "type": "member_expression",
-            "named": true
-          },
-          {
             "type": "nested_identifier",
             "named": true
           }

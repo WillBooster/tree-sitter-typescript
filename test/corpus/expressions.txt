@@ -1654,7 +1654,7 @@ let z = <in<string>>value;
       (type_assertion
         (type_arguments
           (nested_type_identifier
-            (member_expression
+            (nested_identifier
               (identifier)
               (property_identifier))
             (type_identifier)))

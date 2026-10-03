@@ -2782,6 +2782,7 @@ type Index = { [out: string]: number };
 type Tuple = [out: number, out?: string, ...out: boolean[]];
 type Member = in.a;
 type NestedMember = in.a.b;
+type DeepMember = in.a.b.c;
 type Generic = in<string>;
 type NestedGeneric = in.a<string>;
 type ReservedMember = in.in;
@@ -2868,8 +2869,17 @@ type DeclaredOut = out;
   (type_alias_declaration
     (type_identifier)
     (nested_type_identifier
-      (member_expression
+      (nested_identifier
         (identifier)
+        (property_identifier))
+      (type_identifier)))
+  (type_alias_declaration
+    (type_identifier)
+    (nested_type_identifier
+      (nested_identifier
+        (member_expression
+          (identifier)
+          (property_identifier))
         (property_identifier))
       (type_identifier)))
   (type_alias_declaration

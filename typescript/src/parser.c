@@ -4621,6 +4621,7 @@ static const TSSymbol ts_alias_sequences[PRODUCTION_ID_COUNT][MAX_ALIAS_SEQUENCE
     [2] = alias_sym_property_identifier,
   },
   [154] = {
+    [0] = sym_nested_identifier,
     [2] = alias_sym_type_identifier,
   },
   [156] = {
@@ -4881,6 +4882,9 @@ static const uint16_t ts_non_terminal_alias_map[] = {
   sym_nested_identifier, 2,
     sym_nested_identifier,
     sym_member_expression,
+  sym__in_nested_identifier, 2,
+    sym_member_expression,
+    sym_nested_identifier,
   sym_predefined_type, 2,
     sym_predefined_type,
     sym_identifier,
