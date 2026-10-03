@@ -413,6 +413,31 @@ module.exports = function defineGrammar(dialect) {
         return choice(...choices);
       },
 
+      _jsx_identifier: ($, previous) => choice(previous, alias(choice('in', 'out'), $.identifier)),
+
+      nested_identifier: ($) =>
+        prec(
+          'member',
+          seq(
+            field(
+              'object',
+              choice(
+                reserved('properties', $.identifier),
+                alias(choice('in', 'out'), $.identifier),
+                alias($.nested_identifier, $.member_expression)
+              )
+            ),
+            '.',
+            field(
+              'property',
+              choice(
+                reserved('properties', alias($.identifier, $.property_identifier)),
+                alias(choice('in', 'out'), $.property_identifier)
+              )
+            )
+          )
+        ),
+
       _jsx_start_opening_element: ($) =>
         seq(
           '<',
@@ -421,7 +446,7 @@ module.exports = function defineGrammar(dialect) {
               choice(
                 field('name', choice($._jsx_identifier, $.jsx_namespace_name)),
                 seq(
-                  field('name', choice($.identifier, alias($.nested_identifier, $.member_expression))),
+                  field('name', choice($._jsx_identifier, alias($.nested_identifier, $.member_expression))),
                   field('type_arguments', optional($.type_arguments))
                 )
               ),
@@ -1202,7 +1227,7 @@ module.exports = function defineGrammar(dialect) {
       type_parameter: ($) =>
         seq(
           repeat(choice('const', 'in', 'out')),
-          field('name', choice($._type_identifier, alias('out', $.type_identifier))),
+          field('name', $._type_identifier),
           field('constraint', optional($.constraint)),
           field('value', optional($.default_type))
         ),
@@ -1264,7 +1289,7 @@ module.exports = function defineGrammar(dialect) {
 
       // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
-      _type_identifier: ($) => alias(reserved('properties', $.identifier), $.type_identifier),
+      _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'in', 'out'), $.type_identifier),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
