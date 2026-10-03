@@ -33,3 +33,6 @@
   "override"
   "satisfies"
 ] @keyword
+
+(type_parameter
+  ["in" "out"] @keyword)
