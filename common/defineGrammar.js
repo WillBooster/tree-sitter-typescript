@@ -822,14 +822,24 @@ module.exports = function defineGrammar(dialect) {
       _module: ($) =>
         prec.right(
           seq(
-            field('name', choice($.string, reserved('properties', $.identifier), $.nested_identifier)),
+            field(
+              'name',
+              choice($.string, reserved('properties', $.identifier), alias('out', $.identifier), $.nested_identifier)
+            ),
             // On .d.ts files "declare module foo" desugars to "declare module foo {}",
             // hence why it is optional here
             field('body', optional($.statement_block))
           )
         ),
 
-      import_alias: ($) => seq('import', $.identifier, '=', choice($.identifier, $.nested_identifier), $._semicolon),
+      import_alias: ($) =>
+        seq(
+          'import',
+          $.identifier,
+          '=',
+          choice($.identifier, alias('out', $.identifier), $.nested_identifier),
+          $._semicolon
+        ),
 
       nested_type_identifier: ($) =>
         prec(

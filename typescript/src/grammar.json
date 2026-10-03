@@ -10335,6 +10335,15 @@
                   "context_name": "properties"
                 },
                 {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "out"
+                  },
+                  "named": true,
+                  "value": "identifier"
+                },
+                {
                   "type": "SYMBOL",
                   "name": "nested_identifier"
                 }
@@ -10381,6 +10390,15 @@
             {
               "type": "SYMBOL",
               "name": "identifier"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "STRING",
+                "value": "out"
+              },
+              "named": true,
+              "value": "identifier"
             },
             {
               "type": "SYMBOL",
