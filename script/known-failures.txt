@@ -1,7 +1,4 @@
 examples/redux/src/types/store.ts
-examples/redux/website/plugins/remark-typescript-tools/linkDocblocks/plugin.ts
-examples/vscode/build/next/index.ts
-examples/vscode/extensions/copilot/src/extension/chatSessions/copilotcli/node/test/copilotcliSession.spec.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/5710.selection.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.selection.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.summarized.ts
@@ -14,8 +11,3 @@ examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/es
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/eslint_unexpected_token.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/tsc_error_1128.ts
 examples/vscode/extensions/vscode-colorize-perf-tests/test/colorize-fixtures/test-checker.ts
-examples/vscode/src/vs/platform/agentHost/node/claude/claudeSubagentSignals.ts
-examples/vscode/src/vs/platform/tunnel/test/node/tunnelProxy.test.ts
-examples/vscode/src/vs/workbench/contrib/chat/test/common/promptSyntax/hookSchema.test.ts
-examples/vscode/src/vs/workbench/contrib/issue/browser/issueFormService.ts
-examples/vscode/src/vs/workbench/contrib/terminal/test/browser/terminalProfileService.integrationTest.ts
