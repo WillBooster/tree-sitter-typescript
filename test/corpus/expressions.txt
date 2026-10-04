@@ -1669,3 +1669,47 @@ let z = <in<string>>value;
             (type_arguments
               (predefined_type))))
         (identifier)))))
+
+==================================
+Non-null await comparison boundary in typescript
+:language(typescript)
+==================================
+
+async function f() { await
+ x! < y; }
+
+---
+
+(program
+  (function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (expression_statement
+        (binary_expression
+          (await_expression
+            (non_null_expression
+              (identifier)))
+          (identifier))))))
+
+==================================
+Non-null await comparison boundary in tsx
+:language(tsx)
+==================================
+
+async function f() { await
+ x! < y; }
+
+---
+
+(program
+  (function_declaration
+    (identifier)
+    (formal_parameters)
+    (statement_block
+      (expression_statement
+        (binary_expression
+          (await_expression
+            (non_null_expression
+              (identifier)))
+          (identifier))))))
