@@ -1,7 +1,6 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
-// Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'accessor',
   'declare',
@@ -105,6 +104,7 @@ module.exports = function defineGrammar(dialect) {
         $.union_type,
         $.conditional_type,
         $.function_type,
+        $.constructor_type,
         'binary',
         $.type_predicate,
         $.readonly_type,
@@ -157,7 +157,6 @@ module.exports = function defineGrammar(dialect) {
       [$._field_name, $._property_name],
       [$._property_name, $.public_field_definition],
 
-      // This appears to be necessary to parse a parenthesized class expression
       [$.class],
 
       [$.nested_identifier, $.nested_type_identifier, $._type_arguments_target],
@@ -291,7 +290,6 @@ module.exports = function defineGrammar(dialect) {
       _field_name: ($, previous) =>
         choice(previous, alias(choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS), $.property_identifier)),
 
-      // override original catch_clause, add optional type annotation
       catch_clause: ($) =>
         seq(
           'catch',
@@ -490,10 +488,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      // This rule is only referenced by expression when the dialect is 'tsx'
       jsx_opening_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '>')),
 
-      // tsx only. See jsx_opening_element.
       jsx_self_closing_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '/>')),
 
       export_specifier: ($) => {
@@ -846,8 +842,6 @@ module.exports = function defineGrammar(dialect) {
               'name',
               choice($.string, reserved('properties', $.identifier), alias('out', $.identifier), $.nested_identifier)
             ),
-            // On .d.ts files "declare module foo" desugars to "declare module foo {}",
-            // hence why it is optional here
             field('body', optional($.statement_block))
           )
         ),
@@ -936,12 +930,10 @@ module.exports = function defineGrammar(dialect) {
       opting_type_annotation: ($) => seq('?:', $.type),
       type_annotation: ($) => seq(':', $.type),
 
-      // Oh boy
       // The issue is these special type queries need a lower relative precedence than the normal ones,
       // since these are used in type annotations whereas the other ones are used where `typeof` is
       // required beforehand. This allows for parsing of annotations such as
-      // foo: import('x').y.z;
-      // but was a nightmare to get working.
+      // foo: import('x').y.z.
       _type_query_member_expression_in_type_annotation: ($) =>
         seq(
           field(
@@ -1111,8 +1103,6 @@ module.exports = function defineGrammar(dialect) {
               // Sometimes tree-sitter contextual lexing is not good enough to know
               // that 'object' in ':object is foo' is really an identifier and not
               // a predefined_type, so we must explicitely list all possibilities.
-              // TODO: should we use '_reserved_identifier'? Should all the element in
-              // 'predefined_type' be added to '_reserved_identifier'?
               alias($.predefined_type, $.identifier)
             )
           ),
@@ -1122,7 +1112,6 @@ module.exports = function defineGrammar(dialect) {
 
       type_predicate_annotation: ($) => seq(seq(':', $.type_predicate)),
 
-      // Type query expressions are more restrictive than regular expressions
       _type_query_member_expression: ($) =>
         seq(
           field(
@@ -1372,8 +1361,6 @@ function nestedIdentifierTail($) {
 }
 
 /**
- * Creates a rule to match one or more of the rules separated by a comma
- *
  * @param {RuleOrLiteral} rule
  *
  * @return {SeqRule}
@@ -1384,8 +1371,6 @@ function commaSep1(rule) {
 }
 
 /**
- * Creates a rule to optionally match one or more of the rules separated by a comma
- *
  * @param {RuleOrLiteral} rule
  *
  * @return {SeqRule}
@@ -1396,8 +1381,6 @@ function commaSep(rule) {
 }
 
 /**
- * Creates a rule to optionally match one or more of the rules separated by a separator
- *
  * @param {RuleOrLiteral} sep
  *
  * @param {RuleOrLiteral} rule
@@ -1409,8 +1392,6 @@ function sepBy(sep, rule) {
 }
 
 /**
- * Creates a rule to match one or more of the rules separated by a separator
- *
  * @param {RuleOrLiteral} sep
  *
  * @param {RuleOrLiteral} rule
