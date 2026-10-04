@@ -2110,80 +2110,80 @@ import { type "as" as type } from 'x';
     (import_clause
       (named_imports
         (import_specifier
-          (identifier))))
-    (string
+          name: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier)
-          (identifier))))
-    (string
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier))
+          name: (identifier))
         (import_specifier
-          (identifier))))
-    (string
+          name: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier))))
-    (string
+          name: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier)
-          (identifier))))
-    (string
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier)
-          (identifier))))
-    (string
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier)
-          (identifier))))
-    (string
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (identifier)
-          (identifier))))
-    (string
+          name: (identifier)
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (string
+          name: (string
             (string_fragment))
-          (identifier))))
-    (string
+          alias: (identifier))))
+    source: (string
       (string_fragment)))
   (import_statement
     (import_clause
       (named_imports
         (import_specifier
-          (string
+          name: (string
             (string_fragment))
-          (identifier))))
-    (string
+          alias: (identifier))))
+    source: (string
       (string_fragment))))
