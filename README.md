@@ -131,8 +131,9 @@ verification checks the committed header with `bun run check-keywords`.
   regenerating the parsers;
 - a check (`test/unit/queries.test.ts`) that the queries `tree-sitter.json` lists compile against each grammar, are
   published in the npm package and the crate, and that `javascript/queries/` matches the queries of the installed
-  @willbooster/tree-sitter-javascript; after updating that dependency, `script/copy-javascript-queries` refreshes the
-  copies;
+  @willbooster/tree-sitter-javascript. After updating that dependency, run `script/copy-javascript-queries` to refresh
+  the copies and the derived `queries/javascript-tags.scm`. TypeScript uses that JSX-free tags file; TSX and Flow
+  use the complete JavaScript tags;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
   (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`);

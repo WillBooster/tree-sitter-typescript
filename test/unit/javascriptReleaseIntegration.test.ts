@@ -83,6 +83,9 @@ for (const dialect of ['typescript', 'tsx']) {
     try {
       for (const declaration of [
         'class Named<T> extends Base<T> {}',
+        'class<T> extends Base<T> {}',
+        'function<T>(x: T): T { return x; }',
+        '@dec class<T> {}',
         'abstract class Named<T> extends Base<T> {}',
         'function named<T>(x: T): T { return x; }',
       ]) {
@@ -106,9 +109,16 @@ for (const dialect of ['typescript', 'tsx']) {
             previous.delete();
             const fresh = parser.parse(source)!;
             try {
-              expect(tree.rootNode.hasError, source).toBe(false);
+              expect(tree.rootNode.hasError, source).toBe(fresh.rootNode.hasError);
+              if (inserted) {
+                expect(tree.rootNode.hasError, source).toBe(false);
+                expect(tree.rootNode.firstNamedChild?.type).toBe('export_statement');
+                expect(tree.rootNode.firstNamedChild?.childForFieldName('declaration')).toBeDefined();
+              }
               expect(tree.rootNode.toString(), source).toBe(fresh.rootNode.toString());
-              expect(tree.rootNode.lastNamedChild?.text, source).toBe('(value);');
+              if (inserted || declaration.includes('Named') || declaration.includes('named')) {
+                expect(tree.rootNode.lastNamedChild?.text, source).toBe('(value);');
+              }
               expect(
                 tree.rootNode.descendantsOfType('type_arguments').map((n) => n.text),
                 source
