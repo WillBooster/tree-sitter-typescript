@@ -69,6 +69,7 @@ module.exports = function defineGrammar(dialect) {
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
+      $._namespace_expression_end,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -386,6 +387,22 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
+      await_expression: ($) =>
+        prec.dynamic(
+          3,
+          prec.right(
+            'unary_void',
+            seq(
+              alias($._await_keyword, 'await'),
+              optional($._await_identifier_line_break),
+              optional(seq($._await_yield_identifier_start, optional($._await_yield_identifier_context))),
+              optional($._line_break_after_await),
+              $.expression,
+              optional($._await_operand_end)
+            )
+          )
+        ),
+
       primary_expression: ($) =>
         choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
 
@@ -393,7 +410,9 @@ module.exports = function defineGrammar(dialect) {
       // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.
       _type_arguments_target: ($) => {
         const members = JavaScript.grammar.rules.primary_expression.members.filter(
-          (member) => member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression'
+          (member) =>
+            (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
+            (dialect !== 'typescript' || member.name !== '_jsx_element')
         );
         return choice(...members, $.non_null_expression);
       },
@@ -526,14 +545,14 @@ module.exports = function defineGrammar(dialect) {
       // variable named `using`.
       using_declaration: ($) =>
         seq(
-          field('kind', choice('using', seq('await', 'using'))),
+          field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
           commaSep1(alias($._using_declarator, $.variable_declarator)),
           $._semicolon
         ),
 
       _for_using_declaration: ($) =>
         seq(
-          field('kind', choice('using', seq('await', 'using'))),
+          field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
           commaSep1(alias($._using_declarator, $.variable_declarator)),
           ';'
         ),
@@ -559,7 +578,10 @@ module.exports = function defineGrammar(dialect) {
               field('kind', choice('let', 'const')),
               field('left', choice($._binding_identifier, $._destructuring_pattern))
             ),
-            seq(field('kind', choice('using', seq('await', 'using'))), field('left', $._binding_identifier))
+            seq(
+              field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
+              field('left', $._binding_identifier)
+            )
           ),
           field('operator', choice('in', 'of')),
           field('right', $._expressions),
@@ -799,7 +821,7 @@ module.exports = function defineGrammar(dialect) {
 
       module: ($) => seq('module', $._module),
 
-      internal_module: ($) => seq('namespace', $._module),
+      internal_module: ($) => seq('namespace', $._module, optional($._namespace_expression_end)),
 
       global_declaration: ($) =>
         seq(
