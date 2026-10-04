@@ -32,6 +32,9 @@ for (const dialect of ['typescript', 'tsx']) {
           'T extends object',
           'T = string',
           'const T',
+          'T extends { fn: <U>() => U; value: ">" }',
+          'T extends `x${string}`',
+          'T extends `x${`y${string}`}`',
           '/* before */ T /* after */',
         ]) {
           const argument = `<${parameters}>() => T`;
@@ -47,6 +50,25 @@ for (const dialect of ['typescript', 'tsx']) {
           } finally {
             tree.delete();
           }
+        }
+      }
+      for (const source of [
+        'f(a as T << b, c);',
+        'const s = a as T << b > c;',
+        'const s = a satisfies T << b === c;',
+        'let v = x as Y << z, w = 1;',
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.descendantsOfType('generic_type')).toHaveLength(0);
+          expect(
+            tree.rootNode
+              .descendantsOfType('binary_expression')
+              .some((node) => node.childForFieldName('operator')?.text === '<<')
+          ).toBe(true);
+        } finally {
+          tree.delete();
         }
       }
       for (const gap of [' ', '\n', '\r\n', '\r', '\u2028', '\u2029', '/*\n*/', '// line\n']) {

@@ -1253,6 +1253,8 @@ static bool scan_await_keyword(TSLexer *lexer) {
     return true;
 }
 
+static bool scan_generic_function_type(TSLexer *lexer);
+
 static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified, bool heritage) {
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
@@ -1279,21 +1281,64 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified
     if (lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
-    if (lexer->lookahead == '<') {
-        advance(lexer);
-        if (scan_whitespace_and_comments(lexer, &comment, true, false) == REJECT) return false;
-        if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
-        char parameter[16] = {0};
-        bool ascii_parameter = scan_identifier(lexer, parameter, sizeof(parameter), false);
-        if (scan_whitespace_and_comments(lexer, &comment, true, false) == REJECT) return false;
-        if (!(ascii_parameter && (strcmp(parameter, "const") == 0 || strcmp(parameter, "in") == 0 || strcmp(parameter, "out") == 0)) &&
-            lexer->lookahead != '>' && lexer->lookahead != ',' && lexer->lookahead != '=') {
-            char constraint[16] = {0};
-            if (!scan_identifier(lexer, constraint, sizeof(constraint), false) || strcmp(constraint, "extends") != 0) return false;
-        }
-    }
+    if (lexer->lookahead == '<' && !scan_generic_function_type(lexer)) return false;
     lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
+}
+
+static bool scan_type_group(TSLexer *lexer, int32_t close);
+
+static bool scan_generic_function_type(TSLexer *lexer) {
+    bool comment = false;
+    advance(lexer);
+    if (!scan_type_group(lexer, '>') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
+    advance(lexer);
+    if (!scan_type_group(lexer, ')') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
+    advance(lexer);
+    return lexer->lookahead == '>';
+}
+
+static bool scan_type_group(TSLexer *lexer, int32_t close) {
+    unsigned size = 1, capacity = 32;
+    int32_t *stack = ts_malloc(capacity * sizeof(int32_t));
+    if (!stack) return false;
+    stack[0] = close;
+    bool result = false;
+    while (!lexer->eof(lexer)) {
+        int32_t c = lexer->lookahead, end = stack[size - 1], push = 0;
+        if (end == '\'' || end == '"' || end == '`') {
+            advance(lexer);
+            if (c == end) { size--; continue; }
+            if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
+            else if (end == '`' && c == '$' && lexer->lookahead == '{') { advance(lexer); push = '}'; }
+        } else {
+            if (c == '/') {
+                bool comment = false;
+                if (skip_comment(lexer, &comment, false) == NO_COMMENT) break;
+                continue;
+            }
+            advance(lexer);
+            if (c == end) {
+                if (--size == 0) { result = true; break; }
+                continue;
+            }
+            if (c == '\'' || c == '"' || c == '`') push = c;
+            else if (c == '=') { if (lexer->lookahead == '>') advance(lexer); }
+            else if (c == '<' || c == '(' || c == '[' || c == '{') push = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
+            else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
+        }
+        if (push) {
+            if (size == capacity) {
+                capacity *= 2;
+                int32_t *grown = ts_realloc(stack, capacity * sizeof(int32_t));
+                if (!grown) break;
+                stack = grown;
+            }
+            stack[size++] = push;
+        }
+    }
+    ts_free(stack);
+    return result;
 }
 
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
