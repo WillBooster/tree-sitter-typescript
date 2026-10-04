@@ -18,6 +18,7 @@
 ; Keywords
 
 [ "abstract"
+  "accessor"
   "declare"
   "enum"
   "export"

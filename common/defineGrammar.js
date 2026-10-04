@@ -216,9 +216,6 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
-      // A field named `get`, `set`, or `static` is told apart from a member that the word modifies by the line-break
-      // sentinels allowed right after the name, as in the JavaScript grammar's field_definition. They are not allowed
-      // after a type annotation, which may continue on the next line.
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),

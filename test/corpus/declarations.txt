@@ -1793,6 +1793,8 @@ namespace out.Deep {}
 
 ================================================================================
 Auto-accessor modifiers and contextual member names
+:language(typescript)
+:language(tsx)
 ================================================================================
 
 class Method { accessor() { return 1; } }
@@ -1892,6 +1894,8 @@ class Lines {
 
 ================================================================================
 Abstract override auto-accessors
+:language(typescript)
+:language(tsx)
 ================================================================================
 
 abstract class A { abstract accessor value: number; abstract accessor static: number; }
@@ -1930,6 +1934,8 @@ abstract class B extends A { abstract override accessor value: number; abstract 
 
 ================================================================================
 Abstract override members named accessor
+:language(typescript)
+:language(tsx)
 ================================================================================
 
 abstract class Base { abstract accessor: number; }
