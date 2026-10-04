@@ -67,6 +67,8 @@ module.exports = function defineGrammar(dialect) {
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
+      $._type_reference_arguments_start,
+      $._type_member_semicolon,
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
@@ -169,7 +171,6 @@ module.exports = function defineGrammar(dialect) {
       [$._type_arguments_target, $.literal_type, $.rest_pattern],
       [$._type_arguments_target, $.predefined_type, $.rest_pattern],
       [$._type_arguments_target, $.primary_type],
-      [$._type_arguments_target, $.generic_type],
       [$._type_arguments_target, $.predefined_type],
       [$._type_arguments_target, $.pattern, $.primary_type],
       [$._parameter_name, $.primary_type],
@@ -1075,6 +1076,7 @@ module.exports = function defineGrammar(dialect) {
                 alias($._type_query_member_expression_in_type_annotation, $.member_expression)
               )
             ),
+            $._type_reference_arguments_start,
             field('type_arguments', $.type_arguments)
           )
         ),
@@ -1225,7 +1227,7 @@ module.exports = function defineGrammar(dialect) {
             seq(
               optional(choice(',', ';')),
               sepBy1(
-                choice(',', $._semicolon),
+                choice(',', ';', $._type_member_semicolon),
                 choice(
                   $.export_statement,
                   $.property_signature,
@@ -1235,7 +1237,7 @@ module.exports = function defineGrammar(dialect) {
                   $.method_signature
                 )
               ),
-              optional(choice(',', $._semicolon))
+              optional(choice(',', ';', $._type_member_semicolon))
             )
           ),
           choice('}', '|}')

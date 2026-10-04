@@ -24,6 +24,8 @@ enum TokenType {
     TYPE_ARGUMENTS_END,
     TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
     NEW_TYPE_ARGUMENTS_END,
+    TYPE_REFERENCE_ARGUMENTS_START,
+    TYPE_MEMBER_SEMICOLON,
     GLOBAL_DECLARATION_START,
     GLOBAL_DECLARATION_END,
     ERROR_RECOVERY,
@@ -252,6 +254,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
     }
 
     bool before_slash = !scan_whitespace_and_comments(lexer, scanned_comment, true);
+    if (valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && lexer->lookahead == '<') return true;
     // A `;` at the start of the next line ends the statement itself.
     if (!before_slash && lexer->lookahead == ';') {
         return false;
@@ -813,6 +816,25 @@ static bool scan_global_declaration_end(TSLexer *lexer) {
     return true;
 }
 
+static bool scan_type_reference_arguments_start(TSLexer *lexer) {
+    lexer->mark_end(lexer);
+    bool line_break = false;
+    for (;;) {
+        while (is_whitespace(lexer->lookahead)) {
+            line_break |= is_line_terminator(lexer->lookahead);
+            skip(lexer);
+        }
+        if (lexer->lookahead != '/') break;
+        bool scanned_comment = false;
+        CommentResult result = skip_comment(lexer, &scanned_comment, true);
+        if (result == NO_COMMENT) return false;
+        line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
+    }
+    if (line_break || lexer->lookahead != '<') return false;
+    lexer->result_symbol = TYPE_REFERENCE_ARGUMENTS_START;
+    return true;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
@@ -846,11 +868,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if (valid_symbols[AUTOMATIC_SEMICOLON] || valid_symbols[FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON] ||
-        valid_symbols[ARROW_FUNCTION_BLOCK_END]) {
+        valid_symbols[ARROW_FUNCTION_BLOCK_END] || valid_symbols[TYPE_MEMBER_SEMICOLON]) {
         bool after_block_arrow = valid_symbols[ARROW_FUNCTION_BLOCK_END];
         bool scanned_comment = false;
         LineBreakRule rule = LINE_BREAK_BY_NEXT_TOKEN;
-        if (valid_symbols[LINE_BREAK_ENDS_STATEMENT]) {
+        if (valid_symbols[LINE_BREAK_ENDS_STATEMENT] || valid_symbols[TYPE_MEMBER_SEMICOLON]) {
             rule = LINE_BREAK_ENDS;
         } else if (valid_symbols[LINE_BREAK_AFTER_BINDING]) {
             rule = LINE_BREAK_AFTER_BINDING_NAME;
@@ -864,9 +886,14 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         bool before_line_break = false;
         bool ret = scan_automatic_semicolon(lexer, valid_symbols, after_block_arrow, rule, &scanned_comment,
                                             &before_line_break);
+        if (ret && valid_symbols[TYPE_MEMBER_SEMICOLON]) lexer->result_symbol = TYPE_MEMBER_SEMICOLON;
         if (ret && after_block_arrow) {
             lexer->result_symbol = ARROW_FUNCTION_BLOCK_END;
             scanner->automatic_semicolon_pending = true;
+        }
+        if (!ret && before_line_break && valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && lexer->lookahead == '<') {
+            lexer->result_symbol = TYPE_REFERENCE_ARGUMENTS_START;
+            return true;
         }
         if (!ret && !scanned_comment && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
             return scan_ternary_qmark(lexer);
@@ -884,6 +911,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             return scan_closing_comment(lexer);
         }
         return ret;
+    }
+    if (valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
+        return scan_type_reference_arguments_start(lexer);
     }
     if (valid_symbols[GLOBAL_DECLARATION_START] && !valid_symbols[ERROR_RECOVERY]) {
         while (is_whitespace(lexer->lookahead)) skip(lexer);

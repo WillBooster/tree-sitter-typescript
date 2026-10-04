@@ -12180,6 +12180,10 @@
             }
           },
           {
+            "type": "SYMBOL",
+            "name": "_type_reference_arguments_start"
+          },
+          {
             "type": "FIELD",
             "name": "type_arguments",
             "content": {
@@ -13019,8 +13023,12 @@
                                 "value": ","
                               },
                               {
+                                "type": "STRING",
+                                "value": ";"
+                              },
+                              {
                                 "type": "SYMBOL",
-                                "name": "_semicolon"
+                                "name": "_type_member_semicolon"
                               }
                             ]
                           },
@@ -13069,8 +13077,12 @@
                           "value": ","
                         },
                         {
+                          "type": "STRING",
+                          "value": ";"
+                        },
+                        {
                           "type": "SYMBOL",
-                          "name": "_semicolon"
+                          "name": "_type_member_semicolon"
                         }
                       ]
                     },
@@ -13964,10 +13976,6 @@
     [
       "_type_arguments_target",
       "primary_type"
-    ],
-    [
-      "_type_arguments_target",
-      "generic_type"
     ],
     [
       "_type_arguments_target",
@@ -14874,6 +14882,14 @@
     {
       "type": "SYMBOL",
       "name": "_new_type_arguments_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_type_reference_arguments_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_type_member_semicolon"
     },
     {
       "type": "SYMBOL",
