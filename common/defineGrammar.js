@@ -105,6 +105,8 @@ module.exports = function defineGrammar(dialect) {
         'ternary',
       ],
       [
+        $.index_type_query,
+        $.readonly_type,
         $.intersection_type,
         $.union_type,
         $.conditional_type,
@@ -112,7 +114,6 @@ module.exports = function defineGrammar(dialect) {
         $.constructor_type,
         'binary',
         $.type_predicate,
-        $.readonly_type,
       ],
       [$.mapped_type_clause, $._type_arguments_target],
       [$.accessibility_modifier, $._type_arguments_target],
@@ -123,6 +124,7 @@ module.exports = function defineGrammar(dialect) {
       [$.predefined_type, $.unary_expression],
       [$.type, $.flow_maybe_type],
       [$.tuple_type, $.array_type, $.pattern, $.type],
+      [$.array_type, $.lookup_type, $.index_type_query, $.readonly_type],
       [$.readonly_type, $.pattern],
       [$.readonly_type, $._type_arguments_target],
       [$.type_query, $.subscript_expression, $.expression],
@@ -1177,7 +1179,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      index_type_query: ($) => seq('keyof', $.primary_type),
+      index_type_query: ($) => prec.right(seq('keyof', choice($.primary_type, $.readonly_type))),
 
       lookup_type: ($) => seq($.primary_type, '[', $.type, ']'),
 
@@ -1304,7 +1306,7 @@ module.exports = function defineGrammar(dialect) {
 
       array_type: ($) => seq($.primary_type, '[', ']'),
       tuple_type: ($) => seq('[', commaSep($._tuple_type_member), optional(','), ']'),
-      readonly_type: ($) => seq('readonly', $.type),
+      readonly_type: ($) => prec.right(seq('readonly', $.type)),
 
       union_type: ($) =>
         prec.left(
