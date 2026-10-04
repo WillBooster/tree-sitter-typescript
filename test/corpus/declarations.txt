@@ -1889,3 +1889,41 @@ class Lines {
       (public_field_definition
         name: (property_identifier)
         value: (number)))))
+
+================================================================================
+Abstract override auto-accessors
+================================================================================
+
+abstract class A { abstract accessor value: number; abstract accessor static: number; }
+abstract class B extends A { abstract override accessor value: number; abstract override accessor static: number; }
+
+--------------------------------------------------------------------------------
+
+(program
+  (abstract_class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))))
+  (abstract_class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (extends_clause
+        value: (identifier)))
+    body: (class_body
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type))))))

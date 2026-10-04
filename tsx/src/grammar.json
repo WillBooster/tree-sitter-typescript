@@ -8827,6 +8827,18 @@
                           "value": "abstract"
                         },
                         {
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "SYMBOL",
+                              "name": "override_modifier"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
+                        },
+                        {
                           "type": "STRING",
                           "value": "accessor"
                         }
@@ -9185,6 +9197,18 @@
                         {
                           "type": "STRING",
                           "value": "abstract"
+                        },
+                        {
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "SYMBOL",
+                              "name": "override_modifier"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
                         },
                         {
                           "type": "STRING",
