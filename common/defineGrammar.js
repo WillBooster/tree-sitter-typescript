@@ -390,21 +390,17 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
-      await_expression: ($) =>
-        prec.dynamic(
-          3,
-          prec.right(
-            'unary_void',
-            seq(
-              alias($._await_keyword, 'await'),
-              optional($._await_identifier_line_break),
-              optional(seq($._await_yield_identifier_start, optional($._await_yield_identifier_context))),
-              optional($._line_break_after_await),
-              $.expression,
-              optional($._await_operand_end)
+      await_expression: (_, previous) => ({
+        ...previous,
+        content: {
+          ...previous.content,
+          content: seq(
+            ...previous.content.content.members.map((member) =>
+              member.type === 'SYMBOL' && member.name === '_await_operand_end' ? optional(member) : member
             )
-          )
-        ),
+          ),
+        },
+      }),
 
       primary_expression: ($) =>
         choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
