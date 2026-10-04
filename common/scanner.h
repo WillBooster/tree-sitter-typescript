@@ -25,6 +25,7 @@ enum TokenType {
     TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
     NEW_TYPE_ARGUMENTS_END,
     TYPE_REFERENCE_ARGUMENTS_START,
+    UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START,
     TYPE_MEMBER_SEMICOLON,
     GLOBAL_DECLARATION_START,
     GLOBAL_DECLARATION_END,
@@ -183,7 +184,7 @@ static bool ends_statement_after_block_arrow(TSLexer *lexer, bool *scanned_comme
 typedef enum {
     // Decided by the characters that follow.
     LINE_BREAK_BY_NEXT_TOKEN,
-    // After `return`, `yield`, `break`, `continue`, or `debugger`, which nothing on the next line can continue.
+    // After restricted statement keywords or a completed type member; type operators may still continue a member.
     LINE_BREAK_ENDS,
     // After a declared name without an initializer: only `=`, `,`, or a type annotation continues the declaration.
     LINE_BREAK_AFTER_BINDING_NAME,
@@ -254,7 +255,6 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
     }
 
     bool before_slash = !scan_whitespace_and_comments(lexer, scanned_comment, true);
-    if (valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && lexer->lookahead == '<') return true;
     // A `;` at the start of the next line ends the statement itself.
     if (!before_slash && lexer->lookahead == ';') {
         return false;
@@ -816,22 +816,46 @@ static bool scan_global_declaration_end(TSLexer *lexer) {
     return true;
 }
 
-static bool scan_type_reference_arguments_start(TSLexer *lexer) {
+static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified) {
     lexer->mark_end(lexer);
-    bool line_break = false;
+    bool comment = false;
+    if (!scan_whitespace_and_comments(lexer, &comment, true)) return false;
+    if (lexer->lookahead == '#') advance(lexer);
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
+    char word[16] = {0};
+    unsigned length = 0;
+    while (is_identifier_part(lexer->lookahead)) {
+        if (length + 1 < sizeof(word)) word[length++] = lexer->lookahead < 128 ? (char)lexer->lookahead : '?';
+        if (lexer->lookahead == '\\') {
+            advance(lexer);
+            if (lexer->lookahead != 'u') return false;
+            advance(lexer);
+            if (lexer->lookahead == '{') {
+                advance(lexer);
+                while (is_hex_digit(lexer->lookahead)) advance(lexer);
+                if (lexer->lookahead != '}') return false;
+                advance(lexer);
+            }
+        } else advance(lexer);
+    }
+    if (unqualified) {
+        static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null"};
+        for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
+            if (strcmp(word, keywords[i]) == 0) return false;
+        }
+    }
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
-            line_break |= is_line_terminator(lexer->lookahead);
-            skip(lexer);
+            if (is_line_terminator(lexer->lookahead)) return false;
+            advance(lexer);
         }
         if (lexer->lookahead != '/') break;
-        bool scanned_comment = false;
-        CommentResult result = skip_comment(lexer, &scanned_comment, true);
-        if (result == NO_COMMENT) return false;
-        line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
+        if (skip_comment(lexer, &comment, true) != COMMENT) return false;
     }
-    if (line_break || lexer->lookahead != '<') return false;
-    lexer->result_symbol = TYPE_REFERENCE_ARGUMENTS_START;
+    if (lexer->lookahead != '<') return false;
+    advance(lexer);
+    if (lexer->lookahead == '=') return false;
+    lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
 }
 
@@ -872,7 +896,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         bool after_block_arrow = valid_symbols[ARROW_FUNCTION_BLOCK_END];
         bool scanned_comment = false;
         LineBreakRule rule = LINE_BREAK_BY_NEXT_TOKEN;
-        if (valid_symbols[LINE_BREAK_ENDS_STATEMENT] || valid_symbols[TYPE_MEMBER_SEMICOLON]) {
+        if (valid_symbols[LINE_BREAK_ENDS_STATEMENT] ||
+            (valid_symbols[TYPE_MEMBER_SEMICOLON] && !valid_symbols[LINE_BREAK_AFTER_FIELD])) {
             rule = LINE_BREAK_ENDS;
         } else if (valid_symbols[LINE_BREAK_AFTER_BINDING]) {
             rule = LINE_BREAK_AFTER_BINDING_NAME;
@@ -891,10 +916,6 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             lexer->result_symbol = ARROW_FUNCTION_BLOCK_END;
             scanner->automatic_semicolon_pending = true;
         }
-        if (!ret && before_line_break && valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && lexer->lookahead == '<') {
-            lexer->result_symbol = TYPE_REFERENCE_ARGUMENTS_START;
-            return true;
-        }
         if (!ret && !scanned_comment && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
             return scan_ternary_qmark(lexer);
         }
@@ -912,8 +933,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         }
         return ret;
     }
-    if (valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
-        return scan_type_reference_arguments_start(lexer);
+    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START]) && !valid_symbols[ERROR_RECOVERY]) {
+        return scan_type_reference_arguments_start(lexer, valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START]);
     }
     if (valid_symbols[GLOBAL_DECLARATION_START] && !valid_symbols[ERROR_RECOVERY]) {
         while (is_whitespace(lexer->lookahead)) skip(lexer);
