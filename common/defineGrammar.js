@@ -1,4 +1,5 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
+const assert = require('node:assert/strict');
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 // Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
@@ -390,17 +391,20 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
-      await_expression: (_, previous) => ({
-        ...previous,
-        content: {
-          ...previous.content,
-          content: seq(
-            ...previous.content.content.members.map((member) =>
-              member.type === 'SYMBOL' && member.name === '_await_operand_end' ? optional(member) : member
-            )
-          ),
-        },
-      }),
+      await_expression: (_, previous) => {
+        const members = previous.content.content.members;
+        const guardIndex = members.findIndex(
+          (member) => member.type === 'SYMBOL' && member.name === '_await_operand_end'
+        );
+        assert(guardIndex !== -1, 'JavaScript await_expression must have a bare _await_operand_end member');
+        return {
+          ...previous,
+          content: {
+            ...previous.content,
+            content: seq(...members.map((member, index) => (index === guardIndex ? optional(member) : member))),
+          },
+        };
+      },
 
       primary_expression: ($) =>
         choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
