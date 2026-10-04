@@ -8839,8 +8839,16 @@
                           ]
                         },
                         {
-                          "type": "STRING",
-                          "value": "accessor"
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "accessor"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
                         }
                       ]
                     }
@@ -9211,8 +9219,16 @@
                           ]
                         },
                         {
-                          "type": "STRING",
-                          "value": "accessor"
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "STRING",
+                              "value": "accessor"
+                            },
+                            {
+                              "type": "BLANK"
+                            }
+                          ]
                         }
                       ]
                     }

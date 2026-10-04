@@ -235,7 +235,7 @@ module.exports = function defineGrammar(dialect) {
                 seq(optional('abstract'), optional('readonly')),
                 seq(optional('readonly'), optional('abstract')),
                 seq(optional('static'), optional($.override_modifier), 'accessor'),
-                seq('abstract', optional($.override_modifier), 'accessor')
+                seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
               choice(
                 seq(
@@ -272,7 +272,7 @@ module.exports = function defineGrammar(dialect) {
                 seq('readonly', optional('abstract')),
                 seq('abstract', optional('readonly')),
                 seq(optional('static'), optional($.override_modifier), 'accessor'),
-                seq('abstract', optional($.override_modifier), 'accessor')
+                seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
               field('name', alias('static', $.property_identifier)),
               choice(

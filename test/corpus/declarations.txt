@@ -1927,3 +1927,66 @@ abstract class B extends A { abstract override accessor value: number; abstract 
         name: (property_identifier)
         type: (type_annotation
           (predefined_type))))))
+
+================================================================================
+Abstract override members named accessor
+================================================================================
+
+abstract class Base { abstract accessor: number; }
+abstract class Fields extends Base {
+  abstract override accessor
+  value: number;
+}
+abstract class Semicolon extends Base {
+  abstract override accessor;
+}
+abstract class Method extends Base {
+  abstract override accessor
+  value() {}
+}
+
+--------------------------------------------------------------------------------
+
+(program
+  (abstract_class_declaration
+    name: (type_identifier)
+    body: (class_body
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))))
+  (abstract_class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (extends_clause
+        value: (identifier)))
+    body: (class_body
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier))
+      (public_field_definition
+        name: (property_identifier)
+        type: (type_annotation
+          (predefined_type)))))
+  (abstract_class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (extends_clause
+        value: (identifier)))
+    body: (class_body
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier))))
+  (abstract_class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (extends_clause
+        value: (identifier)))
+    body: (class_body
+      (public_field_definition
+        (override_modifier)
+        name: (property_identifier))
+      (method_definition
+        name: (property_identifier)
+        parameters: (formal_parameters)
+        body: (statement_block)))))
