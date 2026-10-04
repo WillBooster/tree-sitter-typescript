@@ -5,6 +5,44 @@ import { loadCurrentWasmBuild } from './wasmBuild';
 await Parser.init();
 for (const dialect of ['typescript', 'tsx']) {
   const language = await loadCurrentWasmBuild(dialect);
+  test(`${dialect} preserves typed resource bindings and regex statement boundaries`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const source of ['for(using of: T = x;;){}', 'for(using of = x;;){}']) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.firstNamedChild?.childForFieldName('initializer')?.type).toBe('using_declaration');
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const declaration of ['type X = T', 'let x: T', 'declare function f(): T']) {
+        const source = `${declaration}/*\nc*//x/.test(y);`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.lastNamedChild?.type, source).toBe('expression_statement');
+          expect(tree.rootNode.lastNamedChild?.text, source).toBe('/x/.test(y);');
+          expect(tree.rootNode.descendantsOfType('regex')).toHaveLength(1);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const source of ['const x = a/*\nc*//b/g;', 'x as T/*\nc*//b/g;', 'for (using of xs) {}']) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.descendantsOfType('regex'), source).toHaveLength(0);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} keeps typed default declarations separate from following expressions`, () => {
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(export_statement declaration: (declaration) @declaration)');

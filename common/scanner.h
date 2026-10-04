@@ -548,7 +548,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
             break;
     }
     if (before_slash) {
-        return false;
+        return !valid_symbols[LOGICAL_OR] && !valid_symbols[ERROR_RECOVERY];
     }
 
     switch (lexer->lookahead) {
@@ -1296,7 +1296,8 @@ static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool *infix
     *infix_operator = !escaped && ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
     if (ascii_word && plain_for_of && strcmp(word, "of") == 0) {
         bool scanned_content = false;
-        return scan_whitespace_and_comments(lexer, &scanned_content, true, false) != REJECT && lexer->lookahead == '=';
+        return scan_whitespace_and_comments(lexer, &scanned_content, true, false) != REJECT &&
+            (lexer->lookahead == '=' || lexer->lookahead == ':');
     }
     return !ascii_word || (strcmp(word, "enum") != 0 && !is_reserved_word(word));
 }
