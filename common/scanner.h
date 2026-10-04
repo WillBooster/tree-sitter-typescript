@@ -317,7 +317,7 @@ static bool follows_yield_operand(TSLexer *lexer);
 static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator);
 
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool comment_condition, bool after_block_arrow,
-                                     LineBreakRule rule, bool *scanned_content, bool *before_line_break, const bool *resource_symbols) {
+                                     LineBreakRule rule, bool *scanned_content, bool *before_line_break, bool allow_resource_binding) {
     *before_line_break = false;
     lexer->result_symbol = AUTOMATIC_SEMICOLON;
     lexer->mark_end(lexer);
@@ -384,11 +384,10 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
 
         if (!is_whitespace(lexer->lookahead)) {
             *before_line_break = true;
-            if (resource_symbols && !resource_line_break && is_identifier_part(lexer->lookahead) &&
+            if (allow_resource_binding && !resource_line_break && is_identifier_part(lexer->lookahead) &&
                 !is_ascii_digit(lexer->lookahead)) {
-                bool infix_operator = false;
                 *scanned_content = true;
-                if (scan_resource_binding(lexer, resource_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], false, &infix_operator)) {
+                if (scan_resource_binding(lexer, false, false, NULL)) {
                     lexer->result_symbol = RESOURCE_BINDING_START;
                     return true;
                 }
@@ -1296,7 +1295,9 @@ static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_
             word[length++] = (char)character;
         }
     }
-    *infix_operator = !escaped && ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
+    if (infix_operator) {
+        *infix_operator = !escaped && ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
+    }
     if (ascii_word && plain_for_of && strcmp(word, "of") == 0) {
         bool scanned_content = false;
         return scan_whitespace_and_comments(lexer, &scanned_content, true, false) != REJECT &&
@@ -1533,7 +1534,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         bool scanned_content = false;
         bool before_line_break = false;
         bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], false, LINE_BREAK_BY_NEXT_TOKEN,
-                                            &scanned_content, &before_line_break, valid_symbols);
+                                            &scanned_content, &before_line_break, true);
         if (ret && lexer->result_symbol == AUTOMATIC_SEMICOLON) {
             if (!valid_symbols[AUTOMATIC_SEMICOLON]) {
                 return false;
@@ -1579,7 +1580,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             rule = LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES;
         }
         bool before_line_break = false;
-        bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], after_block_arrow, rule, &scanned_content, &before_line_break, NULL);
+        bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], after_block_arrow, rule, &scanned_content, &before_line_break, false);
         if (ret && valid_symbols[TYPE_MEMBER_SEMICOLON]) lexer->result_symbol = TYPE_MEMBER_SEMICOLON;
         if (ret && after_block_arrow) {
             lexer->result_symbol = ARROW_FUNCTION_BLOCK_END;
