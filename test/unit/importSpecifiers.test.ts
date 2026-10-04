@@ -1,12 +1,14 @@
-import { Language, Parser } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
+
+import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('matches TypeScript on contextual named-import modifiers', async () => {
   await Parser.init();
   for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser();
-    parser.setLanguage(await Language.load(`tree-sitter-${dialect}.wasm`));
+    parser.setLanguage(await loadCurrentWasmBuild(dialect));
     try {
       for (const specifiers of [
         'typeof as',
