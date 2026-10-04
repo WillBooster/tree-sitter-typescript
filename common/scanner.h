@@ -1278,7 +1278,20 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified
     }
     if (lexer->lookahead != '<') return false;
     advance(lexer);
-    if (lexer->lookahead == '=' || lexer->lookahead == '<') return false;
+    if (lexer->lookahead == '=') return false;
+    if (lexer->lookahead == '<') {
+        advance(lexer);
+        if (scan_whitespace_and_comments(lexer, &comment, true, false) == REJECT) return false;
+        if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
+        char parameter[16] = {0};
+        bool ascii_parameter = scan_identifier(lexer, parameter, sizeof(parameter), false);
+        if (scan_whitespace_and_comments(lexer, &comment, true, false) == REJECT) return false;
+        if (!(ascii_parameter && (strcmp(parameter, "const") == 0 || strcmp(parameter, "in") == 0 || strcmp(parameter, "out") == 0)) &&
+            lexer->lookahead != '>' && lexer->lookahead != ',' && lexer->lookahead != '=') {
+            char constraint[16] = {0};
+            if (!scan_identifier(lexer, constraint, sizeof(constraint), false) || strcmp(constraint, "extends") != 0) return false;
+        }
+    }
     lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
 }

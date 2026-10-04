@@ -25,6 +25,30 @@ for (const dialect of ['typescript', 'tsx']) {
           tree.delete();
         }
       }
+      for (const name of ['Foo', 'ns.Foo']) {
+        for (const parameters of [
+          'T',
+          'T, U',
+          'T extends object',
+          'T = string',
+          'const T',
+          '/* before */ T /* after */',
+        ]) {
+          const argument = `<${parameters}>() => T`;
+          const tree = parser.parse(`type R = ${name}<${argument}>;`)!;
+          try {
+            expect(tree.rootNode.hasError, tree.rootNode.text).toBe(false);
+            const generic = tree.rootNode.descendantsOfType('generic_type')[0]!;
+            expect(generic.childForFieldName('name')?.text).toBe(name);
+            const args = generic.childForFieldName('type_arguments')!;
+            expect(
+              args.namedChildren.filter((node) => node.type !== 'comment').map((node) => [node.type, node.text])
+            ).toEqual([['function_type', argument]]);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
       for (const gap of [' ', '\n', '\r\n', '\r', '\u2028', '\u2029', '/*\n*/', '// line\n']) {
         const source = `class C implements Foo${gap}<string>, ns.Bar${gap}<number> {}`;
         const tree = parser.parse(source)!;
