@@ -1040,7 +1040,7 @@ module.exports = function defineGrammar(dialect) {
           'const'
         ),
 
-      template_type: ($) => seq('${', choice($.primary_type, $.infer_type), '}'),
+      template_type: ($) => seq('${', $.type, '}'),
 
       template_literal_type: ($) =>
         seq('`', repeat(choice(alias($._template_chars, $.string_fragment), $.template_type)), '`'),
