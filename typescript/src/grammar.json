@@ -13107,17 +13107,30 @@
       }
     },
     "index_type_query": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "keyof"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "primary_type"
-        }
-      ]
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "keyof"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "primary_type"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "readonly_type"
+              }
+            ]
+          }
+        ]
+      }
     },
     "lookup_type": {
       "type": "SEQ",
@@ -14108,17 +14121,21 @@
       ]
     },
     "readonly_type": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "readonly"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "type"
-        }
-      ]
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "readonly"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "type"
+          }
+        ]
+      }
     },
     "union_type": {
       "type": "PREC_LEFT",
@@ -14895,6 +14912,14 @@
     [
       {
         "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "readonly_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "intersection_type"
       },
       {
@@ -14920,10 +14945,6 @@
       {
         "type": "SYMBOL",
         "name": "type_predicate"
-      },
-      {
-        "type": "SYMBOL",
-        "name": "readonly_type"
       }
     ],
     [
@@ -15022,6 +15043,24 @@
       {
         "type": "SYMBOL",
         "name": "type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "array_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "lookup_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "readonly_type"
       }
     ],
     [
