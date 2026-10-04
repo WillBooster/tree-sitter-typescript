@@ -29,6 +29,9 @@ namespace outer { export namespace abstract { export interface Item {} } }
 let nested: outer.abstract.Item;
 let deep: abstract.inner.Item;
 interface Deep extends abstract.inner.Item {}
+import BareAlias = abstract;
+import QualifiedAlias = abstract.Item;
+import NestedAlias = abstract.inner.Item;
 `;
 
 const MappedSource = `type Input = { key: string };

@@ -864,7 +864,7 @@ module.exports = function defineGrammar(dialect) {
           'import',
           $.identifier,
           '=',
-          choice($.identifier, alias('out', $.identifier), $.nested_identifier),
+          choice($.identifier, alias(choice('out', 'abstract'), $.identifier), $.nested_identifier),
           $._semicolon
         ),
 

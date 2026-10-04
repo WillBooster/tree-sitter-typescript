@@ -22,10 +22,16 @@ interface Registry { make: UnionFactory; merge: IntersectionFactory; conditional
 `;
 
 const ContinuationSource = `type abstract = number;
+function newFoo() {}
+const ne = 1;
 type F = abstract
 new () => string;
 type G = abstract;
 new Date();
+type H = abstract
+newFoo();
+type I = abstract
+ne;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {

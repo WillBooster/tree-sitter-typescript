@@ -11040,8 +11040,17 @@
             {
               "type": "ALIAS",
               "content": {
-                "type": "STRING",
-                "value": "out"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "out"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "abstract"
+                  }
+                ]
               },
               "named": true,
               "value": "identifier"
