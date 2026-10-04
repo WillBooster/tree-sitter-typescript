@@ -56,12 +56,12 @@ for (const dialect of ['typescript', 'tsx']) {
           })
         );
         const edited = parser.parse(next, tree);
-        const fresh = parser.parse(next);
         assert.ok(edited);
-        assert.ok(fresh);
         const old = tree;
         tree = edited;
         old.delete();
+        const fresh = parser.parse(next);
+        assert.ok(fresh);
         try {
           expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
           if (!replacement.includes('unfinished')) {
@@ -189,12 +189,12 @@ for (const dialect of ['typescript', 'tsx']) {
           })
         );
         const edited = parser.parse(next, tree);
-        const fresh = parser.parse(next);
         assert.ok(edited);
-        assert.ok(fresh);
         const old = tree;
         tree = edited;
         old.delete();
+        const fresh = parser.parse(next);
+        assert.ok(fresh);
         try {
           expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
           if (replacement.includes('unfinished')) {
@@ -384,12 +384,12 @@ for (const dialect of ['typescript', 'tsx']) {
               })
             );
             const edited = parser.parse(next, tree);
-            const fresh = parser.parse(next);
             assert.ok(edited);
-            assert.ok(fresh);
             const old = tree;
             tree = edited;
             old.delete();
+            const fresh = parser.parse(next);
+            assert.ok(fresh);
             try {
               expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
               expect(tree.rootNode.hasError).toBe(false);
@@ -407,6 +407,144 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} preserves typed declaration continuations through incremental comment edits`, () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(predefined_type) @type');
+    try {
+      for (const [prefix, suffix, type] of [
+        ['interface I { a', '\n: string; }', 'string'],
+        ['interface I { a', '\n?: string; }', 'string'],
+        ['type T = { m()', '\n: void; };', 'void'],
+        ['type T = Foo', '\n<number>;', 'number'],
+        ['let x: { a', '\n: string };', 'string'],
+        ['interface I { a: string', '\n; }', 'string'],
+      ] as const) {
+        let comment = '';
+        let source = prefix + suffix;
+        let tree = parser.parse(source);
+        assert.ok(tree);
+        try {
+          for (const replacement of [
+            ' // boundary',
+            ' /* boundary\n */',
+            ' /* first */// boundary',
+            '',
+            ' // restored',
+          ]) {
+            const next = prefix + replacement + suffix;
+            tree.edit(
+              new Edit({
+                startIndex: prefix.length,
+                oldEndIndex: prefix.length + comment.length,
+                newEndIndex: prefix.length + replacement.length,
+                startPosition: position(source, prefix.length),
+                oldEndPosition: position(source, prefix.length + comment.length),
+                newEndPosition: position(next, prefix.length + replacement.length),
+              })
+            );
+            const edited = parser.parse(next, tree);
+            assert.ok(edited);
+            const old = tree;
+            tree = edited;
+            old.delete();
+            const fresh = parser.parse(next);
+            assert.ok(fresh);
+            try {
+              expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
+              expect(tree.rootNode.hasError).toBe(false);
+              expect(tree.rootNode.namedChildren).toHaveLength(1);
+              expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([type]);
+              const [property] = tree.rootNode.descendantsOfType('property_signature');
+              if (property) {
+                expect(property.childForFieldName('name')?.text).toBe('a');
+                expect(property.childForFieldName('type')?.text).toBe(': string');
+              }
+              const [method] = tree.rootNode.descendantsOfType('method_signature');
+              if (method) {
+                expect(method.childForFieldName('parameters')?.text).toBe('()');
+                expect(method.childForFieldName('return_type')?.text).toBe(': void');
+              }
+              const [generic] = tree.rootNode.descendantsOfType('generic_type');
+              if (generic) {
+                expect(generic.childForFieldName('name')?.text).toBe('Foo');
+                expect(generic.childForFieldName('type_arguments')?.text).toBe('<number>');
+              }
+            } finally {
+              fresh.delete();
+            }
+            source = next;
+            comment = replacement;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} keeps trailing arrow comments outside declarations before a regex`, () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(
+      language,
+      '(arrow_function body: (statement_block) @body)\n(comment) @comment\n(regex) @regex'
+    );
+    const prefix = 'const f = () => {}';
+    const suffix = '\n/re/.test(a)\n';
+    let comment = '';
+    let source = prefix + suffix;
+    let tree = parser.parse(source);
+    assert.ok(tree);
+    try {
+      for (const replacement of [' // boundary', ' /* boundary\n */', ' /* first */// boundary', '', ' // restored']) {
+        const next = prefix + replacement + suffix;
+        tree.edit(
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + comment.length,
+            newEndIndex: prefix.length + replacement.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + comment.length),
+            newEndPosition: position(next, prefix.length + replacement.length),
+          })
+        );
+        const edited = parser.parse(next, tree);
+        assert.ok(edited);
+        const old = tree;
+        tree = edited;
+        old.delete();
+        const fresh = parser.parse(next);
+        assert.ok(fresh);
+        try {
+          expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
+          expect(tree.rootNode.hasError).toBe(false);
+          const [declaration] = tree.rootNode.descendantsOfType('lexical_declaration');
+          const [arrow] = tree.rootNode.descendantsOfType('arrow_function');
+          expect(declaration?.text).toBe(prefix);
+          expect(declaration?.endIndex).toBe(prefix.length);
+          expect(arrow?.text).toBe('() => {}');
+          expect(arrow?.endIndex).toBe(prefix.length);
+          const captures = query.captures(tree.rootNode);
+          expect(captures.filter(({ name }) => name === 'body').map(({ node }) => node.text)).toEqual(['{}']);
+          expect(captures.filter(({ name }) => name === 'regex').map(({ node }) => node.text)).toEqual(['/re/']);
+          for (const { node } of captures.filter(({ name }) => name === 'comment')) {
+            expect(node.parent?.type).toBe('program');
+          }
+        } finally {
+          fresh.delete();
+        }
+        source = next;
+        comment = replacement;
+      }
+    } finally {
+      tree.delete();
       query.delete();
       parser.delete();
     }

@@ -417,15 +417,12 @@ module.exports = function defineGrammar(dialect) {
         return choice(...members, $.non_null_expression);
       },
 
-      // If the dialect is regular typescript, we exclude JSX expressions and
-      // include type assertions. If the dialect is TSX, we do the opposite.
       expression: ($, previous) => {
         const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
         const members = previous.members;
 
         if (dialect === 'typescript') {
-          choices.push($.type_assertion);
-          choices.push(...members.filter((member) => member.name !== '_jsx_element'));
+          choices.push($.type_assertion, ...members);
         } else if (dialect === 'tsx') {
           choices.push(...members);
         } else {

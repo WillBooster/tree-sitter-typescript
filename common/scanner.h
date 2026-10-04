@@ -222,6 +222,7 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
                     lexer->advance(lexer, skip_contents);
                 }
                 *scanned_content = true;
+                if (!consume) return ACCEPT;
             } else if (lexer->lookahead == '*') {
                 lexer->advance(lexer, skip_contents);
                 while (!lexer->eof(lexer)) {
@@ -318,14 +319,10 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                     return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_content);
                 }
                 if (comment_condition) {
-                    bool before_slash = scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT;
-                    if (before_slash || (lexer->lookahead != ',' && lexer->lookahead != '=' &&
-                                         lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '.' && lexer->lookahead != '{')) {
-                        return true;
-                    }
-                    if (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '.' || lexer->lookahead == '{') {
-                        return scan_after_line_break(lexer, valid_symbols, false, rule, scanned_content);
-                    }
+                    return scan_after_line_break(lexer, valid_symbols, false, rule, scanned_content);
+                }
+                if (result == ACCEPT && is_line_terminator(lexer->lookahead)) {
+                    return false;
                 }
                 line_break_in_block_comment = result == ACCEPT_IN_BLOCK_COMMENT;
             }
