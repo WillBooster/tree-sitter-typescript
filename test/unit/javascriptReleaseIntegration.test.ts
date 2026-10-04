@@ -57,6 +57,10 @@ for (const dialect of ['typescript', 'tsx']) {
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
           expect(tree.rootNode.descendantsOfType('ternary_expression')).toHaveLength(1);
+          expect(
+            tree.rootNode.descendantsOfType('comment').map((n) => n.text),
+            source
+          ).toEqual(boundary.startsWith('/') ? [boundary.trimEnd()] : []);
           expect(tree.rootNode.descendantsOfType('using_declaration')).toHaveLength(0);
         } finally {
           tree.delete();

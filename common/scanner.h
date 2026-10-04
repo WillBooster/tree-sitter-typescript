@@ -1153,6 +1153,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
     lexer->mark_end(lexer);
     lexer->result_symbol = after_postfix ? POSTFIX_UPDATE_END : AWAIT_OPERAND_END;
     bool saw_newline = false;
+    bool scanned_comment = false;
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
             saw_newline |= is_line_terminator(lexer->lookahead);
@@ -1163,10 +1164,12 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
         }
         skip(lexer);
         if (lexer->lookahead == '/') {
+            scanned_comment = true;
             while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
                 skip(lexer);
             }
         } else if (lexer->lookahead == '*') {
+            scanned_comment = true;
             skip(lexer);
             while (!lexer->eof(lexer)) {
                 saw_newline |= is_line_terminator(lexer->lookahead);
@@ -1197,7 +1200,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             return (infix_operator || (saw_newline && first_binding)) && valid_symbols[AWAIT_OPERAND_END];
         }
         if (!valid_symbols[AWAIT_OPERAND_END]) {
-            return valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?' && scan_ternary_qmark(lexer);
+            return !scanned_comment && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?' && scan_ternary_qmark(lexer);
         }
     }
     if (after_postfix && lexer->lookahead != '(' && lexer->lookahead != '[' && lexer->lookahead != '`') {
