@@ -443,7 +443,7 @@ module.exports = function defineGrammar(dialect) {
         return choice(...choices);
       },
 
-      _jsx_identifier: ($, previous) => choice(previous, alias(choice('in', 'out'), $.identifier)),
+      _jsx_identifier: ($, previous) => choice(previous, alias(choice('in', 'out', 'abstract'), $.identifier)),
 
       nested_identifier: ($) =>
         prec(

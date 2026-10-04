@@ -49,12 +49,21 @@ type CallableType = { value: abstract
 };
 `;
 
+const JsxSource = `const element = <abstract abstract="value" />;
+const paired = <abstract>text</abstract>;
+const qualified = <abstract.Item />;
+const member = <ordinary.abstract />;
+const namespace = <abstract:Item />;
+const attribute = <ordinary abstract:value="value" />;
+`;
+
 for (const dialect of ['typescript', 'tsx']) {
   for (const [description, initialSource, offset] of [
     ['contextual names', Source, Source.indexOf('abstract: abstract')],
     ['heritage and qualified type names', QualifiedSource, QualifiedSource.indexOf('abstract.Item')],
     ['mapped type parameters', MappedSource, MappedSource.indexOf('abstract')],
     ['type member boundaries', MemberSource, MemberSource.indexOf('abstract\n')],
+    ...(dialect === 'tsx' ? ([['JSX names', JsxSource, JsxSource.indexOf('abstract')]] as const) : []),
   ] as const) {
     test(`retains ${dialect} abstract ${description} through edits`, async () => {
       await Parser.init();
