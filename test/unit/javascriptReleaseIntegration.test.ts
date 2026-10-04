@@ -48,6 +48,30 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} ends await-using expressions when a newline rejects a resource binding`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const boundary of ['\n', '// boundary\n', '/*\n*/']) {
+        for (const name of ['x', 'of']) {
+          const source = `async function f() { await using${boundary}${name} = 1; }`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(tree.rootNode.descendantsOfType('await_expression').map((n) => n.text)).toEqual(['await using']);
+            expect(tree.rootNode.descendantsOfType('assignment_expression').map((n) => n.text)).toEqual([
+              `${name} = 1`,
+            ]);
+            expect(tree.rootNode.descendantsOfType('using_declaration')).toHaveLength(0);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} keeps typed default declarations separate from following expressions`, () => {
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(export_statement declaration: (declaration) @declaration)');
