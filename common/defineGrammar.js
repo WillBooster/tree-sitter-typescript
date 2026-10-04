@@ -3,6 +3,7 @@ const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 // Words that are keywords only in some positions and identifiers elsewhere, besides the JavaScript grammar's.
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'accessor',
   'declare',
   'global',
   'namespace',
@@ -215,9 +216,6 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
-      // A field named `get`, `set`, or `static` is told apart from a member that the word modifies by the line-break
-      // sentinels allowed right after the name, as in the JavaScript grammar's field_definition. They are not allowed
-      // after a type annotation, which may continue on the next line.
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
@@ -233,7 +231,8 @@ module.exports = function defineGrammar(dialect) {
                 seq(optional('static'), optional($.override_modifier), optional('readonly')),
                 seq(optional('abstract'), optional('readonly')),
                 seq(optional('readonly'), optional('abstract')),
-                optional('accessor')
+                seq(optional('static'), optional($.override_modifier), 'accessor'),
+                seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
               choice(
                 seq(
@@ -269,7 +268,8 @@ module.exports = function defineGrammar(dialect) {
                 seq($.override_modifier, optional('readonly')),
                 seq('readonly', optional('abstract')),
                 seq('abstract', optional('readonly')),
-                'accessor'
+                seq(optional('static'), optional($.override_modifier), 'accessor'),
+                seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
               field('name', alias('static', $.property_identifier)),
               choice(
