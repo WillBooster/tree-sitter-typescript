@@ -70,6 +70,8 @@ module.exports = function defineGrammar(dialect) {
       $._type_reference_arguments_start,
       $._unqualified_type_reference_arguments_start,
       $._type_member_semicolon,
+      $._heritage_type_start,
+      $._heritage_type_end,
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
@@ -778,8 +780,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      implements_clause: ($) =>
-        seq('implements', commaSep1(choice($.type, alias($._heritage_generic_type, $.generic_type)))),
+      implements_clause: ($) => seq('implements', commaSep1(seq($._heritage_type_start, $.type, $._heritage_type_end))),
 
       ambient_declaration: ($) =>
         seq(
@@ -1065,17 +1066,16 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      generic_type: ($) =>
-        prec('call', seq(field('name', $._generic_type_guarded_name), field('type_arguments', $.type_arguments))),
+      generic_type: ($) => prec('call', seq($._generic_type_guarded_name, field('type_arguments', $.type_arguments))),
 
       _heritage_generic_type: ($) =>
         prec('call', seq(field('name', $._generic_type_name), field('type_arguments', $.type_arguments))),
 
       _generic_type_guarded_name: ($) =>
         choice(
-          seq($._unqualified_type_reference_arguments_start, $._type_reference_identifier),
-          alias($._generic_nested_type_identifier, $.nested_type_identifier),
-          alias($._generic_type_query_member_expression, $.member_expression)
+          seq($._unqualified_type_reference_arguments_start, field('name', $._type_reference_identifier)),
+          field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier)),
+          field('name', alias($._generic_type_query_member_expression, $.member_expression))
         ),
 
       _generic_nested_type_identifier: ($) => nestedTypeIdentifier($, true),
