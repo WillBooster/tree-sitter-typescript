@@ -756,7 +756,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      implements_clause: ($) => seq('implements', commaSep1($.type)),
+      implements_clause: ($) =>
+        seq('implements', commaSep1(choice($.type, alias($._heritage_generic_type, $.generic_type)))),
 
       ambient_declaration: ($) =>
         seq(
@@ -869,7 +870,15 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       extends_type_clause: ($) =>
-        seq('extends', commaSep1(field('type', choice($._type_identifier, $.nested_type_identifier, $.generic_type)))),
+        seq(
+          'extends',
+          commaSep1(
+            field(
+              'type',
+              choice($._type_identifier, $.nested_type_identifier, alias($._heritage_generic_type, $.generic_type))
+            )
+          )
+        ),
 
       enum_declaration: ($) => seq(optional('const'), 'enum', field('name', $.identifier), field('body', $.enum_body)),
 
@@ -1068,17 +1077,20 @@ module.exports = function defineGrammar(dialect) {
         prec(
           'call',
           seq(
-            field(
-              'name',
-              choice(
-                $._type_reference_identifier,
-                $.nested_type_identifier,
-                alias($._type_query_member_expression_in_type_annotation, $.member_expression)
-              )
-            ),
+            field('name', $._generic_type_name),
             $._type_reference_arguments_start,
             field('type_arguments', $.type_arguments)
           )
+        ),
+
+      _heritage_generic_type: ($) =>
+        prec('call', seq(field('name', $._generic_type_name), field('type_arguments', $.type_arguments))),
+
+      _generic_type_name: ($) =>
+        choice(
+          $._type_reference_identifier,
+          $.nested_type_identifier,
+          alias($._type_query_member_expression_in_type_annotation, $.member_expression)
         ),
 
       type_predicate: ($) =>

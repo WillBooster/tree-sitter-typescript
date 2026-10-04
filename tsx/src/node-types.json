@@ -2809,6 +2809,10 @@
       "required": true,
       "types": [
         {
+          "type": "generic_type",
+          "named": true
+        },
+        {
           "type": "type",
           "named": true
         }

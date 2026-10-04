@@ -3280,3 +3280,49 @@ type Inline = Box /*same line*/ <string>;
       (comment)
       type_arguments: (type_arguments
         (predefined_type)))))
+
+==================
+Generic heritage arguments across line breaks
+==================
+
+class A implements B
+<T>, ns.C /* line
+break */ <U> {}
+interface I extends B
+<T>, ns.C /* line
+break */ <U> {}
+
+---
+
+(program
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (generic_type
+          name: (type_identifier)
+          type_arguments: (type_arguments
+            (type_identifier)))
+        (generic_type
+          name: (nested_type_identifier
+            module: (identifier)
+            name: (type_identifier))
+          (comment)
+          type_arguments: (type_arguments
+            (type_identifier)))))
+    body: (class_body))
+  (interface_declaration
+    name: (type_identifier)
+    (extends_type_clause
+      type: (generic_type
+        name: (type_identifier)
+        type_arguments: (type_arguments
+          (type_identifier)))
+      type: (generic_type
+        name: (nested_type_identifier
+          module: (identifier)
+          name: (type_identifier))
+        (comment)
+        type_arguments: (type_arguments
+          (type_identifier))))
+    body: (interface_body)))

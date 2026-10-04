@@ -1,4 +1,3 @@
-examples/redux/src/types/store.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/5710.selection.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.selection.ts
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/extHost.api.impl.summarized.ts
