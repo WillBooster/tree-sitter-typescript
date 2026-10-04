@@ -76,6 +76,7 @@ module.exports = function defineGrammar(dialect) {
       $._global_declaration_end,
       $.__error_recovery,
       $._namespace_expression_end,
+      $._line_break_after_abstract_type,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -168,7 +169,6 @@ module.exports = function defineGrammar(dialect) {
       [$.class],
 
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
-      [$.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
       [$._call_signature, $.constructor_type],
@@ -453,7 +453,7 @@ module.exports = function defineGrammar(dialect) {
               'object',
               choice(
                 reserved('properties', $.identifier),
-                alias('out', $.identifier),
+                alias(choice('out', 'abstract'), $.identifier),
                 alias($.nested_identifier, $.member_expression)
               )
             ),
@@ -848,7 +848,12 @@ module.exports = function defineGrammar(dialect) {
           seq(
             field(
               'name',
-              choice($.string, reserved('properties', $.identifier), alias('out', $.identifier), $.nested_identifier)
+              choice(
+                $.string,
+                reserved('properties', $.identifier),
+                alias(choice('out', 'abstract'), $.identifier),
+                $.nested_identifier
+              )
             ),
             field('body', optional($.statement_block))
           )
@@ -1011,7 +1016,7 @@ module.exports = function defineGrammar(dialect) {
       constructor_type: ($) =>
         prec.left(
           seq(
-            optional('abstract'),
+            optional(seq('abstract', optional($._line_break_after_abstract_type))),
             'new',
             field('type_parameters', optional($.type_parameters)),
             field('parameters', $.formal_parameters),
@@ -1191,7 +1196,7 @@ module.exports = function defineGrammar(dialect) {
 
       mapped_type_clause: ($) =>
         seq(
-          field('name', $._type_identifier),
+          field('name', choice($._type_identifier, alias('abstract', $.type_identifier))),
           'in',
           field('type', $.type),
           optional(seq('as', field('alias', $.type)))

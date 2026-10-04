@@ -20,19 +20,29 @@ class Derived extends Base { value = abstract; read() { return abstract; } }
 
 const QualifiedSource = `interface abstract {}
 interface Named extends abstract {}
-namespace abstract { export interface Item {} export type Generic<T> = T; }
+namespace abstract { export interface Item {} export type Generic<T> = T; export namespace inner { export interface Item {} } }
 let value: abstract.Item;
 let generic: abstract.Generic<string>;
 interface Qualified extends abstract.Item {}
 class Implements implements abstract.Item {}
 namespace outer { export namespace abstract { export interface Item {} } }
 let nested: outer.abstract.Item;
+let deep: abstract.inner.Item;
+interface Deep extends abstract.inner.Item {}
+`;
+
+const MappedSource = `type Input = { key: string };
+type Mapped = { [abstract in keyof Input]: Input[abstract] };
+type Remapped = { [abstract in keyof Input as abstract]: Input[abstract] };
+type Readonly = { readonly [abstract in keyof Input]: Input[abstract] };
+type Optional = { [abstract in keyof Input]?: Input[abstract] };
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
   for (const [description, initialSource, offset] of [
     ['contextual names', Source, Source.indexOf('abstract: abstract')],
     ['heritage and qualified type names', QualifiedSource, QualifiedSource.indexOf('abstract.Item')],
+    ['mapped type parameters', MappedSource, MappedSource.indexOf('abstract')],
   ] as const) {
     test(`retains ${dialect} abstract ${description} through edits`, async () => {
       await Parser.init();

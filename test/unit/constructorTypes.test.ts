@@ -1,7 +1,8 @@
-import { Edit, Parser, Query, type Node, type Point, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type ReturnCapture = readonly [number, string, number, number];
@@ -11,64 +12,79 @@ type C = { c: number };
 type UnionFactory = new () => B | C;
 type IntersectionFactory = new () => B & C;
 type ConditionalFactory<T> = abstract new (value: T) => T extends B ? B : C;
+type MultilineFactory = abstract
+new () => B | C;
+type CommentFactory = abstract/*
+continuation*/new () => B & C;
 type NestedFactory = new () => new () => B | C;
 type UnionOfFactories = (new () => B) | (new () => C);
 interface Registry { make: UnionFactory; merge: IntersectionFactory; conditional: ConditionalFactory<B>; nested: NestedFactory; separate: UnionOfFactories; }
 `;
 
-for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} constructor return grouping through operator edits`, async () => {
-    await Parser.init();
-    const parser = new Parser();
-    let query: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Source;
-    try {
-      const language = await loadCurrentWasmBuild(dialect);
-      parser.setLanguage(language);
-      query = new Query(language, '(constructor_type type: (_) @result) @factory');
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
-      const offset = source.indexOf('|');
-      for (const operator of ['&', '|']) {
-        const next = source.slice(0, offset) + operator + source.slice(offset + 1);
-        tree.edit(
-          new Edit({
-            startIndex: offset,
-            oldEndIndex: offset + 1,
-            newEndIndex: offset + 1,
-            startPosition: position(source, offset),
-            oldEndPosition: position(source, offset + 1),
-            newEndPosition: position(next, offset + 1),
-          })
-        );
-        const previous: Tree = tree;
-        tree = parser.parse(next, previous)!;
-        previous.delete();
-        const fresh = parser.parse(next)!;
-        try {
-          expect(tree.rootNode.hasError).toBe(false);
-          expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
-          const expected = referenceReturns(next, dialect);
-          expect(returnCaptures(query, tree)).toEqual(expected);
-          expect(returnCaptures(query, fresh)).toEqual(expected);
-        } finally {
-          fresh.delete();
-        }
-        source = next;
-      }
-    } finally {
-      tree?.delete();
-      query?.delete();
-      parser.delete();
-    }
-  });
-}
+const ContinuationSource = `type abstract = number;
+type F = abstract
+new () => string;
+type G = abstract;
+new Date();
+`;
 
-function position(source: string, index: number): Point {
-  const lines = source.slice(0, index).split('\n');
-  return { row: lines.length - 1, column: lines.at(-1)!.length };
+for (const dialect of ['typescript', 'tsx']) {
+  for (const [description, initialSource, offset, original, replacements] of [
+    ['return grouping', Source, Source.indexOf('|'), '|', ['&', '|']],
+    [
+      'abstract continuation',
+      ContinuationSource,
+      ContinuationSource.indexOf('abstract\n') + 8,
+      '\n',
+      ['/*\ncomment*/', '\n'],
+    ],
+  ] as const) {
+    test(`retains ${dialect} constructor ${description} through edits`, async () => {
+      await Parser.init();
+      const parser = new Parser();
+      let query: Query | undefined;
+      let tree: Tree | undefined;
+      let source: string = initialSource;
+      try {
+        const language = await loadCurrentWasmBuild(dialect);
+        parser.setLanguage(language);
+        query = new Query(language, '(constructor_type type: (_) @result) @factory');
+        tree = parser.parse(source)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
+        let oldLength = original.length;
+        for (const replacement of replacements) {
+          const next = source.slice(0, offset) + replacement + source.slice(offset + oldLength);
+          const previous: Tree = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: offset,
+              oldEndIndex: offset + oldLength,
+              newEndIndex: offset + replacement.length,
+              startPosition: position(source, offset),
+              oldEndPosition: position(source, offset + oldLength),
+              newEndPosition: position(next, offset + replacement.length),
+            }),
+            (incremental, fresh) => {
+              const expected = referenceReturns(next, dialect);
+              expect(returnCaptures(query!, incremental)).toEqual(expected);
+              expect(returnCaptures(query!, fresh)).toEqual(expected);
+            }
+          );
+          previous.delete();
+          source = next;
+          oldLength = replacement.length;
+        }
+      } finally {
+        tree?.delete();
+        query?.delete();
+        parser.delete();
+      }
+    });
+  }
 }
 
 function referenceReturns(source: string, dialect: string): ReturnCapture[] {
@@ -103,18 +119,4 @@ function returnCaptures(query: Query, tree: Tree): ReturnCapture[] {
       return [factory.startIndex, result.text, result.startIndex, result.endIndex] as const;
     })
     .toSorted((a, b) => a[0] - b[0]);
-}
-
-function snapshot(node: Node): unknown {
-  return [
-    node.type,
-    node.isNamed,
-    node.isMissing,
-    node.startIndex,
-    node.endIndex,
-    node.startPosition,
-    node.endPosition,
-    node.children.map((_, i) => node.fieldNameForChild(i)),
-    node.children.map(snapshot),
-  ];
 }
