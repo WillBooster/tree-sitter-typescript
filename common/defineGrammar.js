@@ -73,6 +73,7 @@ module.exports = function defineGrammar(dialect) {
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
+      $._namespace_expression_end,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -391,6 +392,23 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
 
+      await_expression: (_, previous) => {
+        const members = previous.content.content.members;
+        const guardIndex = members.findIndex(
+          (member) => member.type === 'SYMBOL' && member.name === '_await_operand_end'
+        );
+        if (guardIndex === -1) {
+          throw new Error('JavaScript await_expression must have a bare _await_operand_end member');
+        }
+        return {
+          ...previous,
+          content: {
+            ...previous.content,
+            content: seq(...members.map((member, index) => (index === guardIndex ? optional(member) : member))),
+          },
+        };
+      },
+
       primary_expression: ($) =>
         choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
 
@@ -398,20 +416,19 @@ module.exports = function defineGrammar(dialect) {
       // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.
       _type_arguments_target: ($) => {
         const members = JavaScript.grammar.rules.primary_expression.members.filter(
-          (member) => member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression'
+          (member) =>
+            (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
+            (dialect !== 'typescript' || member.name !== '_jsx_element')
         );
         return choice(...members, $.non_null_expression);
       },
 
-      // If the dialect is regular typescript, we exclude JSX expressions and
-      // include type assertions. If the dialect is TSX, we do the opposite.
       expression: ($, previous) => {
         const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
         const members = previous.members;
 
         if (dialect === 'typescript') {
-          choices.push($.type_assertion);
-          choices.push(...members.filter((member) => member.name !== '_jsx_element'));
+          choices.push($.type_assertion, ...members);
         } else if (dialect === 'tsx') {
           choices.push(...members);
         } else {
@@ -539,14 +556,14 @@ module.exports = function defineGrammar(dialect) {
       // variable named `using`.
       using_declaration: ($) =>
         seq(
-          field('kind', choice('using', seq('await', 'using'))),
+          field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
           commaSep1(alias($._using_declarator, $.variable_declarator)),
           $._semicolon
         ),
 
       _for_using_declaration: ($) =>
         seq(
-          field('kind', choice('using', seq('await', 'using'))),
+          field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
           commaSep1(alias($._using_declarator, $.variable_declarator)),
           ';'
         ),
@@ -572,7 +589,10 @@ module.exports = function defineGrammar(dialect) {
               field('kind', choice('let', 'const')),
               field('left', choice($._binding_identifier, $._destructuring_pattern))
             ),
-            seq(field('kind', choice('using', seq('await', 'using'))), field('left', $._binding_identifier))
+            seq(
+              field('kind', choice('using', seq(alias($._await_keyword, 'await'), 'using'))),
+              field('left', $._binding_identifier)
+            )
           ),
           field('operator', choice('in', 'of')),
           field('right', $._expressions),
@@ -813,7 +833,7 @@ module.exports = function defineGrammar(dialect) {
 
       module: ($) => seq('module', $._module),
 
-      internal_module: ($) => seq('namespace', $._module),
+      internal_module: ($) => seq('namespace', $._module, optional($._namespace_expression_end)),
 
       global_declaration: ($) =>
         seq(
