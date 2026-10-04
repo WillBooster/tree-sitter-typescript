@@ -3071,3 +3071,100 @@ type D = [...out: string[]];
         (type_annotation
           (array_type
             (predefined_type)))))))
+
+================================================================================
+Import types as operands of type operators
+:language(typescript)
+:language(tsx)
+================================================================================
+
+type Keys = keyof import("module").Model;
+type Values = import("module").Model[keyof import("module").Model];
+type List = import("module").Model[];
+type Constructor = typeof import("module").Model;
+type Conditional<T> = T extends import("module").Model ? keyof import("module").Model : never;
+type Namespace = keyof typeof import("module");
+
+--------------------------------------------------------------------------------
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (index_type_query
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))))
+  (type_alias_declaration
+    (type_identifier)
+    (lookup_type
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))
+      (index_type_query
+        (member_expression
+          (call_expression
+            (import)
+            (arguments
+              (string
+                (string_fragment))))
+          (property_identifier)))))
+  (type_alias_declaration
+    (type_identifier)
+    (array_type
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))))
+  (type_alias_declaration
+    (type_identifier)
+    (type_query
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))))
+  (type_alias_declaration
+    (type_identifier)
+    (type_parameters
+      (type_parameter
+        (type_identifier)))
+    (conditional_type
+      (type_identifier)
+      (member_expression
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))
+        (property_identifier))
+      (index_type_query
+        (member_expression
+          (call_expression
+            (import)
+            (arguments
+              (string
+                (string_fragment))))
+          (property_identifier)))
+      (predefined_type)))
+  (type_alias_declaration
+    (type_identifier)
+    (index_type_query
+      (type_query
+        (call_expression
+          (import)
+          (arguments
+            (string
+              (string_fragment))))))))
