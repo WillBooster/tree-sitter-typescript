@@ -320,10 +320,10 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 if (comment_condition) {
                     bool before_slash = scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT;
                     if (before_slash || (lexer->lookahead != ',' && lexer->lookahead != '=' &&
-                                         lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '.')) {
+                                         lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '.' && lexer->lookahead != '{')) {
                         return true;
                     }
-                    if (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '.') {
+                    if (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '.' || lexer->lookahead == '{') {
                         return scan_after_line_break(lexer, valid_symbols, false, rule, scanned_content);
                     }
                 }

@@ -59,6 +59,9 @@ for (const dialect of ['typescript', 'tsx']) {
         const fresh = parser.parse(next);
         assert.ok(edited);
         assert.ok(fresh);
+        const old = tree;
+        tree = edited;
+        old.delete();
         try {
           expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
           if (!replacement.includes('unfinished')) {
@@ -77,8 +80,6 @@ for (const dialect of ['typescript', 'tsx']) {
         } finally {
           fresh.delete();
         }
-        tree.delete();
-        tree = edited;
         source = next;
         comment = replacement;
       }
@@ -191,6 +192,9 @@ for (const dialect of ['typescript', 'tsx']) {
         const fresh = parser.parse(next);
         assert.ok(edited);
         assert.ok(fresh);
+        const old = tree;
+        tree = edited;
+        old.delete();
         try {
           expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
           if (replacement.includes('unfinished')) {
@@ -209,8 +213,6 @@ for (const dialect of ['typescript', 'tsx']) {
         } finally {
           fresh.delete();
         }
-        tree.delete();
-        tree = edited;
         source = next;
         comment = replacement;
       }
@@ -339,6 +341,73 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} attaches class bodies after comments and restores them after incremental edits`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const query = new Query(language, '(method_definition body: (statement_block) @body)');
+    try {
+      for (const [header, body] of [
+        ['m()', '{}'],
+        ['m(): void', '{}'],
+        ['constructor(a: string)', '{}'],
+        ['get x(): number', '{ return 1; }'],
+        ['set x(v: number)', '{}'],
+        ['m<T>(): T', '{ return undefined as T; }'],
+      ]) {
+        const prefix = `class C {\n${header}`;
+        const suffix = `\n${body}\n}`;
+        let comment = '';
+        let source = prefix + suffix;
+        let tree = parser.parse(source);
+        assert.ok(tree);
+        try {
+          for (const replacement of [
+            ' // boundary',
+            ' /* boundary\n */',
+            ' /* first */// boundary',
+            '',
+            ' // restored',
+          ]) {
+            const next = prefix + replacement + suffix;
+            tree.edit(
+              new Edit({
+                startIndex: prefix.length,
+                oldEndIndex: prefix.length + comment.length,
+                newEndIndex: prefix.length + replacement.length,
+                startPosition: position(source, prefix.length),
+                oldEndPosition: position(source, prefix.length + comment.length),
+                newEndPosition: position(next, prefix.length + replacement.length),
+              })
+            );
+            const edited = parser.parse(next, tree);
+            const fresh = parser.parse(next);
+            assert.ok(edited);
+            assert.ok(fresh);
+            const old = tree;
+            tree = edited;
+            old.delete();
+            try {
+              expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
+              expect(tree.rootNode.hasError).toBe(false);
+              expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['class_declaration']);
+              expect(tree.rootNode.descendantsOfType('method_definition')).toHaveLength(1);
+              expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([body]);
+            } finally {
+              fresh.delete();
+            }
+            source = next;
+            comment = replacement;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
       parser.delete();
     }
   });
