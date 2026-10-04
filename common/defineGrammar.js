@@ -66,6 +66,11 @@ module.exports = function defineGrammar(dialect) {
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
+      $._type_reference_arguments_start,
+      $._unqualified_type_reference_arguments_start,
+      $._type_member_semicolon,
+      $._heritage_type_start,
+      $._heritage_type_end,
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
@@ -159,7 +164,7 @@ module.exports = function defineGrammar(dialect) {
 
       [$.class],
 
-      [$.nested_identifier, $.nested_type_identifier, $._type_arguments_target],
+      [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
       [$._call_signature, $.constructor_type],
@@ -170,7 +175,6 @@ module.exports = function defineGrammar(dialect) {
       [$._type_arguments_target, $.literal_type, $.rest_pattern],
       [$._type_arguments_target, $.predefined_type, $.rest_pattern],
       [$._type_arguments_target, $.primary_type],
-      [$._type_arguments_target, $.generic_type],
       [$._type_arguments_target, $.predefined_type],
       [$._type_arguments_target, $.pattern, $.primary_type],
       [$._parameter_name, $.primary_type],
@@ -772,7 +776,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      implements_clause: ($) => seq('implements', commaSep1($.type)),
+      implements_clause: ($) => seq('implements', commaSep1(seq($._heritage_type_start, $.type, $._heritage_type_end))),
 
       ambient_declaration: ($) =>
         seq(
@@ -855,23 +859,7 @@ module.exports = function defineGrammar(dialect) {
           $._semicolon
         ),
 
-      nested_type_identifier: ($) =>
-        prec(
-          'member',
-          seq(
-            field(
-              'module',
-              choice(
-                $.identifier,
-                alias(choice('in', 'out'), $.identifier),
-                $.nested_identifier,
-                alias($._in_nested_identifier, $.nested_identifier)
-              )
-            ),
-            '.',
-            field('name', $._type_reference_identifier)
-          )
-        ),
+      nested_type_identifier: ($) => nestedTypeIdentifier($, false),
 
       interface_declaration: ($) =>
         seq(
@@ -883,7 +871,15 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       extends_type_clause: ($) =>
-        seq('extends', commaSep1(field('type', choice($._type_identifier, $.nested_type_identifier, $.generic_type)))),
+        seq(
+          'extends',
+          commaSep1(
+            field(
+              'type',
+              choice($._type_identifier, $.nested_type_identifier, alias($._heritage_generic_type, $.generic_type))
+            )
+          )
+        ),
 
       enum_declaration: ($) => seq(optional('const'), 'enum', field('name', $.identifier), field('body', $.enum_body)),
 
@@ -934,22 +930,8 @@ module.exports = function defineGrammar(dialect) {
       // since these are used in type annotations whereas the other ones are used where `typeof` is
       // required beforehand. This allows for parsing of annotations such as
       // foo: import('x').y.z.
-      _type_query_member_expression_in_type_annotation: ($) =>
-        seq(
-          field(
-            'object',
-            choice(
-              $.import,
-              alias($._type_query_member_expression_in_type_annotation, $.member_expression),
-              alias($._type_query_call_expression_in_type_annotation, $.call_expression)
-            )
-          ),
-          '.',
-          field(
-            'property',
-            choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
-          )
-        ),
+      _type_query_member_expression_in_type_annotation: ($) => typeQueryMember($, false),
+
       _type_query_call_expression_in_type_annotation: ($) =>
         seq(
           field(
@@ -1076,20 +1058,27 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      generic_type: ($) =>
-        prec(
-          'call',
-          seq(
-            field(
-              'name',
-              choice(
-                $._type_reference_identifier,
-                $.nested_type_identifier,
-                alias($._type_query_member_expression_in_type_annotation, $.member_expression)
-              )
-            ),
-            field('type_arguments', $.type_arguments)
-          )
+      generic_type: ($) => prec('call', seq($._generic_type_guarded_name, field('type_arguments', $.type_arguments))),
+
+      _heritage_generic_type: ($) =>
+        prec('call', seq(field('name', $._generic_type_name), field('type_arguments', $.type_arguments))),
+
+      _generic_type_guarded_name: ($) =>
+        choice(
+          seq($._unqualified_type_reference_arguments_start, field('name', $._type_reference_identifier)),
+          field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier)),
+          field('name', alias($._generic_type_query_member_expression, $.member_expression))
+        ),
+
+      _generic_nested_type_identifier: ($) => nestedTypeIdentifier($, true),
+
+      _generic_type_query_member_expression: ($) => typeQueryMember($, true),
+
+      _generic_type_name: ($) =>
+        choice(
+          $._type_reference_identifier,
+          $.nested_type_identifier,
+          alias($._type_query_member_expression_in_type_annotation, $.member_expression)
         ),
 
       type_predicate: ($) =>
@@ -1235,7 +1224,7 @@ module.exports = function defineGrammar(dialect) {
             seq(
               optional(choice(',', ';')),
               sepBy1(
-                choice(',', $._semicolon),
+                choice(',', ';', $._type_member_semicolon),
                 choice(
                   $.export_statement,
                   $.property_signature,
@@ -1245,7 +1234,7 @@ module.exports = function defineGrammar(dialect) {
                   $.method_signature
                 )
               ),
-              optional(choice(',', $._semicolon))
+              optional(choice(',', ';', $._type_member_semicolon))
             )
           ),
           choice('}', '|}')
@@ -1261,7 +1250,7 @@ module.exports = function defineGrammar(dialect) {
           optional('readonly'),
           field('name', $._property_name),
           optional('?'),
-          field('type', optional($.type_annotation))
+          choice(optional($._line_break_after_field), field('type', $.type_annotation))
         ),
 
       _call_signature: ($) =>
@@ -1400,4 +1389,43 @@ function sepBy(sep, rule) {
  */
 function sepBy1(sep, rule) {
   return seq(rule, repeat(seq(sep, rule)));
+}
+
+function nestedTypeIdentifier($, generic) {
+  return prec(
+    'member',
+    seq(
+      field(
+        'module',
+        choice(
+          $.identifier,
+          alias(choice('in', 'out'), $.identifier),
+          $.nested_identifier,
+          alias($._in_nested_identifier, $.nested_identifier)
+        )
+      ),
+      '.',
+      ...(generic ? [$._type_reference_arguments_start] : []),
+      field('name', $._type_reference_identifier)
+    )
+  );
+}
+
+function typeQueryMember($, generic) {
+  return seq(
+    field(
+      'object',
+      choice(
+        $.import,
+        alias($._type_query_member_expression_in_type_annotation, $.member_expression),
+        alias($._type_query_call_expression_in_type_annotation, $.call_expression)
+      )
+    ),
+    '.',
+    ...(generic ? [$._type_reference_arguments_start] : []),
+    field(
+      'property',
+      choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+    )
+  );
 }

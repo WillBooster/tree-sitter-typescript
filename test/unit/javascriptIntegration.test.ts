@@ -420,7 +420,7 @@ for (const dialect of ['typescript', 'tsx']) {
         ['interface I { a', '\n: string; }', 'string'],
         ['interface I { a', '\n?: string; }', 'string'],
         ['type T = { m()', '\n: void; };', 'void'],
-        ['type T = Foo', '\n<number>;', 'number'],
+        ['interface I extends Foo', '\n<number> {}', 'number'],
         ['let x: { a', '\n: string };', 'string'],
         ['interface I { a: string', '\n; }', 'string'],
       ] as const) {

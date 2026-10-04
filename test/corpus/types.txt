@@ -3169,6 +3169,274 @@ type Namespace = keyof typeof import("module");
             (string
               (string_fragment))))))))
 
+==================
+Generic call signatures across line breaks
+==================
+
+interface Overloads {
+  <T>(value: T): T
+  <T>(value: T, other: unknown): T
+  <T>(value: T): Box<T>
+  <T>(value: T): ns.Box<T>
+}
+type Calls = {
+  <T>(value: T): T /* line
+  break */ <T>(value: T): T
+};
+type Inline = Box /*same line*/ <string>;
+
+---
+
+(program
+  (interface_declaration
+    name: (type_identifier)
+    body: (interface_body
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (type_identifier)))
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier)))
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (predefined_type))))
+        return_type: (type_annotation
+          (type_identifier)))
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (generic_type
+            name: (type_identifier)
+            type_arguments: (type_arguments
+              (type_identifier)))))
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (generic_type
+            name: (nested_type_identifier
+              module: (identifier)
+              name: (type_identifier))
+            type_arguments: (type_arguments
+              (type_identifier)))))))
+  (type_alias_declaration
+    name: (type_identifier)
+    value: (object_type
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (type_identifier)))
+      (comment)
+      (call_signature
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (type_identifier)))))
+  (type_alias_declaration
+    name: (type_identifier)
+    value: (generic_type
+      name: (type_identifier)
+      (comment)
+      type_arguments: (type_arguments
+        (predefined_type)))))
+
+==================
+Generic heritage arguments across line breaks
+==================
+
+class A implements B
+<T>, ns.C /* line
+break */ <U> {}
+interface I extends B
+<T>, ns.C /* line
+break */ <U> {}
+
+---
+
+(program
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (generic_type
+          name: (type_identifier)
+          type_arguments: (type_arguments
+            (type_identifier)))
+        (generic_type
+          name: (nested_type_identifier
+            module: (identifier)
+            name: (type_identifier))
+          (comment)
+          type_arguments: (type_arguments
+            (type_identifier)))))
+    body: (class_body))
+  (interface_declaration
+    name: (type_identifier)
+    (extends_type_clause
+      type: (generic_type
+        name: (type_identifier)
+        type_arguments: (type_arguments
+          (type_identifier)))
+      type: (generic_type
+        name: (nested_type_identifier
+          module: (identifier)
+          name: (type_identifier))
+        (comment)
+        type_arguments: (type_arguments
+          (type_identifier))))
+    body: (interface_body)))
+
+==================
+Type references preserve expression and method continuations
+==================
+
+interface I {
+  foo
+  <T>(x: T): void
+}
+f(a as Foo ? b : c);
+f(a satisfies ns.Foo /* keep */ ? b : c);
+const less = a as T /* line
+break */ < b;
+const compared = a as T <= b;
+const shifted = a satisfies T
+<< b;
+type Escaped = \u0042ox<string>;
+type Braced = \u{42}ox<string>;
+type Imported = import('module').Box<string>;
+
+---
+
+(program
+  (interface_declaration
+    name: (type_identifier)
+    body: (interface_body
+      (method_signature
+        name: (property_identifier)
+        type_parameters: (type_parameters
+          (type_parameter
+            name: (type_identifier)))
+        parameters: (formal_parameters
+          (required_parameter
+            pattern: (identifier)
+            type: (type_annotation
+              (type_identifier))))
+        return_type: (type_annotation
+          (predefined_type)))))
+  (expression_statement
+    (call_expression
+      function: (identifier)
+      arguments: (arguments
+        (ternary_expression
+          condition: (as_expression
+            (identifier)
+            (type_identifier))
+          consequence: (identifier)
+          alternative: (identifier)))))
+  (expression_statement
+    (call_expression
+      function: (identifier)
+      arguments: (arguments
+        (ternary_expression
+          condition: (satisfies_expression
+            (identifier)
+            (nested_type_identifier
+              module: (identifier)
+              name: (type_identifier)))
+          (comment)
+          consequence: (identifier)
+          alternative: (identifier)))))
+  (lexical_declaration
+    (variable_declarator
+      name: (identifier)
+      value: (binary_expression
+        left: (as_expression
+          (identifier)
+          (type_identifier))
+        (comment)
+        right: (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      name: (identifier)
+      value: (binary_expression
+        left: (as_expression
+          (identifier)
+          (type_identifier))
+        right: (identifier))))
+  (lexical_declaration
+    (variable_declarator
+      name: (identifier)
+      value: (binary_expression
+        left: (satisfies_expression
+          (identifier)
+          (type_identifier))
+        right: (identifier))))
+  (type_alias_declaration
+    name: (type_identifier)
+    value: (generic_type
+      name: (type_identifier)
+      type_arguments: (type_arguments
+        (predefined_type))))
+  (type_alias_declaration
+    name: (type_identifier)
+    value: (generic_type
+      name: (type_identifier)
+      type_arguments: (type_arguments
+        (predefined_type))))
+  (type_alias_declaration
+    name: (type_identifier)
+    value: (generic_type
+      name: (member_expression
+        object: (call_expression
+          function: (import)
+          arguments: (arguments
+            (string
+              (string_fragment))))
+        property: (property_identifier))
+      type_arguments: (type_arguments
+        (predefined_type)))))
+
 =======================================
 Constructor return types
 =======================================
