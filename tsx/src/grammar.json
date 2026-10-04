@@ -14919,6 +14919,10 @@
         "name": "function_type"
       },
       {
+        "type": "SYMBOL",
+        "name": "constructor_type"
+      },
+      {
         "type": "STRING",
         "value": "binary"
       },
