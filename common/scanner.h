@@ -231,7 +231,7 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
                             lexer->advance(lexer, skip_contents);
                             *scanned_content = true;
 
-                            if (lexer->lookahead != '/' && !consume) {
+                            if (!consume && (saw_block_newline || lexer->lookahead != '/')) {
                                 return saw_block_newline ? ACCEPT_IN_BLOCK_COMMENT : NO_NEWLINE;
                             }
 
@@ -319,8 +319,15 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 if (after_block_arrow || rule != LINE_BREAK_BY_NEXT_TOKEN) {
                     return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_content);
                 }
-                if (comment_condition && lexer->lookahead != ',' && lexer->lookahead != '=') {
-                    return true;
+                if (comment_condition) {
+                    bool before_slash = scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT;
+                    if (before_slash || (lexer->lookahead != ',' && lexer->lookahead != '=' &&
+                                         lexer->lookahead != '|' && lexer->lookahead != '&')) {
+                        return true;
+                    }
+                    if (lexer->lookahead == '|' || lexer->lookahead == '&') {
+                        return false;
+                    }
                 }
                 line_break_in_block_comment = result == ACCEPT_IN_BLOCK_COMMENT;
             }
@@ -1290,7 +1297,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if (valid_symbols[AWAIT_OPERAND_END] && !valid_symbols[LINE_BREAK_AFTER_AWAIT]) {
         if (valid_symbols[COMPLETED_ARROW_FUNCTION]) {
-            return false;
+            return valid_symbols[TERNARY_QMARK] && scan_ternary_qmark(lexer);
         }
         bool statement_end = false;
         bool ret = scan_expression_end(lexer, false, &statement_end);

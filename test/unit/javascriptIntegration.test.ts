@@ -88,6 +88,138 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} keeps commented union and intersection types in their declarations`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    try {
+      for (const comment of ['// boundary\n', '/* boundary\n */', '/* boundary\n *//* second */']) {
+        const tree = parser.parse(`type A = 'a' ${comment}| 'b';\ntype B = A ${comment}& C;`);
+        assert.ok(tree);
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
+            'type_alias_declaration',
+            'type_alias_declaration',
+          ]);
+          const declarations = tree.rootNode.descendantsOfType('type_alias_declaration');
+          expect(declarations.map((node) => node.childForFieldName('value')?.type)).toEqual([
+            'union_type',
+            'intersection_type',
+          ]);
+          expect(tree.rootNode.descendantsOfType('comment')).toHaveLength(comment.includes('second') ? 4 : 2);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} keeps conditional await arrow bodies and optional parameters`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const query = new Query(language, '(await_expression (expression) @operand)');
+    try {
+      for (const operand of ['g(x)', 'g<T>(x)', 'g!()', 'g?.<T>(x)']) {
+        for (const comment of ['', '/* boundary\n */', '// boundary\n']) {
+          const tree = parser.parse(`const f = async (x?: T, y?: U) => await ${operand} ${comment}? x : undefined;`);
+          assert.ok(tree);
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            const [arrow] = tree.rootNode.descendantsOfType('arrow_function');
+            const body = arrow?.childForFieldName('body');
+            expect(body?.type).toBe('ternary_expression');
+            expect(body?.childForFieldName('condition')?.text).toBe(`await ${operand}`);
+            expect(body?.childForFieldName('consequence')?.text).toBe('x');
+            expect(body?.childForFieldName('alternative')?.text).toBe('undefined');
+            expect(tree.rootNode.descendantsOfType('optional_parameter').map((node) => node.text)).toEqual([
+              'x?: T',
+              'y?: U',
+            ]);
+            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([operand]);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} restores restricted return and regex boundaries across adjacent comment edits`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const declaration = parser.parse('let a/*\nx*//b/.test(x);');
+    assert.ok(declaration);
+    try {
+      expect(declaration.rootNode.hasError).toBe(false);
+      expect(
+        declaration.rootNode.namedChildren.filter((node) => node.type !== 'comment').map((node) => node.type)
+      ).toEqual(['lexical_declaration', 'expression_statement']);
+    } finally {
+      declaration.delete();
+    }
+    const prefix = 'function f(){return';
+    const suffix = '/b/.test(x);}';
+    let comment = '/*\nx*/';
+    let source = prefix + comment + suffix;
+    let tree = parser.parse(source);
+    assert.ok(tree);
+    try {
+      for (const replacement of [
+        '/*\nx*//* second */',
+        '/* same line */',
+        '// boundary\n',
+        '/* unfinished',
+        '/*\nx*/',
+      ]) {
+        const next = prefix + replacement + suffix;
+        tree.edit(
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + comment.length,
+            newEndIndex: prefix.length + replacement.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + comment.length),
+            newEndPosition: position(next, prefix.length + replacement.length),
+          })
+        );
+        const edited = parser.parse(next, tree);
+        const fresh = parser.parse(next);
+        assert.ok(edited);
+        assert.ok(fresh);
+        try {
+          expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
+          if (replacement.includes('unfinished')) {
+            expect(edited.rootNode.hasError).toBe(true);
+          } else {
+            expect(edited.rootNode.hasError).toBe(false);
+            const [returnNode] = edited.rootNode.descendantsOfType('return_statement');
+            expect(
+              returnNode?.namedChildren.filter((node) => node.type !== 'comment').map((node) => node.type)
+            ).toEqual(replacement.includes('\n') ? [] : ['call_expression']);
+            expect(edited.rootNode.descendantsOfType('expression_statement')).toHaveLength(
+              replacement.includes('\n') ? 1 : 0
+            );
+            expect(edited.rootNode.descendantsOfType('regex').map((node) => node.text)).toEqual(['/b/']);
+          }
+        } finally {
+          fresh.delete();
+        }
+        tree.delete();
+        tree = edited;
+        source = next;
+        comment = replacement;
+      }
+    } finally {
+      tree.delete();
+      parser.delete();
+    }
+  });
+
   test(`${dialect} excludes trailing comments from typed function bodies while preserving statement queries`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
