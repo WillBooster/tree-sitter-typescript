@@ -8,7 +8,12 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`${dialect} preserves typed resource bindings and regex statement boundaries`, () => {
     const parser = new Parser().setLanguage(language);
     try {
-      for (const source of ['for(using of: T = x;;){}', 'for(using of = x;;){}']) {
+      for (const source of [
+        'for(using of: T = x;;){}',
+        'for(using of = x;;){}',
+        'for(using\nof: T = x;;){}',
+        'for(using/*\n*/of: T = x;;){}',
+      ]) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(false);

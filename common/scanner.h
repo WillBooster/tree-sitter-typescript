@@ -314,7 +314,7 @@ typedef enum {
 static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow, LineBreakRule rule, bool *scanned_content, bool before_slash);
 static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool skip_contents);
 static bool follows_yield_operand(TSLexer *lexer);
-static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool *infix_operator);
+static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator);
 
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool comment_condition, bool after_block_arrow,
                                      LineBreakRule rule, bool *scanned_content, bool *before_line_break, const bool *resource_symbols) {
@@ -388,7 +388,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 !is_ascii_digit(lexer->lookahead)) {
                 bool infix_operator = false;
                 *scanned_content = true;
-                if (scan_resource_binding(lexer, resource_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], &infix_operator)) {
+                if (scan_resource_binding(lexer, resource_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], false, &infix_operator)) {
                     lexer->result_symbol = RESOURCE_BINDING_START;
                     return true;
                 }
@@ -1187,9 +1187,9 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
     if (valid_symbols[RESOURCE_BINDING_START] || valid_symbols[RESOURCE_BINDING_CONTINUATION] ||
         valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT]) {
         bool first_binding = valid_symbols[RESOURCE_BINDING_START] || valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT];
-        if (!(saw_newline && first_binding) && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+        if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
             bool infix_operator = false;
-            bool binding = scan_resource_binding(lexer, valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], &infix_operator);
+            bool binding = scan_resource_binding(lexer, valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], saw_newline && first_binding, &infix_operator);
             if (binding) {
                 lexer->result_symbol = valid_symbols[RESOURCE_BINDING_START] ? RESOURCE_BINDING_START : RESOURCE_BINDING_CONTINUATION;
                 return true;
@@ -1255,7 +1255,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
     }
 }
 
-static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool *infix_operator) {
+static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator) {
     char word[16] = {0};
     unsigned length = 0;
     bool ascii_word = true;
@@ -1299,7 +1299,7 @@ static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool *infix
         return scan_whitespace_and_comments(lexer, &scanned_content, true, false) != REJECT &&
             (lexer->lookahead == '=' || lexer->lookahead == ':');
     }
-    return !ascii_word || (strcmp(word, "enum") != 0 && !is_reserved_word(word));
+    return !after_line_break && (!ascii_word || (strcmp(word, "enum") != 0 && !is_reserved_word(word)));
 }
 
 static bool scan_await_yield_identifier(TSLexer *lexer) {
@@ -1525,8 +1525,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_await_yield_identifier(lexer);
     }
 
-    if (!valid_symbols[AWAIT_OPERAND_END] &&
-        (valid_symbols[RESOURCE_BINDING_START] || valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT])) {
+    if (!valid_symbols[AWAIT_OPERAND_END] && !valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT] &&
+        valid_symbols[RESOURCE_BINDING_START]) {
         bool scanned_content = false;
         bool before_line_break = false;
         bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], false, LINE_BREAK_BY_NEXT_TOKEN,
