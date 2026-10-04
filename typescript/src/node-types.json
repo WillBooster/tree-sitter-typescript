@@ -3046,6 +3046,10 @@
         {
           "type": "primary_type",
           "named": true
+        },
+        {
+          "type": "readonly_type",
+          "named": true
         }
       ]
     }
