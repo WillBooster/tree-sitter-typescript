@@ -1996,3 +1996,94 @@ abstract class Method extends Base {
         name: (property_identifier)
         parameters: (formal_parameters)
         body: (statement_block)))))
+
+================================================================================
+Exports named type
+================================================================================
+
+export { type } from './Button';
+export type { type } from './Button';
+export { type as renamed, value as type } from './Button';
+export { type type as TypeName } from './Button';
+export { type };
+export type { type };
+export { type as renamed };
+export { type type as TypeName };
+
+export { type as };
+export { type as } from 'x';
+export { type as as as };
+export { type as as as } from 'x';
+
+--------------------------------------------------------------------------------
+
+(program
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment))))
