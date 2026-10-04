@@ -145,9 +145,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
-      [$.import_specifier, $._module_export_name, $._import_identifier],
       [$.import_specifier, $._module_export_name],
-      [$._module_export_name, $._import_identifier],
       [$.export_specifier, $._local_export_specifier, $._module_export_name],
       [$.export_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier],
@@ -503,7 +501,7 @@ module.exports = function defineGrammar(dialect) {
         const name = choice($._import_identifier, alias('as', $.identifier));
         const specifier = choice(
           field('name', name),
-          seq(field('name', choice($._module_export_name, name)), 'as', field('alias', name))
+          seq(field('name', choice($._module_export_name, alias('as', $.identifier))), 'as', field('alias', name))
         );
         return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
       },
