@@ -5200,11 +5200,7 @@
       "required": true,
       "types": [
         {
-          "type": "infer_type",
-          "named": true
-        },
-        {
-          "type": "primary_type",
+          "type": "type",
           "named": true
         }
       ]

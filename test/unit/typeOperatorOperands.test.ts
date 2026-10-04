@@ -1,7 +1,8 @@
-import { Edit, Parser, Query, type Node, type Point, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type OperandCapture = readonly [number, string, number, number];
@@ -42,7 +43,11 @@ for (const dialect of ['typescript', 'tsx']) {
       const offset = source.indexOf('|');
       for (const operator of ['&', '|']) {
         const next = source.slice(0, offset) + operator + source.slice(offset + 1);
-        tree.edit(
+        const previous: Tree = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
           new Edit({
             startIndex: offset,
             oldEndIndex: offset + 1,
@@ -50,24 +55,17 @@ for (const dialect of ['typescript', 'tsx']) {
             startPosition: position(source, offset),
             oldEndPosition: position(source, offset + 1),
             newEndPosition: position(next, offset + 1),
-          })
+          }),
+          (incremental, fresh) => {
+            const expected = referenceOperands(next, dialect);
+            expect(operandCaptures(query!, incremental)).toEqual(expected);
+            expect(operandCaptures(query!, fresh)).toEqual(expected);
+            const aliases = referenceOperands(next, dialect, true);
+            expect(operandCaptures(aliasQuery!, incremental)).toEqual(aliases);
+            expect(operandCaptures(aliasQuery!, fresh)).toEqual(aliases);
+          }
         );
-        const previous: Tree = tree;
-        tree = parser.parse(next, previous)!;
         previous.delete();
-        const fresh = parser.parse(next)!;
-        try {
-          expect(tree.rootNode.hasError).toBe(false);
-          expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
-          const expected = referenceOperands(next, dialect);
-          expect(operandCaptures(query, tree)).toEqual(expected);
-          expect(operandCaptures(query, fresh)).toEqual(expected);
-          const aliases = referenceOperands(next, dialect, true);
-          expect(operandCaptures(aliasQuery, tree)).toEqual(aliases);
-          expect(operandCaptures(aliasQuery, fresh)).toEqual(aliases);
-        } finally {
-          fresh.delete();
-        }
         source = next;
       }
     } finally {
@@ -77,11 +75,6 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
-}
-
-function position(source: string, index: number): Point {
-  const lines = source.slice(0, index).split('\n');
-  return { row: lines.length - 1, column: lines.at(-1)!.length };
 }
 
 function referenceOperands(source: string, dialect: string, aliasesOnly = false): OperandCapture[] {
@@ -120,18 +113,4 @@ function operandCaptures(query: Query, tree: Tree): OperandCapture[] {
       return [operator.startIndex, operand.text, operand.startIndex, operand.endIndex] as const;
     })
     .toSorted((a, b) => a[0] - b[0]);
-}
-
-function snapshot(node: Node): unknown {
-  return [
-    node.type,
-    node.isNamed,
-    node.isMissing,
-    node.startIndex,
-    node.endIndex,
-    node.startPosition,
-    node.endPosition,
-    node.children.map((_, i) => node.fieldNameForChild(i)),
-    node.children.map(snapshot),
-  ];
 }
