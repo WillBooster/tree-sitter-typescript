@@ -18,51 +18,66 @@ abstract class Base { abstract value: number; abstract read(): number; }
 class Derived extends Base { value = abstract; read() { return abstract; } }
 `;
 
+const QualifiedSource = `interface abstract {}
+interface Named extends abstract {}
+namespace abstract { export interface Item {} export type Generic<T> = T; }
+let value: abstract.Item;
+let generic: abstract.Generic<string>;
+interface Qualified extends abstract.Item {}
+class Implements implements abstract.Item {}
+namespace outer { export namespace abstract { export interface Item {} } }
+let nested: outer.abstract.Item;
+`;
+
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} contextual abstract names through edits`, async () => {
-    await Parser.init();
-    const parser = new Parser();
-    let query: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Source;
-    try {
-      const language = await loadCurrentWasmBuild(dialect);
-      parser.setLanguage(language);
-      query = new Query(language, '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name');
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      expect(captures(query, tree)).toEqual(referenceNames(source, dialect));
-      const offset = source.indexOf('abstract: abstract');
-      for (const name of ['ordinary', 'abstract']) {
-        const next = source.slice(0, offset) + name + source.slice(offset + 8);
-        const previous: Tree = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: offset,
-            oldEndIndex: offset + 8,
-            newEndIndex: offset + name.length,
-            startPosition: position(source, offset),
-            oldEndPosition: position(source, offset + 8),
-            newEndPosition: position(next, offset + name.length),
-          }),
-          (incremental, fresh) => {
-            const expected = referenceNames(next, dialect);
-            expect(captures(query!, incremental)).toEqual(expected);
-            expect(captures(query!, fresh)).toEqual(expected);
-          }
-        );
-        previous.delete();
-        source = next;
+  for (const [description, initialSource, offset] of [
+    ['contextual names', Source, Source.indexOf('abstract: abstract')],
+    ['heritage and qualified type names', QualifiedSource, QualifiedSource.indexOf('abstract.Item')],
+  ] as const) {
+    test(`retains ${dialect} abstract ${description} through edits`, async () => {
+      await Parser.init();
+      const parser = new Parser();
+      let query: Query | undefined;
+      let tree: Tree | undefined;
+      let source: string = initialSource;
+      try {
+        const language = await loadCurrentWasmBuild(dialect);
+        parser.setLanguage(language);
+        query = new Query(language, '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name');
+        tree = parser.parse(source)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(captures(query, tree)).toEqual(referenceNames(source, dialect));
+        for (const name of ['ordinary', 'abstract']) {
+          const next = source.slice(0, offset) + name + source.slice(offset + 8);
+          const previous: Tree = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: offset,
+              oldEndIndex: offset + 8,
+              newEndIndex: offset + name.length,
+              startPosition: position(source, offset),
+              oldEndPosition: position(source, offset + 8),
+              newEndPosition: position(next, offset + name.length),
+            }),
+            (incremental, fresh) => {
+              const expected = referenceNames(next, dialect);
+              expect(captures(query!, incremental)).toEqual(expected);
+              expect(captures(query!, fresh)).toEqual(expected);
+            }
+          );
+          previous.delete();
+          source = next;
+        }
+      } finally {
+        tree?.delete();
+        query?.delete();
+        parser.delete();
       }
-    } finally {
-      tree?.delete();
-      query?.delete();
-      parser.delete();
-    }
-  });
+    });
+  }
 }
 
 function referenceNames(source: string, dialect: string): Capture[] {

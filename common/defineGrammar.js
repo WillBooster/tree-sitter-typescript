@@ -168,6 +168,7 @@ module.exports = function defineGrammar(dialect) {
       [$.class],
 
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
+      [$.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
       [$._call_signature, $.constructor_type],
@@ -879,7 +880,11 @@ module.exports = function defineGrammar(dialect) {
           commaSep1(
             field(
               'type',
-              choice($._type_identifier, $.nested_type_identifier, alias($._heritage_generic_type, $.generic_type))
+              choice(
+                $._type_reference_identifier,
+                $.nested_type_identifier,
+                alias($._heritage_generic_type, $.generic_type)
+              )
             )
           )
         ),
@@ -1346,7 +1351,7 @@ function nestedIdentifierTail($) {
       'property',
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
-        alias(choice('in', 'out'), $.property_identifier)
+        alias(choice('in', 'out', 'abstract'), $.property_identifier)
       )
     ),
   ];
@@ -1402,7 +1407,7 @@ function nestedTypeIdentifier($, generic) {
         'module',
         choice(
           $.identifier,
-          alias(choice('in', 'out'), $.identifier),
+          alias(choice('in', 'out', 'abstract'), $.identifier),
           $.nested_identifier,
           alias($._in_nested_identifier, $.nested_identifier)
         )

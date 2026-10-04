@@ -4026,6 +4026,10 @@
                       {
                         "type": "STRING",
                         "value": "out"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "abstract"
                       }
                     ]
                   },
@@ -9958,6 +9962,10 @@
                       {
                         "type": "STRING",
                         "value": "out"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "abstract"
                       }
                     ]
                   },
@@ -11056,6 +11064,10 @@
                       {
                         "type": "STRING",
                         "value": "out"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "abstract"
                       }
                     ]
                   },
@@ -11169,7 +11181,7 @@
                 "members": [
                   {
                     "type": "SYMBOL",
-                    "name": "_type_identifier"
+                    "name": "_type_reference_identifier"
                   },
                   {
                     "type": "SYMBOL",
@@ -11204,7 +11216,7 @@
                       "members": [
                         {
                           "type": "SYMBOL",
-                          "name": "_type_identifier"
+                          "name": "_type_reference_identifier"
                         },
                         {
                           "type": "SYMBOL",
@@ -12538,6 +12550,10 @@
                       {
                         "type": "STRING",
                         "value": "out"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "abstract"
                       }
                     ]
                   },
@@ -14455,6 +14471,11 @@
     ],
     [
       "nested_identifier",
+      "nested_type_identifier",
+      "_generic_nested_type_identifier",
+      "_type_arguments_target"
+    ],
+    [
       "nested_type_identifier",
       "_generic_nested_type_identifier",
       "_type_arguments_target"
