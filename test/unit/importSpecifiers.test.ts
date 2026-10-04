@@ -18,7 +18,15 @@ test('matches TypeScript on contextual named-import modifiers', async () => {
         'typeof as x',
         'typeof as as',
         'type as',
+        'type as as',
         'type as as as',
+        'as as type',
+        'type value',
+        'type value as local',
+        '"remote" as local',
+        'type "remote" as local',
+        'type as, value as local',
+        'type as as as, "remote" as local',
       ]) {
         const source = `import { ${specifiers} } from 'x';`;
         const reference = ts.transpileModule(source, {
@@ -27,7 +35,29 @@ test('matches TypeScript on contextual named-import modifiers', async () => {
         });
         const tree = parser.parse(source)!;
         try {
-          expect(tree.rootNode.hasError, source).toBe((reference.diagnostics?.length ?? 0) > 0);
+          const invalid = (reference.diagnostics?.length ?? 0) > 0;
+          expect(tree.rootNode.hasError, source).toBe(invalid);
+          if (!invalid) {
+            const ast = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.Latest, true);
+            const expected = ast.statements.filter(ts.isImportDeclaration).flatMap((statement) => {
+              const bindings = statement.importClause?.namedBindings;
+              return bindings && ts.isNamedImports(bindings)
+                ? bindings.elements.map((specifier) => ({
+                    name: (specifier.propertyName ?? specifier.name).getText(ast),
+                    alias: specifier.propertyName ? specifier.name.getText(ast) : undefined,
+                    typeOnly: specifier.isTypeOnly,
+                  }))
+                : [];
+            });
+            expect(
+              tree.rootNode.descendantsOfType('import_specifier').map((specifier) => ({
+                name: specifier.childForFieldName('name')?.text,
+                alias: specifier.childForFieldName('alias')?.text,
+                typeOnly: specifier.children.some((child) => !child.isNamed && child.type === 'type'),
+              })),
+              source
+            ).toEqual(expected);
+          }
         } finally {
           tree.delete();
         }
