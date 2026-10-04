@@ -220,6 +220,129 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} ends an await identifier statement before a namespace declaration`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    const query = new Query(
+      language,
+      '(expression_statement (identifier) @await)\n(expression_statement (internal_module) @namespace)'
+    );
+    try {
+      for (const comment of ['\n', '/* boundary\n */', '\n// boundary\n']) {
+        for (const wrapped of [false, true]) {
+          const statements = `await${comment}namespace N {}`;
+          const tree = parser.parse(wrapped ? `function f(){${statements}}` : statements);
+          assert.ok(tree);
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.descendantsOfType('await_expression')).toHaveLength(0);
+            const captures = query.captures(tree.rootNode);
+            expect(captures.filter(({ name }) => name === 'await').map(({ node }) => node.text)).toEqual(['await']);
+            expect(captures.filter(({ name }) => name === 'namespace').map(({ node }) => node.text)).toEqual([
+              'namespace N {}',
+            ]);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+      for (const operand of ['namespace(x)', 'namespace.x', 'namespace / g / x']) {
+        const tree = parser.parse(`async function f(){return await\n${operand};}`);
+        assert.ok(tree);
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.descendantsOfType('internal_module')).toHaveLength(0);
+          expect(tree.rootNode.descendantsOfType('await_expression').map((node) => node.text)).toEqual([
+            `await\n${operand.startsWith('namespace /') ? 'namespace' : operand}`,
+          ]);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} preserves i-initial await using bindings and genuine binary keywords`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    try {
+      for (const name of ['i', 'install', 'inside', 'instanceofX', 'i漢字']) {
+        const source = `async function f(){await using ${name} = g(); for(await using ${name} of values){} for(await using ${name} = g();;){}}`;
+        const tree = parser.parse(source);
+        assert.ok(tree);
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.descendantsOfType('await_expression')).toHaveLength(0);
+          expect(tree.rootNode.descendantsOfType('using_declaration')[0]?.childForFieldName('kind')?.text).toBe(
+            'await'
+          );
+          expect(
+            tree.rootNode.descendantsOfType('variable_declarator').map((node) => node.childForFieldName('name')?.text)
+          ).toEqual([name, name]);
+          expect(tree.rootNode.descendantsOfType('for_in_statement')[0]?.childForFieldName('left')?.text).toBe(name);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const operator of ['in', 'instanceof']) {
+        const tree = parser.parse(`async function f(){return await g<T>(x) ${operator} values;}`);
+        assert.ok(tree);
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          const [binary] = tree.rootNode.descendantsOfType('binary_expression');
+          expect(binary?.childForFieldName('left')?.text).toBe('await g<T>(x)');
+          expect(binary?.childForFieldName('operator')?.text).toBe(operator);
+          expect(binary?.childForFieldName('right')?.text).toBe('values');
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} continues qualified types across comments while ending before decimal statements`, () => {
+    const parser = new Parser();
+    parser.setLanguage(language);
+    try {
+      for (const comment of ['// boundary\n', '/* boundary\n */', '/* boundary\n *//* second */']) {
+        const tree = parser.parse(`type X = A${comment}.B; type Y = typeof a${comment}.b;`);
+        assert.ok(tree);
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
+            'type_alias_declaration',
+            'type_alias_declaration',
+          ]);
+          expect(
+            tree.rootNode
+              .descendantsOfType('type_alias_declaration')
+              .map((node) => node.childForFieldName('value')?.text)
+          ).toEqual([`A${comment}.B`, `typeof a${comment}.b`]);
+        } finally {
+          tree.delete();
+        }
+        const decimal = parser.parse(`type X = A${comment}.1;`);
+        assert.ok(decimal);
+        try {
+          expect(decimal.rootNode.hasError).toBe(false);
+          expect(
+            decimal.rootNode.descendantsOfType('type_alias_declaration')[0]?.childForFieldName('value')?.text
+          ).toBe('A');
+          expect(decimal.rootNode.descendantsOfType('expression_statement').map((node) => node.text)).toEqual(['.1;']);
+        } finally {
+          decimal.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} excludes trailing comments from typed function bodies while preserving statement queries`, () => {
     const parser = new Parser();
     parser.setLanguage(language);

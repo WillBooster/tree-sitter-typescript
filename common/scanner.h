@@ -271,9 +271,7 @@ typedef enum {
     LINE_BREAK_BY_NEXT_TOKEN,
     // After `return`, `yield`, `break`, `continue`, or `debugger`, which nothing on the next line can continue.
     LINE_BREAK_ENDS,
-    // After a declared name without an initializer: only `=` or `,` continues the declaration.
     LINE_BREAK_AFTER_BINDING_NAME,
-    // After a class field name without an initializer: only `=` (an initializer) or `(` (a method) continues it.
     LINE_BREAK_AFTER_FIELD_NAME,
     // After `static` at the start of a class member: a line break continues the member unless a `}`, a `@` (decorators
     // precede modifiers), or the end of input follows, which leaves a field named `static`.
@@ -322,11 +320,11 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 if (comment_condition) {
                     bool before_slash = scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT;
                     if (before_slash || (lexer->lookahead != ',' && lexer->lookahead != '=' &&
-                                         lexer->lookahead != '|' && lexer->lookahead != '&')) {
+                                         lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '.')) {
                         return true;
                     }
-                    if (lexer->lookahead == '|' || lexer->lookahead == '&') {
-                        return false;
+                    if (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '.') {
+                        return scan_after_line_break(lexer, valid_symbols, false, rule, scanned_content);
                     }
                 }
                 line_break_in_block_comment = result == ACCEPT_IN_BLOCK_COMMENT;
@@ -400,7 +398,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                     lexer->result_symbol = AWAIT_YIELD_IDENTIFIER_START;
                     return true;
                 }
-                if (scan_whitespace_and_comments(lexer, scanned_content, true, true) != REJECT && lexer->lookahead == ':') {
+                bool followed_by_trivia = scan_whitespace_and_comments(lexer, scanned_content, true, true) != REJECT;
+                if (followed_by_trivia && lexer->lookahead == ':') {
                     return true;
                 }
                 if (ascii_word && strcmp(word, "async") == 0 && is_identifier_part(lexer->lookahead)) {
@@ -423,7 +422,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                 if (strcmp(word, "import") == 0) {
                     return lexer->lookahead != '(' && lexer->lookahead != '.';
                 }
-                if ((strcmp(word, "using") == 0 || strcmp(word, "let") == 0) && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+                if ((strcmp(word, "using") == 0 || strcmp(word, "let") == 0 ||
+                     (strcmp(word, "namespace") == 0 && followed_by_trivia)) && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
                     char binding[16] = {0};
                     bool ascii_binding = scan_identifier(lexer, binding, sizeof(binding), true);
                     return !ascii_binding || (strcmp(binding, "in") != 0 && strcmp(binding, "instanceof") != 0);
@@ -529,7 +529,6 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
         case '/':
             return false;
 
-        // Insert a semicolon before decimals literals but not otherwise.
         case '.':
             skip(lexer);
             return is_ascii_digit(lexer->lookahead);
@@ -1167,7 +1166,11 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             return after_postfix || saw_newline || lexer->lookahead == '=';
         case '<':
             return after_postfix;
-        case 'i':
+        case 'i': {
+            char word[16] = {0};
+            bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
+            return saw_newline || (ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0));
+        }
         case '=':
         case '*':
         case '%':
@@ -1231,7 +1234,7 @@ static bool scan_await_keyword(TSLexer *lexer) {
         return false;
     }
     lexer->mark_end(lexer);
-    // Record the operand decision on both keyword and identifier tokens so restored nodes cannot keep stale roles.
+    // Probing past mark_end adds lookahead dependencies so operand edits invalidate restored keyword/identifier roles.
     // Advancing without skipping after mark_end preserves the consuming keyword's start across probed comments.
     for (unsigned words = 0; words <= 2; words++) {
         if (scan_whitespace_and_comments(lexer, &scanned_content, true, false) == REJECT ||
