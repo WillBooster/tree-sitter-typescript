@@ -2,6 +2,7 @@
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'abstract',
   'accessor',
   'declare',
   'global',
@@ -1331,7 +1332,7 @@ module.exports = function defineGrammar(dialect) {
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
       _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
 
-      _type_reference_identifier: ($) => choice($._type_identifier, alias('in', $.type_identifier)),
+      _type_reference_identifier: ($) => choice($._type_identifier, alias(choice('in', 'abstract'), $.type_identifier)),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },

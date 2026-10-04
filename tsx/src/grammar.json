@@ -8749,6 +8749,10 @@
             "members": [
               {
                 "type": "STRING",
+                "value": "abstract"
+              },
+              {
+                "type": "STRING",
                 "value": "accessor"
               },
               {
@@ -8893,6 +8897,10 @@
     "_reserved_identifier": {
       "type": "CHOICE",
       "members": [
+        {
+          "type": "STRING",
+          "value": "abstract"
+        },
         {
           "type": "STRING",
           "value": "accessor"
@@ -14313,8 +14321,17 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "STRING",
-            "value": "in"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "in"
+              },
+              {
+                "type": "STRING",
+                "value": "abstract"
+              }
+            ]
           },
           "named": true,
           "value": "type_identifier"
