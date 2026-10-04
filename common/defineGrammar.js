@@ -939,16 +939,7 @@ module.exports = function defineGrammar(dialect) {
 
       asserts_annotation: ($) => seq(seq(':', $.asserts)),
 
-      type: ($) =>
-        choice(
-          $.primary_type,
-          $.function_type,
-          $.readonly_type,
-          $.constructor_type,
-          $.infer_type,
-          prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
-          prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression))
-        ),
+      type: ($) => choice($.primary_type, $.function_type, $.readonly_type, $.constructor_type, $.infer_type),
 
       tuple_parameter: ($) =>
         seq(
@@ -1028,6 +1019,8 @@ module.exports = function defineGrammar(dialect) {
           $.flow_maybe_type,
           $.type_query,
           $.index_type_query,
+          prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
+          prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression)),
           alias($.this, $.this_type),
           $.existential_type,
           $.literal_type,
