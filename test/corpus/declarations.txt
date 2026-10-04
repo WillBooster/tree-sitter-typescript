@@ -2087,3 +2087,103 @@ export { type as as as } from 'x';
         (identifier)))
     (string
       (string_fragment))))
+
+==================
+Contextual names in imports
+==================
+
+import { type as } from 'x';
+import { type as as as } from 'x';
+import { type as, x } from 'x';
+import { as } from 'x';
+import { as as type } from 'x';
+import { type as as } from 'x';
+import { type type as as } from 'x';
+import type { as as type } from 'x';
+import { "type" as as } from 'x';
+import { type "as" as type } from 'x';
+
+---
+
+(program
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier))
+        (import_specifier
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (identifier)
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (string
+            (string_fragment))
+          (identifier))))
+    (string
+      (string_fragment)))
+  (import_statement
+    (import_clause
+      (named_imports
+        (import_specifier
+          (string
+            (string_fragment))
+          (identifier))))
+    (string
+      (string_fragment))))
