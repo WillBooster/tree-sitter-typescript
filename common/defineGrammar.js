@@ -503,7 +503,7 @@ module.exports = function defineGrammar(dialect) {
           field('name', name),
           seq(field('name', choice($._module_export_name, alias('as', $.identifier))), 'as', field('alias', name))
         );
-        return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
+        return choice(specifier, prec.dynamic(1, seq('type', specifier)));
       },
 
       import_attribute: ($) => seq(choice('with', 'assert'), $.object),

@@ -1387,17 +1387,8 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "STRING",
-                    "value": "type"
-                  },
-                  {
-                    "type": "STRING",
-                    "value": "typeof"
-                  }
-                ]
+                "type": "STRING",
+                "value": "type"
               },
               {
                 "type": "CHOICE",
