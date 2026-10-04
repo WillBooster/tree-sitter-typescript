@@ -48,6 +48,36 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} distinguishes contextual resource names from expression initializers`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const boundary of [' ', '\n', '/* comment */', '/*\n*/', '// comment\n']) {
+        const source = `for(using${boundary}? a : b;;){}`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.descendantsOfType('ternary_expression')).toHaveLength(1);
+          expect(tree.rootNode.descendantsOfType('using_declaration')).toHaveLength(0);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const [source, hasError] of [
+        ['for (using of of items) {}', true],
+        ['for (await using of of items) {}', false],
+      ] as const) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(hasError);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} ends await-using expressions when a newline rejects a resource binding`, () => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -142,7 +172,7 @@ for (const dialect of ['typescript', 'tsx']) {
               if (inserted) {
                 expect(tree.rootNode.hasError, source).toBe(false);
                 expect(tree.rootNode.firstNamedChild?.type).toBe('export_statement');
-                expect(tree.rootNode.firstNamedChild?.childForFieldName('declaration')).toBeDefined();
+                expect(tree.rootNode.firstNamedChild?.childForFieldName('declaration'), source).toBeTruthy();
               }
               expect(tree.rootNode.toString(), source).toBe(fresh.rootNode.toString());
               if (inserted || declaration.includes('Named') || declaration.includes('named')) {

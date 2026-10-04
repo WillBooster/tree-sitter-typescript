@@ -1197,7 +1197,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             return (infix_operator || (saw_newline && first_binding)) && valid_symbols[AWAIT_OPERAND_END];
         }
         if (!valid_symbols[AWAIT_OPERAND_END]) {
-            return false;
+            return valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?' && scan_ternary_qmark(lexer);
         }
     }
     if (after_postfix && lexer->lookahead != '(' && lexer->lookahead != '[' && lexer->lookahead != '`') {
