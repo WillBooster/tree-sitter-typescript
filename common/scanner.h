@@ -292,7 +292,6 @@ typedef enum {
     // After the source of an import or re-export: only the `with` of its attributes continues it.
     LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES,
     LINE_BREAK_AFTER_AWAIT_KEYWORD,
-    LINE_BREAK_AFTER_ABSTRACT_TYPE_NAME,
 } LineBreakRule;
 
 static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow, LineBreakRule rule, bool *scanned_content);
@@ -385,15 +384,14 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
     if (!before_slash && lexer->lookahead == ';') {
         return false;
     }
+    if (valid_symbols[LINE_BREAK_AFTER_ABSTRACT_TYPE] && !valid_symbols[ERROR_RECOVERY] &&
+        !before_slash && lexer->lookahead == 'n') {
+        *scanned_content = true;
+        char word[4] = {0};
+        bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
+        return !ascii_word || strcmp(word, "new") != 0;
+    }
     switch (rule) {
-        case LINE_BREAK_AFTER_ABSTRACT_TYPE_NAME:
-            if (!before_slash && lexer->lookahead == 'n') {
-                *scanned_content = true;
-                char word[4] = {0};
-                bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
-                return !ascii_word || strcmp(word, "new") != 0;
-            }
-            break;
         case LINE_BREAK_AFTER_AWAIT_KEYWORD:
             if (!before_slash && lexer->lookahead == '{') {
                 lexer->result_symbol = AWAIT_IDENTIFIER_LINE_BREAK;
@@ -1428,9 +1426,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         bool after_block_arrow = valid_symbols[ARROW_FUNCTION_BLOCK_END];
         bool scanned_content = false;
         LineBreakRule rule = LINE_BREAK_BY_NEXT_TOKEN;
-        if (valid_symbols[LINE_BREAK_AFTER_ABSTRACT_TYPE] && !valid_symbols[ERROR_RECOVERY]) {
-            rule = LINE_BREAK_AFTER_ABSTRACT_TYPE_NAME;
-        } else if (valid_symbols[LINE_BREAK_AFTER_AWAIT]) {
+        if (valid_symbols[LINE_BREAK_AFTER_AWAIT]) {
             rule = LINE_BREAK_AFTER_AWAIT_KEYWORD;
         } else if (valid_symbols[LINE_BREAK_ENDS_STATEMENT] || (valid_symbols[TYPE_MEMBER_SEMICOLON] && !valid_symbols[LINE_BREAK_AFTER_FIELD])) {
             rule = LINE_BREAK_ENDS;

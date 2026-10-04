@@ -38,11 +38,23 @@ type Readonly = { readonly [abstract in keyof Input]: Input[abstract] };
 type Optional = { [abstract in keyof Input]?: Input[abstract] };
 `;
 
+const MemberSource = `type abstract = number;
+interface Callable { value: abstract
+  <T>(value: T): T;
+  other: abstract
+  (value: string): void;
+}
+type CallableType = { value: abstract
+  <T>(value: T): T;
+};
+`;
+
 for (const dialect of ['typescript', 'tsx']) {
   for (const [description, initialSource, offset] of [
     ['contextual names', Source, Source.indexOf('abstract: abstract')],
     ['heritage and qualified type names', QualifiedSource, QualifiedSource.indexOf('abstract.Item')],
     ['mapped type parameters', MappedSource, MappedSource.indexOf('abstract')],
+    ['type member boundaries', MemberSource, MemberSource.indexOf('abstract\n')],
   ] as const) {
     test(`retains ${dialect} abstract ${description} through edits`, async () => {
       await Parser.init();
@@ -53,10 +65,13 @@ for (const dialect of ['typescript', 'tsx']) {
       try {
         const language = await loadCurrentWasmBuild(dialect);
         parser.setLanguage(language);
-        query = new Query(language, '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name');
+        query = new Query(
+          language,
+          '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name\n(call_signature) @signature'
+        );
         tree = parser.parse(source)!;
         expect(tree.rootNode.hasError).toBe(false);
-        expect(captures(query, tree)).toEqual(referenceNames(source, dialect));
+        expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
         for (const name of ['ordinary', 'abstract']) {
           const next = source.slice(0, offset) + name + source.slice(offset + 8);
           const previous: Tree = tree;
@@ -73,7 +88,7 @@ for (const dialect of ['typescript', 'tsx']) {
               newEndPosition: position(next, offset + name.length),
             }),
             (incremental, fresh) => {
-              const expected = referenceNames(next, dialect);
+              const expected = referenceRanges(next, dialect);
               expect(captures(query!, incremental)).toEqual(expected);
               expect(captures(query!, fresh)).toEqual(expected);
             }
@@ -90,7 +105,7 @@ for (const dialect of ['typescript', 'tsx']) {
   }
 }
 
-function referenceNames(source: string, dialect: string): Capture[] {
+function referenceRanges(source: string, dialect: string): Capture[] {
   const reference = ts.createSourceFile(
     `abstract.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
     source,
@@ -101,6 +116,10 @@ function referenceNames(source: string, dialect: string): Capture[] {
   const names: Capture[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && node.text === 'abstract') names.push([node.getStart(reference), node.getEnd()]);
+    if (ts.isCallSignatureDeclaration(node)) {
+      const end = node.getEnd();
+      names.push([node.getStart(reference), source[end - 1] === ';' ? end - 1 : end]);
+    }
     ts.forEachChild(node, visit);
   };
   visit(reference);
@@ -110,7 +129,7 @@ function referenceNames(source: string, dialect: string): Capture[] {
 function captures(query: Query, tree: Tree): Capture[] {
   return query
     .captures(tree.rootNode)
-    .filter(({ node }) => node.text === 'abstract')
+    .filter(({ node }) => node.text === 'abstract' || node.type === 'call_signature')
     .map(({ node }) => [node.startIndex, node.endIndex] as const)
     .toSorted((a, b) => a[0] - b[0]);
 }
