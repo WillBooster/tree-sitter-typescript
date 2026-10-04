@@ -2010,6 +2010,11 @@ export type { type };
 export { type as renamed };
 export { type type as TypeName };
 
+export { type as };
+export { type as } from 'x';
+export { type as as as };
+export { type as as as } from 'x';
+
 --------------------------------------------------------------------------------
 
 (program
@@ -2059,4 +2064,26 @@ export { type type as TypeName };
     (export_clause
       (export_specifier
         (identifier)
-        (identifier)))))
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)))
+    (string
+      (string_fragment)))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier))))
+  (export_statement
+    (export_clause
+      (export_specifier
+        (identifier)
+        (identifier)))
+    (string
+      (string_fragment))))

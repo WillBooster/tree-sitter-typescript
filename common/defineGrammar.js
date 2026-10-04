@@ -145,6 +145,9 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$.export_specifier, $._local_export_specifier, $._module_export_name],
+      [$.export_specifier, $._module_export_name],
+      [$.export_specifier, $._local_export_specifier],
       ...withTypeArgumentsTarget($, previous),
       [$._type_arguments_target, $.using_declaration],
       [$._type_arguments_target, $._for_header, $._for_using_declaration],
@@ -475,16 +478,21 @@ module.exports = function defineGrammar(dialect) {
       // tsx only. See jsx_opening_element.
       jsx_self_closing_element: ($) => prec.dynamic(-1, seq($._jsx_start_opening_element, '/>')),
 
-      export_specifier: (_, previous) => seq(optional(choice('type', 'typeof')), previous),
+      export_specifier: ($) => {
+        const name = choice($._module_export_name, alias('as', $.identifier));
+        const specifier = seq(field('name', name), optional(seq('as', field('alias', name))));
+        return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
+      },
 
       _module_export_name: ($, previous) => choice(previous, alias('type', $.identifier)),
 
-      _local_export_specifier: ($) =>
-        seq(
-          optional(choice('type', 'typeof')),
-          field('name', choice($.identifier, alias('type', $.identifier), $.string)),
-          optional(seq('as', field('alias', $._module_export_name)))
-        ),
+      _local_export_specifier: ($) => {
+        const specifier = seq(
+          field('name', choice($.identifier, alias('type', $.identifier), alias('as', $.identifier), $.string)),
+          optional(seq('as', field('alias', choice($._module_export_name, alias('as', $.identifier)))))
+        );
+        return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
+      },
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
 
