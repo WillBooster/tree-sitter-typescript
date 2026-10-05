@@ -101,6 +101,7 @@ for (const dialect of ['typescript', 'tsx']) {
         tree = parser.parse(source)!;
         expect(tree.rootNode.hasError).toBe(false);
         expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
+        expectNameKinds(parser, query, tree, source, dialect);
         if (description.includes('generic'))
           expect(parameterCaptures(query, tree)).toEqual(referenceParameters(source, dialect));
         for (const name of ['ordinary', 'abstract']) {
@@ -122,6 +123,8 @@ for (const dialect of ['typescript', 'tsx']) {
               const expected = referenceRanges(next, dialect);
               expect(captures(query!, incremental)).toEqual(expected);
               expect(captures(query!, fresh)).toEqual(expected);
+              expectNameKinds(parser, query!, incremental, next, dialect);
+              expectNameKinds(parser, query!, fresh, next, dialect);
               if (description.includes('generic')) {
                 expect(parameterCaptures(query!, incremental)).toEqual(referenceParameters(next, dialect));
                 expect(parameterCaptures(query!, fresh)).toEqual(referenceParameters(next, dialect));
@@ -140,7 +143,41 @@ for (const dialect of ['typescript', 'tsx']) {
   }
 }
 
+function expectNameKinds(parser: Parser, query: Query, tree: Tree, source: string, dialect: string): void {
+  const ranges = referenceRanges(source, dialect);
+  let ordinarySource = source;
+  for (const [start, end] of ranges) {
+    if (source.slice(start, end) === 'abstract')
+      ordinarySource = ordinarySource.slice(0, start) + 'ordinary' + ordinarySource.slice(end);
+  }
+  const ordinary = parser.parse(ordinarySource)!;
+  try {
+    expect(ordinary.rootNode.hasError).toBe(false);
+    expect(kinds(tree)).toEqual(kinds(ordinary));
+  } finally {
+    ordinary.delete();
+  }
+
+  function kinds(current: Tree): readonly (readonly [string, number, number])[] {
+    return query
+      .captures(current.rootNode)
+      .filter(
+        ({ name, node }) =>
+          name !== 'parameter' && ranges.some(([start, end]) => node.startIndex === start && node.endIndex === end)
+      )
+      .map(({ node }) => [node.type, node.startIndex, node.endIndex] as const)
+      .toSorted((a, b) => a[1] - b[1]);
+  }
+}
+
 function referenceRanges(source: string, dialect: string): Capture[] {
+  expect(
+    ts.transpileModule(source, {
+      fileName: dialect === 'tsx' ? 'abstract.tsx' : 'abstract.ts',
+      reportDiagnostics: true,
+      compilerOptions: { jsx: ts.JsxEmit.Preserve },
+    }).diagnostics
+  ).toHaveLength(0);
   const reference = ts.createSourceFile(
     `abstract.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
     source,
@@ -228,13 +265,6 @@ function referenceParameters(source: string, dialect: string): Capture[] {
     true,
     dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   );
-  expect(
-    ts.transpileModule(source, {
-      fileName: dialect === 'tsx' ? 'generic.tsx' : 'generic.ts',
-      reportDiagnostics: true,
-      compilerOptions: { jsx: ts.JsxEmit.Preserve },
-    }).diagnostics
-  ).toHaveLength(0);
   const names: Capture[] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isTypeParameterDeclaration(node)) names.push([node.name.getStart(reference), node.name.getEnd()]);

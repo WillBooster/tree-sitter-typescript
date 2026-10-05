@@ -226,6 +226,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
+      labeled_statement: (_, previous) => prec.dynamic(-1, previous),
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),

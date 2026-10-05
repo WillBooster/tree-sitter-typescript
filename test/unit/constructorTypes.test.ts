@@ -34,7 +34,18 @@ type I = abstract
 ne;
 `;
 
-const RecoverySource = `${ContinuationSource}type J = abstract
+const RecoverySource = `type abstract = number;
+function newFoo() {}
+const ne = 1;
+type F = abstract
+new () => string;
+type G = abstract;
+new Date();
+type H = abstract
+newFoo();
+type I = abstract
+ne;
+type J = abstract
 /*c*/new () => number;
 `;
 
@@ -109,56 +120,61 @@ for (const dialect of ['typescript', 'tsx']) {
 }
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} constructor boundaries through recovery edits`, async () => {
-    await Parser.init();
-    const parser = new Parser();
-    let query: Query | undefined;
-    let tree: Tree | undefined;
-    let source = RecoverySource;
-    const undo: [number, number, string][] = [];
-    try {
-      parser.setLanguage(await loadCurrentWasmBuild(dialect));
-      query = new Query(parser.language!, '(constructor_type type: (_) @result) @factory');
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
-      for (const [start, length, text] of RecoveryEdits) {
-        undo.unshift([start, text.length, source.slice(start, start + length)]);
-        edit(start, length, text);
+  for (const [description, initialSource, edits] of [
+    ['constructor boundaries', RecoverySource, RecoveryEdits],
+    ['abstract alias statements', 'type G = abstract; new Date();', [[4, 3, ':']]],
+  ] as const) {
+    test(`retains ${dialect} ${description} through recovery edits`, async () => {
+      await Parser.init();
+      const parser = new Parser();
+      let query: Query | undefined;
+      let tree: Tree | undefined;
+      let source: string = initialSource;
+      const undo: [number, number, string][] = [];
+      try {
+        parser.setLanguage(await loadCurrentWasmBuild(dialect));
+        query = new Query(parser.language!, '(constructor_type type: (_) @result) @factory');
+        tree = parser.parse(source)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
+        for (const [start, length, text] of edits) {
+          undo.unshift([start, text.length, source.slice(start, start + length)]);
+          edit(start, length, text);
+        }
+        for (const [start, length, text] of undo) edit(start, length, text);
+        expect(source).toBe(initialSource);
+        expect(tree.rootNode.hasError).toBe(false);
+      } finally {
+        tree?.delete();
+        query?.delete();
+        parser.delete();
       }
-      for (const [start, length, text] of undo) edit(start, length, text);
-      expect(source).toBe(RecoverySource);
-      expect(tree.rootNode.hasError).toBe(false);
-    } finally {
-      tree?.delete();
-      query?.delete();
-      parser.delete();
-    }
 
-    function edit(start: number, length: number, text: string): void {
-      const next = source.slice(0, start) + text + source.slice(start + length);
-      const previous = tree!;
-      tree = compareEditedTree(
-        parser,
-        previous,
-        next,
-        new Edit({
-          startIndex: start,
-          oldEndIndex: start + length,
-          newEndIndex: start + text.length,
-          startPosition: position(source, start),
-          oldEndPosition: position(source, start + length),
-          newEndPosition: position(next, start + text.length),
-        }),
-        (incremental, fresh) => {
-          expect(returnCaptures(query!, incremental)).toEqual(returnCaptures(query!, fresh));
-        },
-        true
-      );
-      previous.delete();
-      source = next;
-    }
-  });
+      function edit(start: number, length: number, text: string): void {
+        const next = source.slice(0, start) + text + source.slice(start + length);
+        const previous = tree!;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + length,
+            newEndIndex: start + text.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + length),
+            newEndPosition: position(next, start + text.length),
+          }),
+          (incremental, fresh) => {
+            expect(returnCaptures(query!, incremental)).toEqual(returnCaptures(query!, fresh));
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+      }
+    });
+  }
 }
 
 function referenceReturns(source: string, dialect: string): ReturnCapture[] {
