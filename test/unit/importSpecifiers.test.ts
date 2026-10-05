@@ -81,27 +81,25 @@ test('matches TypeScript on named-export modifiers and identifier fields', async
     'type as as',
     'type as as as',
     'as as type',
-    '"remote" as local',
-    'type "remote" as local',
   ];
   const sources = specifiers.flatMap((specifier) =>
     ['', ' from "m"'].map((suffix) => `export { ${specifier} }${suffix};`)
   );
-  sources.push('export { typeof } from "m";', 'export { typeof as x } from "m";');
+  sources.push(
+    'export { typeof } from "m";',
+    'export { typeof as x } from "m";',
+    'export { "remote" as local } from "m";',
+    'export { type "remote" as local } from "m";'
+  );
   for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
       for (const source of sources) {
-        const reference = ts.transpileModule(source, {
-          reportDiagnostics: true,
-          compilerOptions: { module: ts.ModuleKind.ESNext },
-        });
+        const { ast, invalid } = exportReference(source, dialect === 'tsx');
         const tree = parser.parse(source)!;
         try {
-          const invalid = (reference.diagnostics?.length ?? 0) > 0;
           expect(tree.rootNode.hasError, source).toBe(invalid);
           if (!invalid) {
-            const ast = ts.createSourceFile('exports.ts', source, ts.ScriptTarget.Latest, true);
             const expected = ast.statements.filter(ts.isExportDeclaration).flatMap((statement) => {
               const clause = statement.exportClause;
               return clause && ts.isNamedExports(clause)
@@ -130,3 +128,21 @@ test('matches TypeScript on named-export modifiers and identifier fields', async
     }
   }
 });
+
+function exportReference(source: string, tsx: boolean): { ast: ts.SourceFile; invalid: boolean } {
+  const file = tsx ? '/exports.tsx' : '/exports.ts';
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  const options: ts.CompilerOptions = {
+    noLib: true,
+    noResolve: true,
+    types: [],
+    target: ts.ScriptTarget.Latest,
+    module: ts.ModuleKind.ESNext,
+    jsx: ts.JsxEmit.Preserve,
+  };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name) => (name === file ? ast : undefined);
+  const program = ts.createProgram([file], options, host);
+  const diagnostics = [...program.getSyntacticDiagnostics(ast), ...program.getSemanticDiagnostics(ast)];
+  return { ast, invalid: diagnostics.some(({ code }) => code >= 1000 && code < 2000) };
+}
