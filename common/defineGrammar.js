@@ -76,7 +76,7 @@ module.exports = function defineGrammar(dialect) {
       $._global_declaration_end,
       $.__error_recovery,
       $._namespace_expression_end,
-      $._line_break_after_abstract_type,
+      $._abstract_constructor_prefix,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -1019,7 +1019,7 @@ module.exports = function defineGrammar(dialect) {
       constructor_type: ($) =>
         prec.left(
           seq(
-            optional(seq('abstract', optional($._line_break_after_abstract_type))),
+            optional(seq($._abstract_constructor_prefix, 'abstract')),
             'new',
             field('type_parameters', optional($.type_parameters)),
             field('parameters', $.formal_parameters),
@@ -1281,7 +1281,7 @@ module.exports = function defineGrammar(dialect) {
       type_parameter: ($) =>
         seq(
           repeat(choice('const', 'in', 'out')),
-          field('name', $._type_identifier),
+          field('name', choice($._type_identifier, alias('abstract', $.type_identifier))),
           field('constraint', optional($.constraint)),
           field('value', optional($.default_type))
         ),

@@ -52,6 +52,19 @@ type CallableType = { value: abstract
 };
 `;
 
+const GenericSource = `const identity = <abstract,>(value: abstract) => value;
+const defaulted = <abstract = number,>(value: abstract) => value;
+const pair = <abstract, T>(value: abstract, other: T) => other;
+function choose<abstract>(value: abstract) { return value; }
+class Generic<abstract> { value?: abstract; }
+interface Box<abstract> { value: abstract; }
+type Alias<abstract> = abstract;
+`;
+
+const PlainGenericSource = `const identity = <abstract>(value: abstract) => value;
+const defaulted = <abstract = number>(value: abstract) => value;
+`;
+
 const JsxSource = `const element = <abstract abstract="value" />;
 const paired = <abstract>text</abstract>;
 const qualified = <abstract.Item />;
@@ -66,6 +79,10 @@ for (const dialect of ['typescript', 'tsx']) {
     ['heritage and qualified type names', QualifiedSource, QualifiedSource.indexOf('abstract.Item')],
     ['mapped type parameters', MappedSource, MappedSource.indexOf('abstract')],
     ['type member boundaries', MemberSource, MemberSource.indexOf('abstract\n')],
+    ['generic parameter names', GenericSource, GenericSource.indexOf('abstract')],
+    ...(dialect === 'typescript'
+      ? ([['plain generic arrows', PlainGenericSource, PlainGenericSource.indexOf('abstract')]] as const)
+      : []),
     ...(dialect === 'tsx' ? ([['JSX names', JsxSource, JsxSource.indexOf('abstract')]] as const) : []),
   ] as const) {
     test(`retains ${dialect} abstract ${description} through edits`, async () => {
@@ -79,11 +96,13 @@ for (const dialect of ['typescript', 'tsx']) {
         parser.setLanguage(language);
         query = new Query(
           language,
-          '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name\n(call_signature) @signature'
+          '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name\n(call_signature) @signature\n(type_parameter name: (type_identifier) @parameter)'
         );
         tree = parser.parse(source)!;
         expect(tree.rootNode.hasError).toBe(false);
         expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
+        if (description.includes('generic'))
+          expect(parameterCaptures(query, tree)).toEqual(referenceParameters(source, dialect));
         for (const name of ['ordinary', 'abstract']) {
           const next = source.slice(0, offset) + name + source.slice(offset + 8);
           const previous: Tree = tree;
@@ -103,6 +122,10 @@ for (const dialect of ['typescript', 'tsx']) {
               const expected = referenceRanges(next, dialect);
               expect(captures(query!, incremental)).toEqual(expected);
               expect(captures(query!, fresh)).toEqual(expected);
+              if (description.includes('generic')) {
+                expect(parameterCaptures(query!, incremental)).toEqual(referenceParameters(next, dialect));
+                expect(parameterCaptures(query!, fresh)).toEqual(referenceParameters(next, dialect));
+              }
             }
           );
           previous.delete();
@@ -141,7 +164,38 @@ function referenceRanges(source: string, dialect: string): Capture[] {
 function captures(query: Query, tree: Tree): Capture[] {
   return query
     .captures(tree.rootNode)
-    .filter(({ node }) => node.text === 'abstract' || node.type === 'call_signature')
+    .filter(({ name, node }) => name !== 'parameter' && (node.text === 'abstract' || node.type === 'call_signature'))
     .map(({ node }) => [node.startIndex, node.endIndex] as const)
     .toSorted((a, b) => a[0] - b[0]);
+}
+
+function referenceParameters(source: string, dialect: string): Capture[] {
+  const reference = ts.createSourceFile(
+    'generic.' + dialect,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  expect(
+    ts.transpileModule(source, {
+      fileName: dialect === 'tsx' ? 'generic.tsx' : 'generic.ts',
+      reportDiagnostics: true,
+      compilerOptions: { jsx: ts.JsxEmit.Preserve },
+    }).diagnostics
+  ).toHaveLength(0);
+  const names: Capture[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypeParameterDeclaration(node)) names.push([node.name.getStart(reference), node.name.getEnd()]);
+    ts.forEachChild(node, visit);
+  };
+  visit(reference);
+  return names;
+}
+
+function parameterCaptures(query: Query, tree: Tree): Capture[] {
+  return query
+    .captures(tree.rootNode)
+    .filter(({ name }) => name === 'parameter')
+    .map(({ node }) => [node.startIndex, node.endIndex] as const);
 }
