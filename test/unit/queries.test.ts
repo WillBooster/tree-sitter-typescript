@@ -11,7 +11,6 @@ import treeSitterJson from '../../tree-sitter.json';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Root = path.join(import.meta.dirname, '../..');
-const JavaScriptQueries = path.join(Root, 'node_modules/@willbooster/tree-sitter-javascript/queries');
 const QueryKinds = ['highlights', 'injections', 'locals', 'tags'] as const;
 await Parser.init();
 
@@ -61,12 +60,6 @@ for (const [packageKind, listFiles] of Object.entries(listPublishedFiles)) {
   });
 }
 
-// javascript/queries/ copies the JavaScript grammar's queries, which this grammar extends.
-test('keeps javascript/queries/ identical to the queries of @willbooster/tree-sitter-javascript', () => {
-  for (const file of fs.readdirSync(path.join(Root, 'javascript/queries'))) {
-    expect(
-      fs.readFileSync(path.join(Root, 'javascript/queries', file), 'utf8'),
-      `javascript/queries/${file} differs; run script/copy-javascript-queries`
-    ).toBe(fs.readFileSync(path.join(JavaScriptQueries, file), 'utf8'));
-  }
+test('keeps inherited queries synchronized with the JavaScript grammar', () => {
+  execFileSync(path.join(Root, 'script/copy-javascript-queries'), ['--check'], execOptions);
 });
