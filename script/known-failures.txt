@@ -5,7 +5,6 @@ examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/stri
 examples/vscode/extensions/copilot/src/extension/prompts/node/test/fixtures/vscode.proposed.chatParticipantAdditions.d.selection.ts
 examples/vscode/extensions/copilot/src/extension/typescriptContext/serverPlugin/fixtures/context/p1/source/f4.ts
 examples/vscode/extensions/copilot/src/extension/typescriptContext/serverPlugin/fixtures/context/p14/source/f2.ts
-examples/vscode/extensions/copilot/src/extension/typescriptContext/serverPlugin/src/common/typescripts.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/eslint_comma_expected.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/eslint_unexpected_token.ts
 examples/vscode/extensions/copilot/test/simulation/fixtures/fixing/typescript/tsc_error_1128.ts

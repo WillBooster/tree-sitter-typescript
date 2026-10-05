@@ -6,14 +6,15 @@ export function compareEditedTree(
   previous: Tree,
   source: string,
   edit: Edit,
-  check: (incremental: Tree, fresh: Tree) => void
+  check: (incremental: Tree, fresh: Tree) => void,
+  allowErrors = false
 ): Tree {
   previous.edit(edit);
   const incremental = parser.parse(source, previous)!;
   let fresh: Tree | undefined;
   try {
     fresh = parser.parse(source)!;
-    expect(incremental.rootNode.hasError).toBe(false);
+    if (!allowErrors) expect(incremental.rootNode.hasError).toBe(false);
     expect(snapshot(incremental.rootNode)).toEqual(snapshot(fresh.rootNode));
     check(incremental, fresh);
     return incremental;

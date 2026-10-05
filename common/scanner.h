@@ -51,6 +51,7 @@ enum TokenType {
     GLOBAL_DECLARATION_END,
     ERROR_RECOVERY,
     NAMESPACE_EXPRESSION_END,
+    ABSTRACT_CONSTRUCTOR_PREFIX,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -1356,7 +1357,9 @@ static bool scan_await_keyword(TSLexer *lexer) {
 
 static bool scan_generic_function_type(TSLexer *lexer);
 
-static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified, bool heritage) {
+static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
+    bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
+    bool allow_type_arguments = unqualified || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START];
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
     bool comment = false;
@@ -1370,16 +1373,28 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, bool unqualified
             if (strcmp(word, keywords[i]) == 0) return false;
         }
     }
+    bool abstract_prefix = valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] && ascii_word && strcmp(word, "abstract") == 0;
+    bool line_break = false;
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
-            if (!heritage && is_line_terminator(lexer->lookahead)) return false;
+            if (is_line_terminator(lexer->lookahead)) {
+                line_break = true;
+                if (!heritage && !abstract_prefix) return false;
+            }
             advance(lexer);
         }
         if (lexer->lookahead != '/') break;
         CommentResult result = skip_comment(lexer, &comment, true);
-        if (result != COMMENT && !(heritage && result == COMMENT_WITH_LINE_TERMINATOR)) return false;
+        if (result == COMMENT_WITH_LINE_TERMINATOR) line_break = true;
+        if (result != COMMENT && !((heritage || abstract_prefix) && result == COMMENT_WITH_LINE_TERMINATOR)) return false;
     }
-    if (lexer->lookahead != '<') return false;
+    if (abstract_prefix && lexer->lookahead == 'n') {
+        char next[4] = {0};
+        if (!scan_identifier(lexer, next, sizeof(next), false) || strcmp(next, "new") != 0) return false;
+        lexer->result_symbol = ABSTRACT_CONSTRUCTOR_PREFIX;
+        return true;
+    }
+    if (!allow_type_arguments || (line_break && !heritage) || lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
     if (lexer->lookahead == '<' && !scan_generic_function_type(lexer)) return false;
@@ -1614,9 +1629,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return ret;
     }
 
-    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START]) && !valid_symbols[ERROR_RECOVERY]) {
-        bool result = scan_type_reference_arguments_start(lexer, valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START], scanner->heritage_type_pending);
-        if (result) scanner->heritage_type_pending = false;
+    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) && !valid_symbols[ERROR_RECOVERY]) {
+        bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
+        if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX) scanner->heritage_type_pending = false;
         return result;
     }
 

@@ -2,6 +2,7 @@
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'abstract',
   'accessor',
   'declare',
   'global',
@@ -75,6 +76,7 @@ module.exports = function defineGrammar(dialect) {
       $._global_declaration_end,
       $.__error_recovery,
       $._namespace_expression_end,
+      $._abstract_constructor_prefix,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -224,6 +226,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
+      labeled_statement: (_, previous) => prec.dynamic(-1, previous),
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
@@ -439,7 +442,7 @@ module.exports = function defineGrammar(dialect) {
         return choice(...choices);
       },
 
-      _jsx_identifier: ($, previous) => choice(previous, alias(choice('in', 'out'), $.identifier)),
+      _jsx_identifier: ($, previous) => choice(previous, alias(choice('in', 'out', 'abstract'), $.identifier)),
 
       nested_identifier: ($) =>
         prec(
@@ -449,7 +452,7 @@ module.exports = function defineGrammar(dialect) {
               'object',
               choice(
                 reserved('properties', $.identifier),
-                alias('out', $.identifier),
+                alias(choice('out', 'abstract'), $.identifier),
                 alias($.nested_identifier, $.member_expression)
               )
             ),
@@ -849,7 +852,12 @@ module.exports = function defineGrammar(dialect) {
           seq(
             field(
               'name',
-              choice($.string, reserved('properties', $.identifier), alias('out', $.identifier), $.nested_identifier)
+              choice(
+                $.string,
+                reserved('properties', $.identifier),
+                alias(choice('out', 'abstract'), $.identifier),
+                $.nested_identifier
+              )
             ),
             field('body', optional($.statement_block))
           )
@@ -860,7 +868,7 @@ module.exports = function defineGrammar(dialect) {
           'import',
           $.identifier,
           '=',
-          choice($.identifier, alias('out', $.identifier), $.nested_identifier),
+          choice($.identifier, alias(choice('out', 'abstract'), $.identifier), $.nested_identifier),
           $._semicolon
         ),
 
@@ -881,7 +889,12 @@ module.exports = function defineGrammar(dialect) {
           commaSep1(
             field(
               'type',
-              choice($._type_identifier, $.nested_type_identifier, alias($._heritage_generic_type, $.generic_type))
+              choice(
+                $._type_identifier,
+                alias('abstract', $.type_identifier),
+                $.nested_type_identifier,
+                alias($._heritage_generic_type, $.generic_type)
+              )
             )
           )
         ),
@@ -1008,7 +1021,7 @@ module.exports = function defineGrammar(dialect) {
       constructor_type: ($) =>
         prec.left(
           seq(
-            optional('abstract'),
+            optional(seq($._abstract_constructor_prefix, 'abstract')),
             'new',
             field('type_parameters', optional($.type_parameters)),
             field('parameters', $.formal_parameters),
@@ -1188,7 +1201,7 @@ module.exports = function defineGrammar(dialect) {
 
       mapped_type_clause: ($) =>
         seq(
-          field('name', $._type_identifier),
+          field('name', choice($._type_identifier, alias('abstract', $.type_identifier))),
           'in',
           field('type', $.type),
           optional(seq('as', field('alias', $.type)))
@@ -1270,7 +1283,7 @@ module.exports = function defineGrammar(dialect) {
       type_parameter: ($) =>
         seq(
           repeat(choice('const', 'in', 'out')),
-          field('name', $._type_identifier),
+          field('name', choice($._type_identifier, alias('abstract', $.type_identifier))),
           field('constraint', optional($.constraint)),
           field('value', optional($.default_type))
         ),
@@ -1334,7 +1347,7 @@ module.exports = function defineGrammar(dialect) {
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
       _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
 
-      _type_reference_identifier: ($) => choice($._type_identifier, alias('in', $.type_identifier)),
+      _type_reference_identifier: ($) => choice($._type_identifier, alias(choice('in', 'abstract'), $.type_identifier)),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
@@ -1348,7 +1361,7 @@ function nestedIdentifierTail($) {
       'property',
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
-        alias(choice('in', 'out'), $.property_identifier)
+        alias(choice('in', 'out', 'abstract'), $.property_identifier)
       )
     ),
   ];
@@ -1404,7 +1417,7 @@ function nestedTypeIdentifier($, generic) {
         'module',
         choice(
           $.identifier,
-          alias(choice('in', 'out'), $.identifier),
+          alias(choice('in', 'out', 'abstract'), $.identifier),
           $.nested_identifier,
           alias($._in_nested_identifier, $.nested_identifier)
         )
