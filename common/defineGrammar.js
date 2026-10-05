@@ -889,7 +889,8 @@ module.exports = function defineGrammar(dialect) {
             field(
               'type',
               choice(
-                $._type_reference_identifier,
+                $._type_identifier,
+                alias('abstract', $.type_identifier),
                 $.nested_type_identifier,
                 alias($._heritage_generic_type, $.generic_type)
               )

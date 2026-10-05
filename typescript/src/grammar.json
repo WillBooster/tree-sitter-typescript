@@ -11600,7 +11600,16 @@
                 "members": [
                   {
                     "type": "SYMBOL",
-                    "name": "_type_reference_identifier"
+                    "name": "_type_identifier"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "STRING",
+                      "value": "abstract"
+                    },
+                    "named": true,
+                    "value": "type_identifier"
                   },
                   {
                     "type": "SYMBOL",
@@ -11635,7 +11644,16 @@
                       "members": [
                         {
                           "type": "SYMBOL",
-                          "name": "_type_reference_identifier"
+                          "name": "_type_identifier"
+                        },
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "STRING",
+                            "value": "abstract"
+                          },
+                          "named": true,
+                          "value": "type_identifier"
                         },
                         {
                           "type": "SYMBOL",
