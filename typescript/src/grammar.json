@@ -4172,6 +4172,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },
@@ -10336,6 +10340,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },

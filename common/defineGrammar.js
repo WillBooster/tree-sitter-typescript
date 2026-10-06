@@ -1443,7 +1443,7 @@ function nestedIdentifierTail($) {
       'property',
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
-        alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.property_identifier)
+        alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.property_identifier)
       )
     ),
   ];

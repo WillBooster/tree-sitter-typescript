@@ -28,6 +28,8 @@ namespace Qualified {
   export function matches(value: unknown): value is is.NS { return typeof value === 'string'; }
   export declare const property: { [K in keyof is.Obj]: number };
   export let nested: is.x.NS;
+  export let deeper: Qualified.is.NS;
+  export let repeated: Qualified.is.x.NS;
   declare function assertKeyof(keyof: unknown): asserts keyof;
   declare function assertInfer(infer: unknown): asserts infer;
   declare function assertReadonly(readonly: unknown): asserts readonly;
