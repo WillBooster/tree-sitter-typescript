@@ -30,6 +30,57 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     );
   }, 30_000);
   afterAll(() => query?.delete());
+  test('preserves the type field after extra-colon edits', () => {
+    const parser = new Parser().setLanguage(language);
+    const recoveryQuery = new Query(language, '(parenthesized_expression type: (type_annotation) @annotation)');
+    let source = 'const x = (unknown: x: number);';
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, ': number');
+      for (const [before, after, annotation] of [
+        [': x: number', ': x', ': x'],
+        [': x', ': x: number', ': number'],
+        ['unknown', 'never', ': number'],
+        ['never', 'unknown', ': number'],
+      ]) {
+        const start = source.indexOf(before!);
+        const next = source.slice(0, start) + after + source.slice(start + before!.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before!.length,
+            newEndIndex: start + after!.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before!.length),
+            newEndPosition: position(next, start + after!.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, annotation!);
+            check(fresh, next, annotation!);
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+      }
+      function check(current: Tree, text: string, annotation: string): void {
+        expect(current.rootNode.hasError).toBe(annotation === ': number');
+        const start = text.lastIndexOf(annotation);
+        expect(
+          recoveryQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+        ).toEqual([[annotation, start, start + annotation.length]]);
+      }
+    } finally {
+      tree?.delete();
+      recoveryQuery.delete();
+      parser.delete();
+    }
+  });
   test.each(['unknown', 'never', 'unique'])('retains the annotated %s expression through arrow edits', (name) => {
     const parser = new Parser().setLanguage(language);
     const roleQuery = new Query(
