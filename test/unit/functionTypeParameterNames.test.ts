@@ -30,6 +30,62 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     );
   }, 30_000);
   afterAll(() => query?.delete());
+  test.each(['unknown', 'never', 'unique'])('retains %s optional callback ownership through arrow edits', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
+    let source = `type F = (${name}?: number) => unknown;`;
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, false);
+      for (const [before, after, error] of [
+        [' => unknown', '', true],
+        [');', ') => unknown;', false],
+        ['number', '() => number', false],
+        [' => unknown', '', true],
+        [');', ') => unknown;', false],
+        ['() => number', 'number', false],
+      ] as const) {
+        const start = source.indexOf(before);
+        expect(start).toBeGreaterThanOrEqual(0);
+        const next = source.slice(0, start) + after + source.slice(start + before.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before.length,
+            newEndIndex: start + after.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before.length),
+            newEndPosition: position(next, start + after.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, error);
+            check(fresh, next, error);
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+      }
+      function check(current: Tree, text: string, error: boolean): void {
+        expect(current.rootNode.hasError).toBe(error);
+        const captures = aliasQuery.captures(current.rootNode);
+        expect(captures.map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])).toEqual([
+          ['name', 'F', 5, 6],
+          ['value', text.slice(9, -1), 9, text.length - 1],
+        ]);
+        expect(captures[1]!.node.type).toBe(error ? 'parenthesized_type' : 'function_type');
+      }
+    } finally {
+      tree?.delete();
+      aliasQuery.delete();
+      parser.delete();
+    }
+  });
   test('retains index-signature fields through name and trivia edits', () => {
     const parser = new Parser().setLanguage(language);
     const indexQuery = new Query(

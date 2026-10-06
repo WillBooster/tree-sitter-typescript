@@ -1407,15 +1407,15 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                     break;
             }
             if (!scan_annotated_type_colons(lexer)) return false;
-            if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
-            advance(lexer);
-            if (lexer->lookahead != '>') return false;
             lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
         } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
         } else {
             return false;
         }
+        if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+        advance(lexer);
+        if (lexer->lookahead != '>') return false;
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
