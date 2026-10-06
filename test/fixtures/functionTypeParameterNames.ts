@@ -1,7 +1,7 @@
 type UnknownCallback = (unknown: unknown) => unknown;
 type NeverCallback = (never: never) => never;
 type UniqueCallback = (unique: unknown) => unknown;
-type OptionalCallback = (unknown?: number, never?: string) => string;
+type OptionalCallback = (unknown?: number, never?: string, unique?: string) => string;
 type GenericCallback = <T>(unknown: T, never?: T) => T;
 type Factory = new (unknown: unknown, never?: string) => object;
 interface Callable {

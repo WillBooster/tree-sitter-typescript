@@ -19,8 +19,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     query = new Query(
       language,
       `
-      [(required_parameter pattern: (identifier) @name)
-       (optional_parameter pattern: (identifier) @name)]
+      [(required_parameter pattern: (pattern/identifier) @name)
+       (optional_parameter pattern: (pattern/identifier) @name)]
       [(required_parameter type: (type_annotation (_) @type))
        (optional_parameter type: (type_annotation (_) @type))]
     `
@@ -32,7 +32,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     '(never: never)',
     '(unique: unknown)',
     '(unknown?: number',
-    ', never?: string) => string',
+    ', never?: string,',
+    ', unique?: string) => string',
   ])('preserves %s name and type through edits', (marker) => {
     const parser = new Parser().setLanguage(language);
     let tree: Tree | undefined;
@@ -40,7 +41,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     try {
       tree = parser.parse(source)!;
       check(tree, source);
-      const word = marker.startsWith('(unique:') ? 'unique' : marker.includes('unknown') ? 'unknown' : 'never';
+      const word = marker.includes('unique') ? 'unique' : marker.includes('unknown') ? 'unknown' : 'never';
       const markerStart = source.indexOf(marker);
       expect(markerStart).toBeGreaterThanOrEqual(0);
       const start = markerStart + marker.indexOf(word);

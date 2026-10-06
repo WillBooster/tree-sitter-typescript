@@ -8748,25 +8748,56 @@
       ]
     },
     "pattern": {
-      "type": "PREC_DYNAMIC",
-      "value": -1,
-      "content": {
-        "type": "CHOICE",
-        "members": [
-          {
-            "type": "SYMBOL",
-            "name": "_lhs_expression"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "parenthesized_expression"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "rest_pattern"
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "PREC_DYNAMIC",
+          "value": -1,
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_lhs_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "parenthesized_expression"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "rest_pattern"
+              }
+            ]
           }
-        ]
-      }
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "PREC",
+            "value": -1,
+            "content": {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "unknown"
+                },
+                {
+                  "type": "STRING",
+                  "value": "never"
+                },
+                {
+                  "type": "STRING",
+                  "value": "unique"
+                }
+              ]
+            }
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
     },
     "rest_pattern": {
       "type": "PREC_RIGHT",
@@ -12122,32 +12153,6 @@
               {
                 "type": "SYMBOL",
                 "name": "pattern"
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "PREC",
-                  "value": -1,
-                  "content": {
-                    "type": "CHOICE",
-                    "members": [
-                      {
-                        "type": "STRING",
-                        "value": "unknown"
-                      },
-                      {
-                        "type": "STRING",
-                        "value": "never"
-                      },
-                      {
-                        "type": "STRING",
-                        "value": "unique"
-                      }
-                    ]
-                  }
-                },
-                "named": true,
-                "value": "identifier"
               },
               {
                 "type": "SYMBOL",

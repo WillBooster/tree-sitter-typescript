@@ -938,16 +938,15 @@ module.exports = function defineGrammar(dialect) {
       optional_parameter: ($) =>
         seq($._parameter_name, '?', field('type', optional($.type_annotation)), optional($._initializer)),
 
+      pattern: ($, previous) => choice(previous, alias(prec(-1, choice('unknown', 'never', 'unique')), $.identifier)),
+
       _parameter_name: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
           optional($.accessibility_modifier),
           optional($.override_modifier),
           optional('readonly'),
-          field(
-            'pattern',
-            choice($.pattern, alias(prec(-1, choice('unknown', 'never', 'unique')), $.identifier), $.this)
-          )
+          field('pattern', choice($.pattern, $.this))
         ),
 
       omitting_type_annotation: ($) => seq('-?:', $.type),
