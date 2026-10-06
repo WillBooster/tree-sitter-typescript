@@ -4247,8 +4247,22 @@
               "type": "FIELD",
               "name": "name",
               "content": {
-                "type": "SYMBOL",
-                "name": "_jsx_element_name"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_jsx_closing_recovery_identifier"
+                    },
+                    "named": true,
+                    "value": "identifier"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_jsx_element_name"
+                  }
+                ]
               }
             },
             {
@@ -16377,6 +16391,10 @@
     {
       "type": "SYMBOL",
       "name": "_abstract_constructor_prefix"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_jsx_closing_recovery_identifier"
     }
   ],
   "inline": [

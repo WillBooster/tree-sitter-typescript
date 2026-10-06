@@ -366,6 +366,118 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       }
     }
   );
+  if (dialect === 'tsx')
+    test('retains incomplete closing JSX names while completing and renaming tags', () => {
+      const parser = new Parser().setLanguage(language);
+      let tree: Tree | undefined;
+      let source = 'const value=<is></is>;';
+      const stages = [
+        'const value=<is></is',
+        'const value=<is></is ',
+        'const value=<is></is:',
+        'const value=<is></is.',
+        'const value=<is></is.1',
+        'const value=<is></is:1',
+        'const value=<is></is.:',
+        'const value=<is></is:.',
+        'const value=<is></is.?',
+        'const value=<is></is:?',
+        'const value=<is></is..',
+        'const value=<is></is::',
+        'const value=<is></is. /*',
+        'const value=<is></is: /*',
+        'const value=<is></is. /* c */?',
+        'const value=<is></is: /* c */?',
+        'const value=<is></is\n',
+        'const value=<is>{x}</is',
+        'const value=<is a={x}></is',
+        'const value=<is a={x}></is /* closing */',
+        'const value=<is a={x}></is /*',
+        'const value=<is a={x}></is /* closing',
+        'const value=<is a={x}></is /',
+        'const value=<is a={x}></is?',
+        'const value=<is a={x}></is \u200D',
+        'const value=<is a={x}></is // closing\n',
+        'const value=<is a={x}></island',
+        'const value=<is a={x}></island>;',
+        'const value=<is a={x}></is>;',
+        'const value=<is></<!-- preceding -->\nis',
+        'const value=<is></<!-- preceding -->\nis>;',
+        'const value=<is></--> preceding\nis',
+        'const value=<is></--> preceding\nis>;',
+        'const value=<is-></is-',
+        'const value=<is-></is->;',
+        'const value=<is--></is--',
+        'const value=<is--></is-->;',
+        'const value=<is></is>;',
+      ];
+      try {
+        tree = parser.parse(source)!;
+        for (const next of stages) {
+          let start = 0;
+          while (source[start] === next[start] && start < Math.min(source.length, next.length)) start++;
+          let oldEnd = source.length;
+          let newEnd = next.length;
+          while (oldEnd > start && newEnd > start && source[oldEnd - 1] === next[newEnd - 1]) {
+            oldEnd--;
+            newEnd--;
+          }
+          const previous = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: oldEnd,
+              newEndIndex: newEnd,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, oldEnd),
+              newEndPosition: position(next, newEnd),
+            }),
+            (incremental, fresh) => {
+              for (const current of [incremental, fresh]) {
+                expect(current.rootNode.hasError).toBe(!next.endsWith('>;'));
+                const name = next.slice(next.lastIndexOf('</') + 2).match(/island|is--|is-|is/)![0];
+                const closingStart = next.lastIndexOf(name);
+                const leaf = current.rootNode
+                  .descendantsOfType('identifier')
+                  .find((node) => node.startIndex === closingStart);
+                expect(leaf?.text).toBe(name);
+                expect(leaf?.endIndex).toBe(closingStart + name.length);
+                expect(
+                  configured[0]!
+                    .captures(current.rootNode)
+                    .some(
+                      ({ name: capture, node }) =>
+                        capture === 'variable' &&
+                        node.startIndex === closingStart &&
+                        node.endIndex === closingStart + name.length
+                    )
+                ).toBe(true);
+                expect(
+                  configured[2]!
+                    .captures(current.rootNode)
+                    .some(
+                      ({ name: capture, node }) =>
+                        capture === 'local.reference' &&
+                        node.startIndex === closingStart &&
+                        node.endIndex === closingStart + name.length
+                    )
+                ).toBe(true);
+              }
+              for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
+            },
+            true
+          );
+          previous.delete();
+          source = next;
+        }
+      } finally {
+        tree?.delete();
+        parser.delete();
+      }
+    });
   test.each(['qualified type', 'undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
     'preserves qualified type and bare assertion roles through %s edits',
     (role) => {

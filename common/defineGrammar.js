@@ -80,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $.__error_recovery,
       $._namespace_expression_end,
       $._abstract_constructor_prefix,
+      $._jsx_closing_recovery_identifier,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -452,6 +453,13 @@ module.exports = function defineGrammar(dialect) {
 
         return choice(...choices);
       },
+
+      jsx_closing_element: ($) =>
+        seq(
+          '</',
+          optional(field('name', choice(alias($._jsx_closing_recovery_identifier, $.identifier), $._jsx_element_name))),
+          '>'
+        ),
 
       _jsx_identifier: ($, previous) =>
         choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.identifier)),
