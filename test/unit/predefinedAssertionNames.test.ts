@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Language, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
@@ -111,14 +111,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const queries: Query[] = [];
     let tree: Tree | undefined;
     try {
-      const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-      for (const files of [grammar.highlights, grammar.tags, grammar.locals, grammar.injections]) {
-        const querySource = [files]
-          .flat()
-          .map((file) => fs.readFileSync(path.join(import.meta.dirname, '../..', file), 'utf8'))
-          .join('\n');
-        queries.push(new Query(language, querySource));
-      }
+      queries.push(...configuredQueries(language, dialect));
       for (const word of ['any', 'number', 'boolean', 'string', 'symbol', 'unknown', 'never', 'object', 'unique']) {
         let source = `declare function f(value: unknown): asserts ${word};\nconst sentinel = 1;\n`;
         tree = parser.parse(source)!;
@@ -183,4 +176,120 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
+}
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves ${dialect} ordinary-name assertion recovery and restoration`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const queries: Query[] = [];
+    let annotationQuery: Query | undefined;
+    let tree: Tree | undefined;
+    try {
+      queries.push(...configuredQueries(language, dialect));
+      annotationQuery = new Query(
+        language,
+        `
+        (function_signature return_type: (_) @annotation)
+        (function_declaration return_type: (_) @annotation)
+      `
+      );
+      for (const [declaration, tail] of [
+        [true, ' : string'],
+        [false, ': string'],
+        [true, ' as string'],
+        [true, ': string = 1'],
+      ] as const) {
+        const prefix = `${declaration ? 'declare ' : ''}function f(value: unknown): asserts value`;
+        const suffix = declaration ? ';' : ' { if (!value) throw Error(); }';
+        let source = `${prefix}${suffix}\nconst sentinel = 1;\n`;
+        tree = parser.parse(source)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        for (const [before, after] of [
+          ['', tail],
+          [tail, ''],
+        ]) {
+          const start = prefix.length;
+          const next = source.slice(0, start) + after + source.slice(start + before!.length);
+          const previous = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + before!.length,
+              newEndIndex: start + after!.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + before!.length),
+              newEndPosition: position(next, start + after!.length),
+            }),
+            (incremental, fresh) => {
+              for (const query of queries) {
+                const captures = (current: Tree): unknown[] =>
+                  query
+                    .captures(current.rootNode)
+                    .map(({ name, node }) => [
+                      name,
+                      node.type,
+                      node.text,
+                      node.startIndex,
+                      node.endIndex,
+                      node.startPosition,
+                      node.endPosition,
+                    ]);
+                expect(captures(incremental)).toEqual(captures(fresh));
+              }
+              for (const current of [incremental, fresh]) {
+                expect(current.rootNode.hasError).toBe(after !== '');
+                const annotations = annotationQuery!.captures(current.rootNode);
+                expect(annotations).toHaveLength(1);
+                const annotation = annotations[0]!.node;
+                expect(annotation.type).toBe('asserts_annotation');
+                expect(annotation.startIndex).toBe(prefix.indexOf(': asserts'));
+                const assertion = annotation.namedChildren[0]!;
+                expect(assertion.type).toBe('asserts');
+                const name = assertion.namedChildren.at(-1)!;
+                expect(name.type).toBe('identifier');
+                expect(name.text).toBe(after ? 'string' : 'value');
+                expect(name.startIndex).toBe(after ? next.indexOf('string', start) : prefix.lastIndexOf('value'));
+                expect(name.endIndex).toBe(name.startIndex + name.text.length);
+                expect(current.rootNode.namedChildren.at(-1)!.text).toBe('const sentinel = 1;');
+              }
+            },
+            true
+          );
+          previous.delete();
+          source = next;
+        }
+        expect(source).toBe(`${prefix}${suffix}\nconst sentinel = 1;\n`);
+        tree.delete();
+        tree = undefined;
+      }
+    } finally {
+      tree?.delete();
+      annotationQuery?.delete();
+      for (const query of queries) query.delete();
+      parser.delete();
+    }
+  });
+}
+
+function configuredQueries(language: Language, dialect: string): Query[] {
+  const queries: Query[] = [];
+  try {
+    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
+    for (const files of [grammar.highlights, grammar.tags, grammar.locals, grammar.injections]) {
+      const querySource = [files]
+        .flat()
+        .map((file) => fs.readFileSync(path.join(import.meta.dirname, '../..', file), 'utf8'))
+        .join('\n');
+      queries.push(new Query(language, querySource));
+    }
+    return queries;
+  } catch (error) {
+    for (const query of queries) query.delete();
+    throw error;
+  }
 }
