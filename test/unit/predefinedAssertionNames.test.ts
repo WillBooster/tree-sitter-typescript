@@ -195,13 +195,14 @@ for (const dialect of ['typescript', 'tsx']) {
         (function_declaration return_type: (_) @annotation)
       `
       );
-      for (const [declaration, tail] of [
-        [true, ' : string'],
-        [false, ': string'],
-        [true, ' as string'],
-        [true, ': string = 1'],
+      for (const [declaration, tail, word] of [
+        [true, ' : string', 'value'],
+        [false, ': string', 'value'],
+        [true, ' as string', 'value'],
+        [true, ': string = 1', 'value'],
+        [true, ' symbol', 'out'],
       ] as const) {
-        const prefix = `${declaration ? 'declare ' : ''}function f(value: unknown): asserts value`;
+        const prefix = `${declaration ? 'declare ' : ''}function f(${word}: unknown): asserts ${word}`;
         const suffix = declaration ? ';' : ' { if (!value) throw Error(); }';
         let source = `${prefix}${suffix}\nconst sentinel = 1;\n`;
         tree = parser.parse(source)!;
@@ -252,8 +253,9 @@ for (const dialect of ['typescript', 'tsx']) {
                 expect(assertion.type).toBe('asserts');
                 const name = assertion.namedChildren.at(-1)!;
                 expect(name.type).toBe('identifier');
-                expect(name.text).toBe(after ? 'string' : 'value');
-                expect(name.startIndex).toBe(after ? next.indexOf('string', start) : prefix.lastIndexOf('value'));
+                const recoveredName = word === 'out' ? 'symbol' : 'string';
+                expect(name.text).toBe(after ? recoveredName : word);
+                expect(name.startIndex).toBe(after ? next.indexOf(recoveredName, start) : prefix.lastIndexOf(word));
                 expect(name.endIndex).toBe(name.startIndex + name.text.length);
                 expect(current.rootNode.namedChildren.at(-1)!.text).toBe('const sentinel = 1;');
               }
