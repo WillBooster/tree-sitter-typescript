@@ -30,6 +30,68 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     );
   }, 30_000);
   afterAll(() => query?.delete());
+  test.each(['unknown', 'never', 'unique'])(
+    'retains %s optional callback recovery through return-type edits',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      let source = `type F = (${name}?: number) => unknown;`;
+      let tree: Tree | undefined;
+      try {
+        tree = parser.parse(source)!;
+        check(tree, source, false);
+        for (const [before, after, missing] of [
+          ['=> unknown;', '=>;', true],
+          ['=>;', '=> /* return */ ;', true],
+          ['=> /* return */ ;', '=> unknown;', false],
+        ] as const) {
+          const start = source.indexOf(before);
+          expect(start).toBeGreaterThanOrEqual(0);
+          const next = source.slice(0, start) + after + source.slice(start + before.length);
+          const previous = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + before.length,
+              newEndIndex: start + after.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + before.length),
+              newEndPosition: position(next, start + after.length),
+            }),
+            (incremental, fresh) => {
+              check(incremental, next, missing);
+              check(fresh, next, missing);
+            },
+            true
+          );
+          previous.delete();
+          source = next;
+        }
+        function check(current: Tree, text: string, missing: boolean): void {
+          expect(current.rootNode.hasError).toBe(missing);
+          const end = missing ? text.lastIndexOf(')') + 1 : text.length - 1;
+          expect(
+            aliasQuery
+              .captures(current.rootNode)
+              .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+          ).toEqual([
+            ['name', 'type_identifier', 'F', 5, 6],
+            ['value', missing ? 'parenthesized_type' : 'function_type', text.slice(9, end), 9, end],
+          ]);
+        }
+      } finally {
+        tree?.delete();
+        aliasQuery.delete();
+        parser.delete();
+      }
+    }
+  );
   test.each(['unknown', 'never', 'unique'])('retains %s optional callback ownership through arrow edits', (name) => {
     const parser = new Parser().setLanguage(language);
     const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');

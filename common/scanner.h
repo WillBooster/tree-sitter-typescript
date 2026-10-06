@@ -1416,6 +1416,23 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
         advance(lexer);
         if (lexer->lookahead != '>') return false;
+        if (optional_parameter) {
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+            switch (lexer->lookahead) {
+                case ')':
+                case ']':
+                case '}':
+                case ',':
+                case ';':
+                case ':':
+                case '=':
+                case '>':
+                    return false;
+                default:
+                    break;
+            }
+        }
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
