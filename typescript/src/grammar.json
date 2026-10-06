@@ -12406,6 +12406,14 @@
             "members": [
               {
                 "type": "STRING",
+                "value": "as"
+              },
+              {
+                "type": "STRING",
+                "value": "satisfies"
+              },
+              {
+                "type": "STRING",
                 "value": "any"
               },
               {

@@ -21,10 +21,12 @@ type Mapped = { [as in keyof Keys as as]: Keys[as] };
 type Checked = { [satisfies in keyof Keys as satisfies]: Keys[satisfies] };
 class Base<T> {}
 class Derived extends Base<as[]> {}
+class ValueDerived extends Base<typeof as> {}
 interface Inherited extends as {}
 const inferred = as as (typeof as);
 const checkedClass = satisfies satisfies (typeof satisfies);
 const prototype = value as (typeof as.prototype);
+type Tuple = [as: string, satisfies?: number, ...as: boolean[]];
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -42,6 +44,9 @@ for (const dialect of ['typescript', 'tsx']) {
       (mapped_type_clause name: (type_identifier) @mapped.name type: (_) @mapped.type alias: (_) @mapped.alias)
       (extends_clause type_arguments: (type_arguments) @heritage)
       (extends_type_clause type: (type_identifier) @interface.name)
+      (tuple_type (required_parameter name: (identifier) @tuple.name))
+      (tuple_type (optional_parameter name: (identifier) @tuple.name))
+      (tuple_type (required_parameter name: (rest_pattern (identifier) @tuple.name)))
     `
     );
     let source = Source;
@@ -54,6 +59,7 @@ for (const dialect of ['typescript', 'tsx']) {
         source.indexOf('Base<as[]>') + 5,
         source.indexOf('[as in') + 1,
         source.indexOf('typeof as') + 7,
+        source.indexOf('[as: string') + 1,
       ]) {
         for (const [before, after] of [
           ['as', 'satisfies'],
@@ -116,6 +122,7 @@ for (const dialect of ['typescript', 'tsx']) {
           assertions.push([ts.isAsExpression(node) ? 'as' : 'satisfies', node.getStart(reference), node.getEnd()]);
         if (ts.isParenthesizedTypeNode(node)) addType('parenthesized', node);
         if (ts.isTypeQueryNode(node)) addType('query.value', node.exprName);
+        if (ts.isNamedTupleMember(node)) addType('tuple.name', node.name);
         if (ts.isMappedTypeNode(node)) {
           addType('mapped.name', node.typeParameter.name);
           addType('mapped.type', node.typeParameter.constraint!);

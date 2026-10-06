@@ -985,6 +985,8 @@ module.exports = function defineGrammar(dialect) {
           $.identifier,
           alias(
             choice(
+              'as',
+              'satisfies',
               'any',
               'number',
               'boolean',
