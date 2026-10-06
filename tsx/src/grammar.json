@@ -9057,6 +9057,14 @@
               },
               {
                 "type": "STRING",
+                "value": "as"
+              },
+              {
+                "type": "STRING",
+                "value": "satisfies"
+              },
+              {
+                "type": "STRING",
                 "value": "accessor"
               },
               {
@@ -9204,6 +9212,14 @@
         {
           "type": "STRING",
           "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "as"
+        },
+        {
+          "type": "STRING",
+          "value": "satisfies"
         },
         {
           "type": "STRING",
@@ -14840,6 +14856,11 @@
     }
   ],
   "conflicts": [
+    [
+      "arrow_function",
+      "method_definition",
+      "_type_arguments_target"
+    ],
     [
       "import_specifier",
       "_module_export_name"
