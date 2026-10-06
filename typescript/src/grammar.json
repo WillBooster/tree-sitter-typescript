@@ -12341,6 +12341,10 @@
                   {
                     "type": "STRING",
                     "value": "object"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "unique"
                   }
                 ]
               },
@@ -13320,8 +13324,17 @@
               {
                 "type": "ALIAS",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "predefined_type"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "predefined_type"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "unique"
+                    }
+                  ]
                 },
                 "named": true,
                 "value": "identifier"

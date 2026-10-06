@@ -984,7 +984,8 @@ module.exports = function defineGrammar(dialect) {
                 'symbol',
                 'unknown',
                 'never',
-                'object'
+                'object',
+                'unique'
               ),
               $.identifier
             ),
@@ -1140,7 +1141,7 @@ module.exports = function defineGrammar(dialect) {
               $.identifier,
               alias(choice('out', 'as', 'satisfies'), $.identifier),
               $.this,
-              alias($.predefined_type, $.identifier)
+              alias(choice($.predefined_type, 'unique'), $.identifier)
             )
           ),
           'is',
