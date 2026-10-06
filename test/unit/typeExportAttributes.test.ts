@@ -88,3 +88,47 @@ test('preserves type re-export attributes when their keyword crosses a newline',
     }
   }
 });
+
+test('separates a following with statement from re-export attributes', async () => {
+  await Parser.init();
+  for (const dialect of ['typescript', 'tsx']) {
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const declaration of [
+        'export type { A }',
+        'export type *',
+        'export type * as ns',
+        'export { A }',
+        'import { A }',
+      ]) {
+        for (const trivia of [' ', '\n', ' /* c */ ', ' // c\n']) {
+          const prefix = `${declaration} from "m"\n`;
+          const statement = `with${trivia}(x) { use(x); }`;
+          const source = prefix + statement;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(tree.rootNode.namedChildren[0]?.descendantsOfType('import_attribute')).toHaveLength(0);
+            expect(tree.rootNode.namedChildren[1]?.type).toBe('with_statement');
+            expect(tree.rootNode.namedChildren[1]?.text).toBe(statement);
+          } finally {
+            tree.delete();
+          }
+          const attribute = `with${trivia}{ type: "json" }`;
+          const attributeTree = parser.parse(`${prefix}${attribute};\nconst after = 1;`)!;
+          try {
+            expect(attributeTree.rootNode.hasError, attribute).toBe(false);
+            expect(attributeTree.rootNode.namedChildren[0]?.descendantsOfType('import_attribute')[0]?.text).toBe(
+              attribute
+            );
+            expect(attributeTree.rootNode.namedChildren[1]?.text).toBe('const after = 1;');
+          } finally {
+            attributeTree.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  }
+});
