@@ -38,6 +38,16 @@ const identity = <as,>(item: as) => item;
 const defaulted = <satisfies = string,>(item: satisfies) => item;
 `;
 
+const JsxSource = `declare namespace JSX { interface Element {} interface ElementClass {} interface IntrinsicElements { [tag: string]: any; } }
+const directJsx = <as />;
+const checkedJsx = <satisfies />;
+const namespacedJsx = <x:as />;
+const leftNamespacedJsx = <as:ns />;
+const nestedJsx = <as attr={1}><satisfies>text</satisfies><div x={<as />} /></as>;
+const memberJsx = <as.Types.Value />;
+const attributeJsx = <div as={1} satisfies={2} />;
+`;
+
 for (const dialect of ['typescript', 'tsx']) {
   test(`retains ${dialect} contextual constructor names and operator roles through edits`, async () => {
     await Parser.init();
@@ -60,9 +70,11 @@ for (const dialect of ['typescript', 'tsx']) {
       (type_predicate name: (identifier) @predicate.name)
       (asserts . (identifier) @assert.name)
       (type_parameter name: (type_identifier) @generic.name)
+      ${dialect === 'tsx' ? '(jsx_self_closing_element name: (_) @jsx.name) (jsx_opening_element name: (_) @jsx.name) (jsx_closing_element name: (_) @jsx.name)' : ''}
     `
     );
-    let source = Source;
+    const original = Source + (dialect === 'tsx' ? JsxSource : '');
+    let source = original;
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
@@ -75,6 +87,13 @@ for (const dialect of ['typescript', 'tsx']) {
         source.indexOf('[as: string') + 1,
         source.indexOf('type Qualified = as') + 'type Qualified = '.length,
         source.indexOf('const identity = <as') + 'const identity = <'.length,
+        ...(dialect === 'tsx'
+          ? [
+              source.indexOf('const directJsx = <as') + 'const directJsx = <'.length,
+              source.indexOf('const namespacedJsx = <x:as') + 'const namespacedJsx = <x:'.length,
+              source.indexOf('const leftNamespacedJsx = <as') + 'const leftNamespacedJsx = <'.length,
+            ]
+          : []),
       ]) {
         for (const [before, after] of [
           ['as', 'satisfies'],
@@ -103,7 +122,7 @@ for (const dialect of ['typescript', 'tsx']) {
           source = next;
         }
       }
-      expect(source).toBe(Source);
+      expect(source).toBe(original);
     } finally {
       tree?.delete();
       typeRoles.delete();
@@ -138,6 +157,8 @@ for (const dialect of ['typescript', 'tsx']) {
         if (ts.isParenthesizedTypeNode(node)) addType('parenthesized', node);
         if (ts.isTypeQueryNode(node)) addType('query.value', node.exprName);
         if (ts.isNamedTupleMember(node)) addType('tuple.name', node.name);
+        if (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node))
+          addType('jsx.name', node.tagName);
         if (ts.isTypeReferenceNode(node) && ts.isQualifiedName(node.typeName)) addType('qualified.type', node.typeName);
         if (ts.isTypePredicateNode(node))
           addType(node.assertsModifier && !node.type ? 'assert.name' : 'predicate.name', node.parameterName);

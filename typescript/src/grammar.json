@@ -4033,6 +4033,14 @@
               {
                 "type": "STRING",
                 "value": "abstract"
+              },
+              {
+                "type": "STRING",
+                "value": "as"
+              },
+              {
+                "type": "STRING",
+                "value": "satisfies"
               }
             ]
           },
