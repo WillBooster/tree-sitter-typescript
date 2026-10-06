@@ -334,7 +334,7 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
             true,
             role === 'JSX' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
           );
-          const expected: [string, number, number][] = [];
+          const expected: [string, string, number, number][] = [];
           const expectedTypes: [number, number][] = [];
           const visit = (node: ts.Node): void => {
             const name =
@@ -344,14 +344,21 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
                     (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node))
                   ? node.tagName
                   : undefined;
-            if (name) expected.push([name.getText(reference), name.getStart(reference), name.getEnd()]);
+            if (name) {
+              const type = ts.isPropertyAccessExpression(name)
+                ? 'member_expression'
+                : ts.isJsxNamespacedName(name)
+                  ? 'jsx_namespace_name'
+                  : 'identifier';
+              expected.push([name.getText(reference), type, name.getStart(reference), name.getEnd()]);
+            }
             if (ts.isTupleTypeNode(node)) expectedTypes.push([node.getStart(reference), node.getEnd()]);
             ts.forEachChild(node, visit);
           };
           visit(reference);
           expect(current.rootNode.hasError).toBe(false);
           expect(
-            names.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            names.captures(current.rootNode).map(({ node }) => [node.text, node.type, node.startIndex, node.endIndex])
           ).toEqual(expected);
           expect(tuples.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
             expectedTypes
