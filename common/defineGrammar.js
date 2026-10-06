@@ -502,7 +502,7 @@ module.exports = function defineGrammar(dialect) {
       export_specifier: ($) => {
         const name = choice($._module_export_name, alias('as', $.identifier));
         const specifier = seq(field('name', name), optional(seq('as', field('alias', name))));
-        return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
+        return choice(specifier, prec.dynamic(1, seq('type', specifier)));
       },
 
       _module_export_name: ($, previous) => choice(previous, alias('type', $.identifier)),
@@ -512,7 +512,7 @@ module.exports = function defineGrammar(dialect) {
           field('name', choice($.identifier, alias('type', $.identifier), alias('as', $.identifier))),
           optional(seq('as', field('alias', choice($._module_export_name, alias('as', $.identifier)))))
         );
-        return choice(specifier, prec.dynamic(1, seq(choice('type', 'typeof'), specifier)));
+        return choice(specifier, prec.dynamic(1, seq('type', specifier)));
       },
 
       _import_identifier: ($) => choice($.identifier, alias('type', $.identifier)),
