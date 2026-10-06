@@ -27,9 +27,6 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'new',
 ];
 
-// Every primary expression but a `new` without arguments reduces to `_type_arguments_target` before
-// `primary_expression`, so the JavaScript grammar's precedences and conflicts for `primary_expression` take effect only
-// on `_type_arguments_target`.
 function withTypeArgumentsTarget($, lists) {
   return lists.map((list) =>
     list.map((entry) =>

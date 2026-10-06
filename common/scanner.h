@@ -1375,7 +1375,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-    if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !private_name && ascii_word &&
+    if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !private_name && ascii_word &&
         (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0)) {
         lexer->mark_end(lexer);
         if (!scan_default_trivia(lexer, true, true)) return false;
@@ -1407,11 +1407,9 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                     break;
             }
             if (!scan_annotated_type_colons(lexer)) return false;
-            if (unqualified) {
-                if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
-                advance(lexer);
-                if (lexer->lookahead != '>') return false;
-            }
+            if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+            advance(lexer);
+            if (lexer->lookahead != '>') return false;
             lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
         } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;

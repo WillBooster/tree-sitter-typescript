@@ -30,6 +30,132 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     );
   }, 30_000);
   afterAll(() => query?.delete());
+  test('retains index-signature fields through name and trivia edits', () => {
+    const parser = new Parser().setLanguage(language);
+    const indexQuery = new Query(
+      language,
+      '(index_signature name: (identifier) @name index_type: (_) @index type: (type_annotation (_) @result))'
+    );
+    let source =
+      'interface I { [unknown: string]: number; }\nclass C { [unique: string]: number; }\ntype T = { readonly [never: string]: number };';
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, 'unknown');
+      for (const [before, after, name] of [
+        ['unknown', 'value', 'value'],
+        ['value', 'never', 'never'],
+        ['never:', 'never /* key */:', 'never'],
+        ['never /* key */:', 'never:', 'never'],
+        ['never:', 'unknown:', 'unknown'],
+      ] as const) {
+        const start = source.indexOf(before);
+        expect(start).toBeGreaterThanOrEqual(0);
+        const next = source.slice(0, start) + after + source.slice(start + before.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before.length,
+            newEndIndex: start + after.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before.length),
+            newEndPosition: position(next, start + after.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, name);
+            check(fresh, next, name);
+          }
+        );
+        previous.delete();
+        source = next;
+      }
+      function check(current: Tree, text: string, firstName: string): void {
+        expect(current.rootNode.hasError).toBe(false);
+        const expected = [firstName, 'unique', 'never'].flatMap((name, i) => {
+          const start = text.indexOf('[' + name, i === 2 ? text.indexOf('type T') : 0) + 1;
+          const index = text.indexOf('string', start),
+            result = text.indexOf('number', index);
+          return [
+            ['name', name, start, start + name.length],
+            ['index', 'string', index, index + 6],
+            ['result', 'number', result, result + 6],
+          ];
+        });
+        expect(
+          indexQuery
+            .captures(current.rootNode)
+            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
+        ).toEqual(expected);
+      }
+    } finally {
+      tree?.delete();
+      indexQuery.delete();
+      parser.delete();
+    }
+  });
+  test.each(['unknown', 'never', 'unique'])(
+    'retains %s initializer ownership through nested-type arrow edits',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const valueQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
+      let source = `const x = (${name}: (x: number) => number);`;
+      let tree: Tree | undefined;
+      try {
+        tree = parser.parse(source)!;
+        check(tree, source, false);
+        for (const [before, after, error] of [
+          [' => number', '', true],
+          ['(x: number)', '((x: number))', true],
+          ['((x: number))', '(x: number) => number', false],
+          ['(x: number) => number', '(unique: number) => number', false],
+          ['(unique: number) => number', '(x: number) => number', false],
+          ['(x: number) => number', '() => number', false],
+          ['() => number', '()', true],
+          ['()', '(x: number) => number', false],
+        ] as const) {
+          const start = source.indexOf(before);
+          expect(start).toBeGreaterThanOrEqual(0);
+          const next = source.slice(0, start) + after + source.slice(start + before.length);
+          const previous = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + before.length,
+              newEndIndex: start + after.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + before.length),
+              newEndPosition: position(next, start + after.length),
+            }),
+            (incremental, fresh) => {
+              check(incremental, next, error);
+              check(fresh, next, error);
+            },
+            true
+          );
+          previous.delete();
+          source = next;
+        }
+        function check(current: Tree, text: string, error: boolean): void {
+          expect(current.rootNode.hasError).toBe(error);
+          const start = text.indexOf('(');
+          expect(
+            valueQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+          ).toEqual([[text.slice(start, -1), start, text.length - 1]]);
+        }
+      } finally {
+        tree?.delete();
+        valueQuery.delete();
+        parser.delete();
+      }
+    }
+  );
   test('retains malformed parenthesized-type ownership through arrow edits', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(
