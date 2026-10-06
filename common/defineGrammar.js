@@ -157,6 +157,10 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$.primary_type, $.type_predicate],
+      [$.infer_type],
+      [$.infer_type, $.type_predicate],
+      [$.asserts, $.type_predicate],
       [$.arrow_function, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $._type_query_identifier],
       [$._type_arguments_target, $.internal_module],
@@ -970,7 +974,7 @@ module.exports = function defineGrammar(dialect) {
       asserts: ($) =>
         seq(
           'asserts',
-          choice($.type_predicate, $.identifier, alias(choice('out', 'as', 'satisfies'), $.identifier), $.this)
+          choice($.type_predicate, $.identifier, alias(choice('out', 'as', 'satisfies', 'is'), $.identifier), $.this)
         ),
 
       asserts_annotation: ($) => seq(seq(':', $.asserts)),
@@ -1075,7 +1079,8 @@ module.exports = function defineGrammar(dialect) {
       template_literal_type: ($) =>
         seq('`', repeat(choice(alias($._template_chars, $.string_fragment), $.template_type)), '`'),
 
-      infer_type: ($) => prec.right(seq('infer', $._type_identifier, optional(seq('extends', $.type)))),
+      infer_type: ($) =>
+        choice(seq('infer', $._type_identifier), prec.right(seq('infer', $._type_identifier, 'extends', $.type))),
 
       conditional_type: ($) =>
         prec.right(
@@ -1119,7 +1124,10 @@ module.exports = function defineGrammar(dialect) {
             'name',
             choice(
               $.identifier,
-              alias(choice('out', 'as', 'satisfies'), $.identifier),
+              alias(
+                choice('out', 'as', 'satisfies', $.undefined, 'keyof', 'infer', 'readonly', 'abstract', 'asserts'),
+                $.identifier
+              ),
               $.this,
               alias($.predefined_type, $.identifier)
             )
@@ -1359,7 +1367,7 @@ module.exports = function defineGrammar(dialect) {
 
       // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
-      _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
+      _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out', 'is'), $.type_identifier),
 
       _type_reference_identifier: ($) =>
         choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies'), $.type_identifier)),
