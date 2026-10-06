@@ -80,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $._namespace_expression_end,
       $._abstract_constructor_prefix,
       $._predefined_parameter_name,
+      $._predefined_annotated_name,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -188,6 +189,9 @@ module.exports = function defineGrammar(dialect) {
       [$._type_arguments_target, $.pattern, $.primary_type],
       [$._parameter_name, $.primary_type],
       [$.pattern, $.primary_type],
+      [$.pattern, $.primary_expression],
+      [$.rest_pattern, $.primary_expression],
+      [$._for_header, $.primary_expression],
 
       [$._tuple_label, $.primary_type],
       [$._tuple_label, $.literal_type],
@@ -233,7 +237,18 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     rules: {
-      labeled_statement: (_, previous) => prec.dynamic(-1, previous),
+      labeled_statement: ($) =>
+        prec.dynamic(
+          -1,
+          seq(
+            field(
+              'label',
+              alias(choice($.identifier, $._reserved_identifier, $._predefined_annotated_name), $.statement_identifier)
+            ),
+            ':',
+            field('body', $._single_statement)
+          )
+        ),
       public_field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
@@ -401,7 +416,8 @@ module.exports = function defineGrammar(dialect) {
 
       _augmented_assignment_lhs: ($, previous) => choice(previous, $.non_null_expression),
 
-      _lhs_expression: ($, previous) => choice(previous, $.non_null_expression),
+      _lhs_expression: ($, previous) =>
+        choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
 
       await_expression: (_, previous) => {
         const members = previous.content.content.members;
@@ -421,7 +437,11 @@ module.exports = function defineGrammar(dialect) {
       },
 
       primary_expression: ($) =>
-        choice($._type_arguments_target, alias($._argumentless_new_expression, $.new_expression)),
+        choice(
+          $._type_arguments_target,
+          alias($._argumentless_new_expression, $.new_expression),
+          alias($._predefined_annotated_name, $.identifier)
+        ),
 
       // The primary expressions that type arguments in an expression may follow: TypeScript gives the type arguments
       // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.

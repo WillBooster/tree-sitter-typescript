@@ -53,6 +53,7 @@ enum TokenType {
     NAMESPACE_EXPRESSION_END,
     ABSTRACT_CONSTRUCTOR_PREFIX,
     PREDEFINED_PARAMETER_NAME,
+    PREDEFINED_ANNOTATED_NAME,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -67,7 +68,7 @@ typedef struct {
 } Scanner;
 
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
-static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks);
+static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
 
@@ -1369,16 +1370,43 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-    if (valid_symbols[PREDEFINED_PARAMETER_NAME] && !private_name && ascii_word &&
+    if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !private_name && ascii_word &&
         (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0)) {
         lexer->mark_end(lexer);
-        if (!scan_default_trivia(lexer, true)) return false;
-        if (lexer->lookahead == '?') {
+        if (!scan_default_trivia(lexer, true, true)) return false;
+        bool optional_parameter = lexer->lookahead == '?';
+        if (optional_parameter) {
             advance(lexer);
-            if (!scan_default_trivia(lexer, true)) return false;
+            if (!scan_default_trivia(lexer, true, true)) return false;
         }
         if (lexer->lookahead != ':') return false;
-        lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+        if (!optional_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, false)) return false;
+            while (lexer->lookahead == '?') {
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) return false;
+            }
+            if (lexer->eof(lexer)) return false;
+            switch (lexer->lookahead) {
+                case ')':
+                case ']':
+                case '}':
+                case ',':
+                case ';':
+                case '=':
+                case ':':
+                case '>':
+                    return false;
+                default:
+                    break;
+            }
+            lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
+        } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
+            lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+        } else {
+            return false;
+        }
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
@@ -1645,10 +1673,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] ||
-         (valid_symbols[PREDEFINED_PARAMETER_NAME] && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
+         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
         if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
-            lexer->result_symbol != PREDEFINED_PARAMETER_NAME) scanner->heritage_type_pending = false;
+            lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
+            lexer->result_symbol != PREDEFINED_ANNOTATED_NAME) scanner->heritage_type_pending = false;
         return result;
     }
 
@@ -1684,7 +1713,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         !valid_symbols[REGEX_PATTERN] && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
         return scan_html_comment(lexer);
     }
-    if (valid_symbols[PREDEFINED_PARAMETER_NAME] && !valid_symbols[ERROR_RECOVERY] &&
+    if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
         (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
         return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
@@ -1772,7 +1801,7 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
     lexer->mark_end(lexer);
     lexer->result_symbol = EXPORT_DEFAULT;
     scanner->default_declaration_pending = false;
-    if (!scan_default_trivia(lexer, true)) return true;
+    if (!scan_default_trivia(lexer, true, true)) return true;
     if (lexer->lookahead == '@') {
         scanner->default_declaration_pending = true;
     } else {
@@ -1780,11 +1809,11 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
         if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
         if (strcmp(word, "function") == 0 || strcmp(word, "class") == 0) {
             scanner->default_declaration_pending = true;
-        } else if (strcmp(word, "abstract") == 0 && scan_default_trivia(lexer, false)) {
+        } else if (strcmp(word, "abstract") == 0 && scan_default_trivia(lexer, false, true)) {
             memset(word, 0, sizeof(word));
             scanner->default_declaration_pending =
                 scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "class") == 0;
-        } else if (strcmp(word, "async") == 0 && scan_default_trivia(lexer, false)) {
+        } else if (strcmp(word, "async") == 0 && scan_default_trivia(lexer, false, true)) {
             memset(word, 0, sizeof(word));
             scanner->default_declaration_pending =
                 scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "function") == 0;
@@ -1793,7 +1822,7 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
     return true;
 }
 
-static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks) {
+static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments) {
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
             if (!allow_line_breaks && is_line_terminator(lexer->lookahead)) return false;
@@ -1821,7 +1850,7 @@ static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks) {
                 continue;
             }
             if (lexer->lookahead != '/') return false;
-        } else if (lexer->lookahead == '<' || lexer->lookahead == '-') {
+        } else if (html_comments && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
             const char *opening = lexer->lookahead == '<' ? "<!--" : "-->";
             for (; *opening; opening++) {
                 if (lexer->lookahead != *opening) return false;

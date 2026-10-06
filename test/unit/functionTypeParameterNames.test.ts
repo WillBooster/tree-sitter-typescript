@@ -30,6 +30,86 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     );
   }, 30_000);
   afterAll(() => query?.delete());
+  test.each(['unknown', 'never', 'unique'])('retains the annotated %s expression through arrow edits', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const roleQuery = new Query(
+      language,
+      `
+      (labeled_statement label: (statement_identifier) @label)
+      (parenthesized_expression (identifier) @expression_name)
+      (primary_expression/identifier) @primary
+      (parenthesized_expression type: (type_annotation (predefined_type) @type))
+      (required_parameter pattern: (pattern/identifier) @binding_name
+        type: (type_annotation (predefined_type) @type))
+    `
+    );
+    let source = `${name}: { const x = (${name} /* annotation */: number); }`;
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, 'expression_name');
+      for (const [before, after, role, error] of [
+        [';', ` => ${name};`, 'binding_name', false],
+        [` => ${name};`, ';', 'expression_name', false],
+        ['number', '', 'expression_name', true],
+        [': );', ': number);', 'expression_name', false],
+      ] as const) {
+        const start = source.indexOf(before);
+        expect(start).toBeGreaterThanOrEqual(0);
+        const next = source.slice(0, start) + after + source.slice(start + before.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before!.length,
+            newEndIndex: start + after!.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before!.length),
+            newEndPosition: position(next, start + after!.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, role, error);
+            check(fresh, next, role, error);
+          },
+          error
+        );
+        previous.delete();
+        source = next;
+      }
+      function check(current: Tree, text: string, role: string, error = false): void {
+        expect(current.rootNode.hasError).toBe(error);
+        const nameStart = text.indexOf(name, text.indexOf('('));
+        const typeStart = text.indexOf('number');
+        expect(
+          roleQuery
+            .captures(current.rootNode)
+            .filter(({ name }) => name !== 'primary')
+            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
+        ).toEqual([
+          ['label', name, 0, name.length],
+          [role, name, nameStart, nameStart + name.length],
+          ...(typeStart === -1 ? [] : [['type', 'number', typeStart, typeStart + 'number'.length]]),
+        ]);
+        if (role === 'expression_name') {
+          expect(
+            roleQuery
+              .captures(current.rootNode)
+              .some(
+                ({ name: capture, node }) =>
+                  capture === 'primary' && node.startIndex === nameStart && node.endIndex === nameStart + name.length
+              )
+          ).toBe(true);
+        }
+      }
+    } finally {
+      tree?.delete();
+      roleQuery.delete();
+      parser.delete();
+    }
+  });
   test('retains the type alias result through invalid constructor bindings', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(
