@@ -52,6 +52,7 @@ enum TokenType {
     ERROR_RECOVERY,
     NAMESPACE_EXPRESSION_END,
     ABSTRACT_CONSTRUCTOR_PREFIX,
+    PREDEFINED_PARAMETER_NAME,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -1363,10 +1364,24 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
     bool comment = false;
-    if (lexer->lookahead == '#') advance(lexer);
+    bool private_name = lexer->lookahead == '#';
+    if (private_name) advance(lexer);
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+    if (valid_symbols[PREDEFINED_PARAMETER_NAME] && !private_name && ascii_word &&
+        (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0)) {
+        lexer->mark_end(lexer);
+        if (!scan_default_trivia(lexer, true)) return false;
+        if (lexer->lookahead == '?') {
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true)) return false;
+        }
+        if (lexer->lookahead != ':') return false;
+        lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+        return true;
+    }
+    if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
     if (unqualified && ascii_word) {
         static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
@@ -1629,9 +1644,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return ret;
     }
 
-    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) && !valid_symbols[ERROR_RECOVERY]) {
+    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] ||
+         (valid_symbols[PREDEFINED_PARAMETER_NAME] && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
-        if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX) scanner->heritage_type_pending = false;
+        if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
+            lexer->result_symbol != PREDEFINED_PARAMETER_NAME) scanner->heritage_type_pending = false;
         return result;
     }
 
@@ -1666,6 +1683,10 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     if (valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] && !valid_symbols[ESCAPE_SEQUENCE] &&
         !valid_symbols[REGEX_PATTERN] && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
         return scan_html_comment(lexer);
+    }
+    if (valid_symbols[PREDEFINED_PARAMETER_NAME] && !valid_symbols[ERROR_RECOVERY] &&
+        (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
+        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
     return false;
 }

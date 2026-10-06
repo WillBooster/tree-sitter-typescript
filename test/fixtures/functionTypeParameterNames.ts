@@ -15,3 +15,19 @@ const value: unknown = callback({ never: 'ordinary property', unknown: 'ordinary
 const instance: object = new factory(value);
 const optional: OptionalCallback = (unknown, never) => `${unknown}${never}`;
 const generic: GenericCallback = <T>(unknown: T) => unknown;
+
+function collectNames(unknown: number, never: number, unique: number): number[] {
+  const entries = [unknown, never, unique];
+  const payload = { first: unknown, second: never, third: unique };
+  return [...entries, payload.first, payload.second, payload.third];
+}
+const collected: number[] = collectNames(1, 2, 3);
+
+type CommentedCallback = (
+  // leading trivia
+  unknown /* binding
+  */: unknown,
+  never /* optional */ ? : string,
+  unique // binding
+  ? : number
+) => unknown;

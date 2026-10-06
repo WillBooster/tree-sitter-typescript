@@ -79,6 +79,7 @@ module.exports = function defineGrammar(dialect) {
       $.__error_recovery,
       $._namespace_expression_end,
       $._abstract_constructor_prefix,
+      $._predefined_parameter_name,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -938,7 +939,7 @@ module.exports = function defineGrammar(dialect) {
       optional_parameter: ($) =>
         seq($._parameter_name, '?', field('type', optional($.type_annotation)), optional($._initializer)),
 
-      pattern: ($, previous) => choice(previous, alias(prec(-1, choice('unknown', 'never', 'unique')), $.identifier)),
+      pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
 
       _parameter_name: ($) =>
         seq(

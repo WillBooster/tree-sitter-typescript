@@ -8778,25 +8778,8 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "PREC",
-            "value": -1,
-            "content": {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "unknown"
-                },
-                {
-                  "type": "STRING",
-                  "value": "never"
-                },
-                {
-                  "type": "STRING",
-                  "value": "unique"
-                }
-              ]
-            }
+            "type": "SYMBOL",
+            "name": "_predefined_parameter_name"
           },
           "named": true,
           "value": "identifier"
@@ -16238,6 +16221,10 @@
     {
       "type": "SYMBOL",
       "name": "_abstract_constructor_prefix"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_predefined_parameter_name"
     }
   ],
   "inline": [
