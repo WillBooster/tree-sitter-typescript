@@ -271,12 +271,46 @@
               "value": "type"
             },
             {
-              "type": "SYMBOL",
-              "name": "export_clause"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "export_clause"
+                },
+                {
+                  "type": "STRING",
+                  "value": "*"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "namespace_export"
+                }
+              ]
             },
             {
               "type": "SYMBOL",
               "name": "_from_clause"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "import_attribute"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_line_break_before_attributes"
+                    }
+                  ]
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             },
             {
               "type": "SYMBOL",
@@ -303,40 +337,6 @@
               },
               "named": true,
               "value": "export_clause"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_semicolon"
-            }
-          ]
-        },
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "export"
-            },
-            {
-              "type": "STRING",
-              "value": "type"
-            },
-            {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "*"
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "namespace_export"
-                }
-              ]
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_from_clause"
             },
             {
               "type": "SYMBOL",
@@ -4095,6 +4095,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },
@@ -11431,6 +11435,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },
@@ -11505,6 +11513,10 @@
                   {
                     "type": "STRING",
                     "value": "satisfies"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "is"
                   }
                 ]
               },
@@ -11563,6 +11575,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },
@@ -12331,6 +12347,30 @@
                   {
                     "type": "STRING",
                     "value": "is"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "undefined"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "keyof"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "infer"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "readonly"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "abstract"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "asserts"
                   },
                   {
                     "type": "STRING",
@@ -13176,6 +13216,10 @@
                       {
                         "type": "STRING",
                         "value": "satisfies"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "is"
                       }
                     ]
                   },

@@ -266,6 +266,83 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       parser.delete();
     }
   });
+  test.each(['qualified type', 'undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
+    'preserves qualified type and bare assertion roles through %s edits',
+    (role) => {
+      const parser = new Parser().setLanguage(language);
+      const assertions = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
+      const qualified = new Query(language, '(primary_type/nested_type_identifier) @qualified');
+      const before = role === 'qualified type' ? 'is' : role;
+      const marker = role === 'qualified type' ? 'value: ' : 'asserts ';
+      const start = Source.indexOf(`${marker}${before}${role === 'qualified type' ? '.NS' : ';'}`) + marker.length;
+      let tree: Tree | undefined;
+      let source = Source;
+      try {
+        tree = parser.parse(source)!;
+        check(tree, source);
+        for (const [oldName, newName] of [
+          [before, 'parameter'],
+          ['parameter', before],
+        ]) {
+          const next = source.slice(0, start) + newName + source.slice(start + oldName!.length);
+          const previous = tree;
+          tree = compareEditedTree(
+            parser,
+            previous,
+            next,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + oldName!.length,
+              newEndIndex: start + newName!.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + oldName!.length),
+              newEndPosition: position(next, start + newName!.length),
+            }),
+            (incremental, fresh) => {
+              check(incremental, next);
+              check(fresh, next);
+              for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
+            }
+          );
+          previous.delete();
+          source = next;
+        }
+        expect(source).toBe(Source);
+        function check(current: Tree, text: string): void {
+          const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
+          const expected: [string, number, number][] = [];
+          let referenceType: ts.TypeNode | undefined;
+          const visit = (node: ts.Node): void => {
+            if (ts.isTypePredicateNode(node) && node.assertsModifier && !node.type)
+              expected.push([
+                node.parameterName.getText(reference),
+                node.parameterName.getStart(reference),
+                node.parameterName.getEnd(),
+              ]);
+            if (ts.isVariableDeclaration(node) && node.name.getText(reference) === 'value') referenceType = node.type;
+            ts.forEachChild(node, visit);
+          };
+          visit(reference);
+          expect(current.rootNode.hasError).toBe(false);
+          expect(
+            assertions.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+          ).toEqual(expected);
+          const capture = qualified
+            .captures(current.rootNode)
+            .find(({ node }) => node.startIndex === referenceType!.getStart(reference))!;
+          expect(capture.node.text).toBe(referenceType!.getText(reference));
+          expect(capture.node.endIndex).toBe(referenceType!.getEnd());
+          expect(capture.node.childForFieldName('module')?.type).toBe('identifier');
+          expect(capture.node.childForFieldName('name')?.type).toBe('type_identifier');
+        }
+      } finally {
+        tree?.delete();
+        assertions.delete();
+        qualified.delete();
+        parser.delete();
+      }
+    }
+  );
   test.each(['undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
     'preserves %s predicate ownership through edits',
     (word) => {
