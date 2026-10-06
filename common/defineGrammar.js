@@ -159,6 +159,7 @@ module.exports = function defineGrammar(dialect) {
     conflicts: ($, previous) => [
       [$.arrow_function, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $.nested_type_identifier, $._generic_nested_type_identifier],
+      [$._type_arguments_target, $._type_query_identifier],
       [$.import_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier, $._module_export_name],
       [$.export_specifier, $._module_export_name],
@@ -1128,7 +1129,7 @@ module.exports = function defineGrammar(dialect) {
           field(
             'object',
             choice(
-              reserved('properties', $.identifier),
+              $._type_query_identifier,
               $.this,
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
@@ -1146,7 +1147,7 @@ module.exports = function defineGrammar(dialect) {
           field(
             'object',
             choice(
-              reserved('properties', $.identifier),
+              $._type_query_identifier,
               $.this,
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
@@ -1164,7 +1165,7 @@ module.exports = function defineGrammar(dialect) {
             'function',
             choice(
               $.import,
-              reserved('properties', $.identifier),
+              $._type_query_identifier,
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
@@ -1177,7 +1178,7 @@ module.exports = function defineGrammar(dialect) {
             'function',
             choice(
               $.import,
-              reserved('properties', $.identifier),
+              $._type_query_identifier,
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
@@ -1193,11 +1194,14 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression),
               alias($._type_query_instantiation_expression, $.instantiation_expression),
-              reserved('properties', $.identifier),
+              $._type_query_identifier,
               $.this
             )
           )
         ),
+
+      _type_query_identifier: ($) =>
+        choice(reserved('properties', $.identifier), alias(choice('as', 'satisfies'), $.identifier)),
 
       index_type_query: ($) => prec.right(seq('keyof', choice($.primary_type, $.readonly_type))),
 

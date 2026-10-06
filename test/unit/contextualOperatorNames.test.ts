@@ -22,6 +22,9 @@ type Checked = { [satisfies in keyof Keys as satisfies]: Keys[satisfies] };
 class Base<T> {}
 class Derived extends Base<as[]> {}
 interface Inherited extends as {}
+const inferred = as as (typeof as);
+const checkedClass = satisfies satisfies (typeof satisfies);
+const prototype = value as (typeof as.prototype);
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -35,6 +38,7 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       `
       (parenthesized_type) @parenthesized
+      (type_query . (_) @query.value)
       (mapped_type_clause name: (type_identifier) @mapped.name type: (_) @mapped.type alias: (_) @mapped.alias)
       (extends_clause type_arguments: (type_arguments) @heritage)
       (extends_type_clause type: (type_identifier) @interface.name)
@@ -49,6 +53,7 @@ for (const dialect of ['typescript', 'tsx']) {
         source.indexOf('new as') + 4,
         source.indexOf('Base<as[]>') + 5,
         source.indexOf('[as in') + 1,
+        source.indexOf('typeof as') + 7,
       ]) {
         for (const [before, after] of [
           ['as', 'satisfies'],
@@ -110,6 +115,7 @@ for (const dialect of ['typescript', 'tsx']) {
         if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node))
           assertions.push([ts.isAsExpression(node) ? 'as' : 'satisfies', node.getStart(reference), node.getEnd()]);
         if (ts.isParenthesizedTypeNode(node)) addType('parenthesized', node);
+        if (ts.isTypeQueryNode(node)) addType('query.value', node.exprName);
         if (ts.isMappedTypeNode(node)) {
           addType('mapped.name', node.typeParameter.name);
           addType('mapped.type', node.typeParameter.constraint!);
