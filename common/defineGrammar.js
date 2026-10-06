@@ -158,6 +158,7 @@ module.exports = function defineGrammar(dialect) {
 
     conflicts: ($, previous) => [
       [$.arrow_function, $.method_definition, $._type_arguments_target],
+      [$._type_arguments_target, $.nested_type_identifier, $._generic_nested_type_identifier],
       [$.import_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier, $._module_export_name],
       [$.export_specifier, $._module_export_name],
@@ -894,7 +895,7 @@ module.exports = function defineGrammar(dialect) {
               'type',
               choice(
                 $._type_identifier,
-                alias('abstract', $.type_identifier),
+                alias(choice('abstract', 'as', 'satisfies'), $.type_identifier),
                 $.nested_type_identifier,
                 alias($._heritage_generic_type, $.generic_type)
               )
@@ -1204,7 +1205,7 @@ module.exports = function defineGrammar(dialect) {
 
       mapped_type_clause: ($) =>
         seq(
-          field('name', choice($._type_identifier, alias('abstract', $.type_identifier))),
+          field('name', choice($._type_identifier, alias(choice('abstract', 'as', 'satisfies'), $.type_identifier))),
           'in',
           field('type', $.type),
           optional(seq('as', field('alias', $.type)))
@@ -1350,7 +1351,8 @@ module.exports = function defineGrammar(dialect) {
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
       _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
 
-      _type_reference_identifier: ($) => choice($._type_identifier, alias(choice('in', 'abstract'), $.type_identifier)),
+      _type_reference_identifier: ($) =>
+        choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies'), $.type_identifier)),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
@@ -1420,7 +1422,7 @@ function nestedTypeIdentifier($, generic) {
         'module',
         choice(
           $.identifier,
-          alias(choice('in', 'out', 'abstract'), $.identifier),
+          alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.identifier),
           $.nested_identifier,
           alias($._in_nested_identifier, $.nested_identifier)
         )

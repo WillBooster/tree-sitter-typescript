@@ -11507,6 +11507,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -11625,8 +11633,21 @@
                   {
                     "type": "ALIAS",
                     "content": {
-                      "type": "STRING",
-                      "value": "abstract"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "abstract"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "as"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "satisfies"
+                        }
+                      ]
                     },
                     "named": true,
                     "value": "type_identifier"
@@ -11669,8 +11690,21 @@
                         {
                           "type": "ALIAS",
                           "content": {
-                            "type": "STRING",
-                            "value": "abstract"
+                            "type": "CHOICE",
+                            "members": [
+                              {
+                                "type": "STRING",
+                                "value": "abstract"
+                              },
+                              {
+                                "type": "STRING",
+                                "value": "as"
+                              },
+                              {
+                                "type": "STRING",
+                                "value": "satisfies"
+                              }
+                            ]
                           },
                           "named": true,
                           "value": "type_identifier"
@@ -13020,6 +13054,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -13650,8 +13692,21 @@
               {
                 "type": "ALIAS",
                 "content": {
-                  "type": "STRING",
-                  "value": "abstract"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "abstract"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "as"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "satisfies"
+                    }
+                  ]
                 },
                 "named": true,
                 "value": "type_identifier"
@@ -14831,6 +14886,14 @@
               {
                 "type": "STRING",
                 "value": "abstract"
+              },
+              {
+                "type": "STRING",
+                "value": "as"
+              },
+              {
+                "type": "STRING",
+                "value": "satisfies"
               }
             ]
           },
@@ -14860,6 +14923,11 @@
       "arrow_function",
       "method_definition",
       "_type_arguments_target"
+    ],
+    [
+      "_type_arguments_target",
+      "nested_type_identifier",
+      "_generic_nested_type_identifier"
     ],
     [
       "import_specifier",
