@@ -973,7 +973,28 @@ module.exports = function defineGrammar(dialect) {
       asserts: ($) =>
         seq(
           'asserts',
-          choice($.type_predicate, $.identifier, alias(choice('out', 'as', 'satisfies'), $.identifier), $.this)
+          choice(
+            $.type_predicate,
+            $.identifier,
+            alias(
+              choice(
+                'out',
+                'as',
+                'satisfies',
+                'any',
+                'number',
+                'boolean',
+                'string',
+                'symbol',
+                'unknown',
+                'never',
+                'object',
+                'unique'
+              ),
+              $.identifier
+            ),
+            $.this
+          )
         ),
 
       asserts_annotation: ($) => seq(seq(':', $.asserts)),
@@ -1124,7 +1145,7 @@ module.exports = function defineGrammar(dialect) {
               $.identifier,
               alias(choice('out', 'as', 'satisfies'), $.identifier),
               $.this,
-              alias($.predefined_type, $.identifier)
+              alias(choice($.predefined_type, 'unique'), $.identifier)
             )
           ),
           'is',
