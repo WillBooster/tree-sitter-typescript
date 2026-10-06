@@ -709,10 +709,6 @@
                     },
                     "named": true,
                     "value": "identifier"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "string"
                   }
                 ]
               }
@@ -807,10 +803,6 @@
                           },
                           "named": true,
                           "value": "identifier"
-                        },
-                        {
-                          "type": "SYMBOL",
-                          "name": "string"
                         }
                       ]
                     }
