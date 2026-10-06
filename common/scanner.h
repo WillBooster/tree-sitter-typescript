@@ -1362,6 +1362,7 @@ static bool scan_await_keyword(TSLexer *lexer) {
 
 static bool scan_generic_function_type(TSLexer *lexer);
 static bool scan_annotated_type_colons(TSLexer *lexer);
+static bool scan_type_group(TSLexer *lexer, int32_t close);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1406,6 +1407,11 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                     break;
             }
             if (!scan_annotated_type_colons(lexer)) return false;
+            if (unqualified) {
+                if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+                advance(lexer);
+                if (lexer->lookahead != '>') return false;
+            }
             lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
         } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
@@ -1449,8 +1455,6 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
 }
-
-static bool scan_type_group(TSLexer *lexer, int32_t close);
 
 static bool scan_generic_function_type(TSLexer *lexer) {
     bool comment = false;
@@ -1508,15 +1512,22 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
 static bool scan_annotated_type_colons(TSLexer *lexer) {
     unsigned conditional_depth = 0;
     bool saw_extends = false;
+    bool first = true;
     while (!lexer->eof(lexer)) {
         if (!scan_default_trivia(lexer, true, false)) return true;
         int32_t c = lexer->lookahead;
         if (c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return true;
         if (is_identifier_part(c)) {
             char word[16] = {0};
-            if (scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "extends") == 0) saw_extends = true;
+            bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+            if (first && ascii_word && strcmp(word, "unique") == 0) {
+                if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+            }
+            if (ascii_word && strcmp(word, "extends") == 0) saw_extends = true;
+            first = false;
             continue;
         }
+        first = false;
         advance(lexer);
         if (c == ':') {
             if (conditional_depth == 0) return false;
