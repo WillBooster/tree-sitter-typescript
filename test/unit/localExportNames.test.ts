@@ -1,6 +1,8 @@
 import { Edit, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
+import { compareEditedTree, position } from '../helpers/treeEdit.js';
+
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('rejects string-named local exports while retaining string re-exports and aliases', async () => {
@@ -60,27 +62,25 @@ test('updates export validity when adding and removing a from clause', async () 
         try {
           expect(tree.rootNode.hasError).toBe(true);
           for (const nextClause of [' from "m"', '', ' from "m"']) {
-            tree.edit(
+            const previousSource = prefix + clause + ';';
+            const source = prefix + nextClause + ';';
+            const next = compareEditedTree(
+              parser,
+              tree,
+              source,
               new Edit({
                 startIndex: prefix.length,
                 oldEndIndex: prefix.length + clause.length,
                 newEndIndex: prefix.length + nextClause.length,
-                startPosition: { row: 0, column: prefix.length },
-                oldEndPosition: { row: 0, column: prefix.length + clause.length },
-                newEndPosition: { row: 0, column: prefix.length + nextClause.length },
-              })
+                startPosition: position(previousSource, prefix.length),
+                oldEndPosition: position(previousSource, prefix.length + clause.length),
+                newEndPosition: position(source, prefix.length + nextClause.length),
+              }),
+              (incremental) => expect(incremental.rootNode.hasError, source).toBe(!nextClause),
+              true
             );
-            const source = prefix + nextClause + ';';
-            const previous = tree;
-            tree = parser.parse(source, previous)!;
-            previous.delete();
-            const fresh = parser.parse(source)!;
-            try {
-              expect(tree.rootNode.hasError, source).toBe(!nextClause);
-              expect(tree.rootNode.toString()).toBe(fresh.rootNode.toString());
-            } finally {
-              fresh.delete();
-            }
+            tree.delete();
+            tree = next;
             clause = nextClause;
           }
         } finally {
