@@ -4073,6 +4073,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -4130,6 +4138,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -10264,6 +10280,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -11373,6 +11397,14 @@
                       {
                         "type": "STRING",
                         "value": "abstract"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "as"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "satisfies"
                       }
                     ]
                   },
@@ -11439,6 +11471,14 @@
                   {
                     "type": "STRING",
                     "value": "abstract"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "as"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "satisfies"
                   }
                 ]
               },
@@ -12248,8 +12288,21 @@
             {
               "type": "ALIAS",
               "content": {
-                "type": "STRING",
-                "value": "out"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "out"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "as"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "satisfies"
+                  }
+                ]
               },
               "named": true,
               "value": "identifier"
@@ -13201,8 +13254,21 @@
               {
                 "type": "ALIAS",
                 "content": {
-                  "type": "STRING",
-                  "value": "out"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "out"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "as"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "satisfies"
+                    }
+                  ]
                 },
                 "named": true,
                 "value": "identifier"
@@ -14343,8 +14409,21 @@
               {
                 "type": "ALIAS",
                 "content": {
-                  "type": "STRING",
-                  "value": "abstract"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "abstract"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "as"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "satisfies"
+                    }
+                  ]
                 },
                 "named": true,
                 "value": "type_identifier"
@@ -14927,12 +15006,15 @@
     ],
     [
       "_type_arguments_target",
-      "nested_type_identifier",
-      "_generic_nested_type_identifier"
+      "_type_query_identifier"
     ],
     [
       "_type_arguments_target",
-      "_type_query_identifier"
+      "internal_module"
+    ],
+    [
+      "_type_arguments_target",
+      "module"
     ],
     [
       "import_specifier",

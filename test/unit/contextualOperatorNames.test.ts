@@ -27,6 +27,15 @@ const inferred = as as (typeof as);
 const checkedClass = satisfies satisfies (typeof satisfies);
 const prototype = value as (typeof as.prototype);
 type Tuple = [as: string, satisfies?: number, ...as: boolean[]];
+declare namespace as { namespace Types { class Value { value: number; } } }
+declare namespace satisfies { namespace Types { class Value { value: number; } } }
+type Qualified = as.Types.Value;
+const qualified = value as as.Types.Value;
+const checkedQualified = value satisfies satisfies.Types.Value;
+function isString(as: unknown): as is string { return typeof as === 'string'; }
+function ensure(satisfies: unknown): asserts satisfies { if (!satisfies) throw Error(); }
+const identity = <as,>(item: as) => item;
+const defaulted = <satisfies = string,>(item: satisfies) => item;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -47,6 +56,10 @@ for (const dialect of ['typescript', 'tsx']) {
       (tuple_type (required_parameter name: (identifier) @tuple.name))
       (tuple_type (optional_parameter name: (identifier) @tuple.name))
       (tuple_type (required_parameter name: (rest_pattern (identifier) @tuple.name)))
+      (nested_type_identifier) @qualified.type
+      (type_predicate name: (identifier) @predicate.name)
+      (asserts . (identifier) @assert.name)
+      (type_parameter name: (type_identifier) @generic.name)
     `
     );
     let source = Source;
@@ -60,6 +73,8 @@ for (const dialect of ['typescript', 'tsx']) {
         source.indexOf('[as in') + 1,
         source.indexOf('typeof as') + 7,
         source.indexOf('[as: string') + 1,
+        source.indexOf('type Qualified = as') + 'type Qualified = '.length,
+        source.indexOf('const identity = <as') + 'const identity = <'.length,
       ]) {
         for (const [before, after] of [
           ['as', 'satisfies'],
@@ -123,6 +138,11 @@ for (const dialect of ['typescript', 'tsx']) {
         if (ts.isParenthesizedTypeNode(node)) addType('parenthesized', node);
         if (ts.isTypeQueryNode(node)) addType('query.value', node.exprName);
         if (ts.isNamedTupleMember(node)) addType('tuple.name', node.name);
+        if (ts.isTypeReferenceNode(node) && ts.isQualifiedName(node.typeName)) addType('qualified.type', node.typeName);
+        if (ts.isTypePredicateNode(node))
+          addType(node.assertsModifier && !node.type ? 'assert.name' : 'predicate.name', node.parameterName);
+        if (ts.isTypeParameterDeclaration(node) && !ts.isMappedTypeNode(node.parent))
+          addType('generic.name', node.name);
         if (ts.isMappedTypeNode(node)) {
           addType('mapped.name', node.typeParameter.name);
           addType('mapped.type', node.typeParameter.constraint!);
