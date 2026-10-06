@@ -52,6 +52,7 @@ enum TokenType {
     ERROR_RECOVERY,
     NAMESPACE_EXPRESSION_END,
     ABSTRACT_CONSTRUCTOR_PREFIX,
+    JSX_CLOSING_RECOVERY_IDENTIFIER,
     PREDEFINED_PARAMETER_NAME,
     PREDEFINED_ANNOTATED_NAME,
 };
@@ -69,6 +70,7 @@ typedef struct {
 
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
 static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
+static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
 
@@ -542,7 +544,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
         case LINE_BREAK_AFTER_MODIFIER_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
         case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
-            return before_slash || !scan_word(lexer, "with");
+            if (before_slash || !scan_word(lexer, "with")) return true;
+            return scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT || lexer->lookahead != '{';
         case LINE_BREAK_AFTER_ACCESSOR_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->lookahead == '*' ||
                                      lexer->eof(lexer));
@@ -1503,7 +1506,6 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
-
     if (valid_symbols[REGEX_FLAGS_START] && !valid_symbols[AUTOMATIC_SEMICOLON]) {
         if (lexer->lookahead != '/') return false;
         lexer->mark_end(lexer);
@@ -1713,6 +1715,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         !valid_symbols[REGEX_PATTERN] && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
         return scan_html_comment(lexer);
     }
+    if (valid_symbols[JSX_CLOSING_RECOVERY_IDENTIFIER] && !valid_symbols[ERROR_RECOVERY]) {
+        return scan_jsx_closing_recovery_identifier(lexer);
+    }
     if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
         (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
         return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
@@ -1819,6 +1824,30 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
                 scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "function") == 0;
         }
     }
+    return true;
+}
+
+static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer) {
+    while (is_whitespace(lexer->lookahead)) skip(lexer);
+    if (lexer->lookahead != 'i') return false;
+    advance(lexer);
+    if (lexer->lookahead != 's') return false;
+    advance(lexer);
+    if (is_identifier_part(lexer->lookahead) || lexer->lookahead == '-') return false;
+    lexer->mark_end(lexer);
+    if (!scan_default_trivia(lexer, true, true)) {
+        if (!lexer->eof(lexer)) return false;
+    } else if (lexer->lookahead == '.' || lexer->lookahead == ':') {
+        advance(lexer);
+        if (!scan_default_trivia(lexer, true, true)) {
+            if (!lexer->eof(lexer)) return false;
+        } else if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+            return false;
+        }
+    } else if (lexer->lookahead == '>') {
+        return false;
+    }
+    lexer->result_symbol = JSX_CLOSING_RECOVERY_IDENTIFIER;
     return true;
 }
 

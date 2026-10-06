@@ -5,6 +5,7 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'abstract',
   'as',
   'satisfies',
+  'is',
   'accessor',
   'declare',
   'global',
@@ -79,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $.__error_recovery,
       $._namespace_expression_end,
       $._abstract_constructor_prefix,
+      $._jsx_closing_recovery_identifier,
       $._predefined_parameter_name,
       $._predefined_annotated_name,
     ],
@@ -159,6 +161,10 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$.primary_type, $.type_predicate],
+      [$.infer_type],
+      [$.infer_type, $.type_predicate],
+      [$.asserts, $.type_predicate],
       [$.arrow_function, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $._type_query_identifier],
       [$._type_arguments_target, $.internal_module],
@@ -469,8 +475,15 @@ module.exports = function defineGrammar(dialect) {
         return choice(...choices);
       },
 
+      jsx_closing_element: ($) =>
+        seq(
+          '</',
+          optional(field('name', choice(alias($._jsx_closing_recovery_identifier, $.identifier), $._jsx_element_name))),
+          '>'
+        ),
+
       _jsx_identifier: ($, previous) =>
-        choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.identifier)),
+        choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.identifier)),
 
       nested_identifier: ($) =>
         prec(
@@ -480,7 +493,7 @@ module.exports = function defineGrammar(dialect) {
               'object',
               choice(
                 reserved('properties', $.identifier),
-                alias(choice('out', 'abstract', 'as', 'satisfies'), $.identifier),
+                alias(choice('out', 'abstract', 'as', 'satisfies', 'is'), $.identifier),
                 alias($.nested_identifier, $.member_expression)
               )
             ),
@@ -576,9 +589,15 @@ module.exports = function defineGrammar(dialect) {
         choice(
           previous,
           seq('export', field('declaration', alias($.global_declaration, $.internal_module))),
-          seq('export', 'type', $.export_clause, $._from_clause, $._semicolon),
+          seq(
+            'export',
+            'type',
+            choice($.export_clause, '*', $.namespace_export),
+            $._from_clause,
+            optional(choice($.import_attribute, $._line_break_before_attributes)),
+            $._semicolon
+          ),
           seq('export', 'type', alias($._local_export_clause, $.export_clause), $._semicolon),
-          seq('export', 'type', choice('*', $.namespace_export), $._from_clause, $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
         ),
@@ -884,7 +903,7 @@ module.exports = function defineGrammar(dialect) {
               choice(
                 $.string,
                 reserved('properties', $.identifier),
-                alias(choice('out', 'abstract', 'as', 'satisfies'), $.identifier),
+                alias(choice('out', 'abstract', 'as', 'satisfies', 'is'), $.identifier),
                 $.nested_identifier
               )
             ),
@@ -897,7 +916,11 @@ module.exports = function defineGrammar(dialect) {
           'import',
           $.identifier,
           '=',
-          choice($.identifier, alias(choice('out', 'abstract', 'as', 'satisfies'), $.identifier), $.nested_identifier),
+          choice(
+            $.identifier,
+            alias(choice('out', 'abstract', 'as', 'satisfies', 'is'), $.identifier),
+            $.nested_identifier
+          ),
           $._semicolon
         ),
 
@@ -1001,6 +1024,13 @@ module.exports = function defineGrammar(dialect) {
                 'out',
                 'as',
                 'satisfies',
+                'is',
+                $.undefined,
+                'keyof',
+                'infer',
+                'readonly',
+                'abstract',
+                'asserts',
                 'any',
                 'number',
                 'boolean',
@@ -1049,6 +1079,7 @@ module.exports = function defineGrammar(dialect) {
               'object',
               'readonly',
               'out',
+              'is',
               'keyof',
               'infer',
               'typeof',
@@ -1119,7 +1150,8 @@ module.exports = function defineGrammar(dialect) {
       template_literal_type: ($) =>
         seq('`', repeat(choice(alias($._template_chars, $.string_fragment), $.template_type)), '`'),
 
-      infer_type: ($) => prec.right(seq('infer', $._type_identifier, optional(seq('extends', $.type)))),
+      infer_type: ($) =>
+        choice(seq('infer', $._type_identifier), prec.right(seq('infer', $._type_identifier, 'extends', $.type))),
 
       conditional_type: ($) =>
         prec.right(
@@ -1163,7 +1195,21 @@ module.exports = function defineGrammar(dialect) {
             'name',
             choice(
               $.identifier,
-              alias(choice('out', 'as', 'satisfies'), $.identifier),
+              alias(
+                choice(
+                  'out',
+                  'as',
+                  'satisfies',
+                  $.undefined,
+                  'keyof',
+                  'infer',
+                  'readonly',
+                  'abstract',
+                  'asserts',
+                  'is'
+                ),
+                $.identifier
+              ),
               $.this,
               alias(choice($.predefined_type, 'unique'), $.identifier)
             )
@@ -1403,7 +1449,7 @@ module.exports = function defineGrammar(dialect) {
 
       // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
-      _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out'), $.type_identifier),
+      _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out', 'is'), $.type_identifier),
 
       _type_reference_identifier: ($) =>
         choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies'), $.type_identifier)),
@@ -1420,7 +1466,7 @@ function nestedIdentifierTail($) {
       'property',
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
-        alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.property_identifier)
+        alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.property_identifier)
       )
     ),
   ];
@@ -1476,7 +1522,7 @@ function nestedTypeIdentifier($, generic) {
         'module',
         choice(
           $.identifier,
-          alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.identifier),
+          alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.identifier),
           $.nested_identifier,
           alias($._in_nested_identifier, $.nested_identifier)
         )
