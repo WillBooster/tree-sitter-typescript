@@ -104,6 +104,58 @@ for (const container of ['interface', 'class', 'typeLiteral', 'functionType']) {
   }
 }
 
+const FurtherKeywordPrefixes = [
+  'readonly',
+  'abstract',
+  'declare',
+  'import',
+  'function',
+  'type',
+  'interface',
+  'global',
+  'bigint',
+  'asserts',
+  'export',
+  'in',
+  'instanceof',
+  'public',
+  'private',
+  'static',
+  'override',
+  'get',
+  'set',
+  'of',
+  'async',
+  'accessor',
+  'intrinsic',
+  'any',
+  'number',
+  'enum',
+  'satisfies',
+];
+for (const word of ['value', 'foo', 'foobar', 'f']) {
+  for (const declaration of [true, false]) {
+    const keywords =
+      word === 'foobar' ? ['import', 'function', 'type', 'interface', 'async', 'enum'] : FurtherKeywordPrefixes;
+    for (const keyword of keywords) {
+      if (!declaration && ['interface', 'enum'].includes(keyword)) continue;
+      RecoveryCases.push([word, declaration, ` ${keyword} symbol`, ' { }']);
+    }
+  }
+  for (const [prefix, suffix] of [
+    ['interface I { (value: unknown): asserts ', '; }'],
+    ['type T = { (value: unknown): asserts ', '; };'],
+    ['declare abstract class C { abstract m(value: unknown): asserts ', '; }'],
+    ['interface I { m<T>(value: unknown): asserts ', '; }'],
+  ]) {
+    for (const tail of word === 'foobar'
+      ? [' as unknown', ' unique symbol']
+      : [' : string', ' as unknown', ' symbol', ' unique symbol']) {
+      RecoveryCases.push([word, false, tail, '', undefined, undefined, prefix + word, suffix]);
+    }
+  }
+}
+
 const RecoverySamples = RecoveryCases.map(
   ([word, declaration, tail, body, parameter, following, prefix, suffix, recoveredName]) => ({
     word,
@@ -300,6 +352,8 @@ describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dia
       (function_signature return_type: (_) @annotation)
       (function_declaration return_type: (_) @annotation)
       (method_signature return_type: (_) @annotation)
+      (call_signature return_type: (_) @annotation)
+      (abstract_method_signature return_type: (_) @annotation)
       (method_definition return_type: (_) @annotation)
       (function_type return_type: (_) @annotation)
     `
