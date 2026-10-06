@@ -1361,7 +1361,7 @@ static bool scan_await_keyword(TSLexer *lexer) {
 }
 
 static bool scan_generic_function_type(TSLexer *lexer);
-static bool scan_annotated_type_colons(TSLexer *lexer);
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression);
 static bool scan_type_group(TSLexer *lexer, int32_t close);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
@@ -1385,7 +1385,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
         if (lexer->lookahead != ':') return false;
-        if (!optional_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+        if (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
             advance(lexer);
             if (!scan_default_trivia(lexer, true, false)) return false;
             while (lexer->lookahead == '?') {
@@ -1406,7 +1406,9 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                 default:
                     break;
             }
-            if (!scan_annotated_type_colons(lexer)) return false;
+            if (!scan_annotated_type_colons(lexer, false)) return false;
+        }
+        if (!optional_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
             lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
         } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
@@ -1416,8 +1418,8 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
         advance(lexer);
         if (lexer->lookahead != '>') return false;
+        advance(lexer);
         if (optional_parameter) {
-            advance(lexer);
             if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
             switch (lexer->lookahead) {
                 case ')':
@@ -1433,6 +1435,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                     break;
             }
         }
+        if (!scan_annotated_type_colons(lexer, true)) return false;
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
@@ -1524,7 +1527,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
     return result;
 }
 
-static bool scan_annotated_type_colons(TSLexer *lexer) {
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
     unsigned conditional_depth = 0;
     bool saw_extends = false;
     bool first = true;
@@ -1535,7 +1538,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer) {
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-            if (first && ascii_word && strcmp(word, "unique") == 0) {
+            if (!allow_expression && first && ascii_word && strcmp(word, "unique") == 0) {
                 if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
             }
             if (ascii_word && strcmp(word, "extends") == 0) saw_extends = true;
@@ -1547,8 +1550,12 @@ static bool scan_annotated_type_colons(TSLexer *lexer) {
         if (c == ':') {
             if (conditional_depth == 0) return false;
             conditional_depth--;
-        } else if (c == '?' && saw_extends) {
-            conditional_depth++;
+        } else if (c == '?' && (saw_extends || allow_expression)) {
+            if (allow_expression && lexer->lookahead == '?') advance(lexer);
+            else if (allow_expression && lexer->lookahead == '.') {
+                advance(lexer);
+                if (is_ascii_digit(lexer->lookahead)) conditional_depth++;
+            } else conditional_depth++;
         } else if (c == '=') {
             if (lexer->lookahead != '>') return true;
             advance(lexer);

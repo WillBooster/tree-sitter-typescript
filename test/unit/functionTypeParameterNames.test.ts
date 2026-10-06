@@ -31,6 +31,151 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
   }, 30_000);
   afterAll(() => query?.delete());
   test.each(['unknown', 'never', 'unique'])(
+    'retains %s callback bodies through conditional and colon edits',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      try {
+        for (const optional of ['', '?']) {
+          let source = `const fn = (${name}${optional}: number) => x;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            for (const body of [
+              'x ? y : z',
+              'x ?? y',
+              'x?.y',
+              'x?.1 : y',
+              'unique',
+              '(x: number) => x',
+              '({x: y})',
+              '(x < y) ? x : y',
+              'x < y ? x : y',
+              '/x:y/.test(x)',
+              'foo("x:y")',
+              'x ? y ? y : z : z',
+              'x ?? (y ? z : x)',
+              'x',
+            ]) {
+              const start = source.indexOf(' => ') + 4;
+              const end = source.length - 1;
+              const next = source.slice(0, start) + body + ';';
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + body.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + body.length),
+                }),
+                (incremental, fresh) => {
+                  check(incremental, next, body);
+                  check(fresh, next, body);
+                }
+              );
+              previous.delete();
+              source = next;
+            }
+            function check(current: Tree, text: string, body: string): void {
+              expect(current.rootNode.hasError).toBe(false);
+              const arrow = current.rootNode.descendantsOfType('arrow_function')[0]!;
+              const parameter = arrow.childForFieldName('parameters')!.namedChildren[0]!;
+              const pattern = parameter.childForFieldName('pattern')!;
+              expect(pattern.type).toBe('identifier');
+              expect(pattern.text).toBe(name);
+              expect(pattern.startIndex).toBe(text.indexOf(name));
+              expect(pattern.endIndex).toBe(text.indexOf(name) + name.length);
+              const result = arrow.childForFieldName('body')!;
+              expect(result.text).toBe(body);
+              expect(result.startIndex).toBe(text.indexOf(' => ') + 4);
+              expect(result.endIndex).toBe(text.length - 1);
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      } finally {
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])('retains %s optional extra-colon recovery through type edits', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const parameterQuery = new Query(
+      language,
+      `
+      [(required_parameter pattern: (identifier) @name type: (type_annotation (predefined_type) @type))
+       (optional_parameter pattern: (identifier) @name type: (type_annotation (predefined_type) @type))]
+    `
+    );
+    let source = `type F = (${name}?: number) => void;`;
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, false);
+      for (const [before, after, extraColon] of [
+        ['number', 'x: number', true],
+        [') =>', ', m: string) =>', true],
+        ['x: number', 'number', false],
+        [', m: string', '', false],
+      ] as const) {
+        const start = source.indexOf(before);
+        expect(start).toBeGreaterThanOrEqual(0);
+        const next = source.slice(0, start) + after + source.slice(start + before.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before.length,
+            newEndIndex: start + after.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before.length),
+            newEndPosition: position(next, start + after.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, extraColon);
+            check(fresh, next, extraColon);
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+      }
+      function check(current: Tree, text: string, extraColon: boolean): void {
+        expect(current.rootNode.hasError).toBe(extraColon);
+        const firstName = extraColon ? 'x' : name;
+        const start = extraColon ? text.indexOf('x: number') : text.indexOf(name);
+        const type = text.indexOf('number');
+        const expected: (string | number)[][] = [
+          ['name', firstName, start, start + firstName.length],
+          ['type', 'number', type, type + 6],
+        ];
+        if (text.includes('m: string')) {
+          const m = text.indexOf('m: string');
+          const type = text.indexOf('string');
+          expected.push(['name', 'm', m, m + 1], ['type', 'string', type, type + 6]);
+        }
+        expect(
+          parameterQuery
+            .captures(current.rootNode)
+            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
+        ).toEqual(expected);
+        expect(current.rootNode.descendantsOfType('optional_parameter')).toHaveLength(extraColon ? 0 : 1);
+      }
+    } finally {
+      tree?.delete();
+      parameterQuery.delete();
+      parser.delete();
+    }
+  });
+  test.each(['unknown', 'never', 'unique'])(
     'retains %s optional callback recovery through return-type edits',
     (name) => {
       const parser = new Parser().setLanguage(language);
