@@ -44,3 +44,12 @@ namespace Qualified {
     return stringify(value);
   }
 }
+
+type RequiredTuple = [is: string];
+type OptionalTuple = [is?: string];
+type RestTuple = [...is: string[]];
+type TupleGuard = (is: unknown) => [is: string];
+const tupleGuard: TupleGuard = (value) => [String(value)];
+const tuple: RequiredTuple = tupleGuard('value');
+function readTuple(value: RequiredTuple) { return value[0].toUpperCase(); }
+const tupleText = readTuple(tuple);

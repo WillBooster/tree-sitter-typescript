@@ -266,6 +266,106 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       parser.delete();
     }
   });
+  test.each(dialect === 'tsx' ? ['tuple', 'JSX'] : ['tuple'])(
+    'preserves %s name fields and queries through edits',
+    (role) => {
+      const parser = new Parser().setLanguage(language);
+      const tupleQuery = `
+      (tuple_type (required_parameter name: (identifier) @name))
+      (tuple_type (optional_parameter name: (identifier) @name))
+      (tuple_type (required_parameter name: (rest_pattern (identifier) @name)))
+    `;
+      const jsxQuery = `
+      (jsx_opening_element name: (_) @name)
+      (jsx_closing_element name: (_) @name)
+      (jsx_self_closing_element name: (_) @name)
+    `;
+      const names = new Query(language, role === 'tuple' ? tupleQuery : jsxQuery);
+      const tuples = new Query(language, '(primary_type/tuple_type) @tuple');
+      const original =
+        role === 'tuple'
+          ? Source
+          : `
+      namespace JSX { export interface Element {} export interface IntrinsicElements { is: { value?: string }; parameter: { value?: string }; 'is:label': {}; } }
+      declare namespace is { function Pane(props: {}): JSX.Element; }
+      const value = <is value="value"><is.Pane /><is:label /></is>;
+      const sentinel = 1;`;
+      let source = original;
+      let tree: Tree | undefined;
+      try {
+        tree = parser.parse(source)!;
+        check(tree, source);
+        for (const marker of role === 'tuple' ? ['[is: string]'] : ['<is value=', '</is>']) {
+          const start = source.indexOf(marker) + (marker.startsWith('</') ? 2 : 1);
+          for (const [oldName, newName] of [
+            ['is', 'parameter'],
+            ['parameter', 'is'],
+          ]) {
+            const next = source.slice(0, start) + newName + source.slice(start + oldName!.length);
+            const previous = tree;
+            tree = compareEditedTree(
+              parser,
+              previous,
+              next,
+              new Edit({
+                startIndex: start,
+                oldEndIndex: start + oldName!.length,
+                newEndIndex: start + newName!.length,
+                startPosition: position(source, start),
+                oldEndPosition: position(source, start + oldName!.length),
+                newEndPosition: position(next, start + newName!.length),
+              }),
+              (incremental, fresh) => {
+                check(incremental, next);
+                check(fresh, next);
+                for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
+              }
+            );
+            previous.delete();
+            source = next;
+          }
+        }
+        expect(source).toBe(original);
+        function check(current: Tree, text: string): void {
+          const reference = ts.createSourceFile(
+            role === 'JSX' ? 'names.tsx' : 'names.ts',
+            text,
+            ts.ScriptTarget.Latest,
+            true,
+            role === 'JSX' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+          );
+          const expected: [string, number, number][] = [];
+          const expectedTypes: [number, number][] = [];
+          const visit = (node: ts.Node): void => {
+            const name =
+              role === 'tuple' && ts.isNamedTupleMember(node)
+                ? node.name
+                : role === 'JSX' &&
+                    (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node))
+                  ? node.tagName
+                  : undefined;
+            if (name) expected.push([name.getText(reference), name.getStart(reference), name.getEnd()]);
+            if (ts.isTupleTypeNode(node)) expectedTypes.push([node.getStart(reference), node.getEnd()]);
+            ts.forEachChild(node, visit);
+          };
+          visit(reference);
+          expect(current.rootNode.hasError).toBe(false);
+          expect(
+            names.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
+          ).toEqual(expected);
+          expect(tuples.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
+            expectedTypes
+          );
+          if (role === 'JSX') expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
+        }
+      } finally {
+        tree?.delete();
+        names.delete();
+        tuples.delete();
+        parser.delete();
+      }
+    }
+  );
   test.each(['qualified type', 'undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
     'preserves qualified type and bare assertion roles through %s edits',
     (role) => {

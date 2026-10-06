@@ -454,7 +454,7 @@ module.exports = function defineGrammar(dialect) {
       },
 
       _jsx_identifier: ($, previous) =>
-        choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies'), $.identifier)),
+        choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is'), $.identifier)),
 
       nested_identifier: ($) =>
         prec(
@@ -1048,6 +1048,7 @@ module.exports = function defineGrammar(dialect) {
               'object',
               'readonly',
               'out',
+              'is',
               'keyof',
               'infer',
               'typeof',
