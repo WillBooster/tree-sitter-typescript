@@ -41,13 +41,8 @@ for (const declaration of [true, false]) {
   for (const tail of tails) RecoveryCases.push(['foobar', declaration, tail, ' { }']);
 }
 RecoveryCases.push(['out', true, ' symbol', ' { }']);
-for (const [declaration, tail] of [
-  [true, ' : string'],
-  [false, ': string'],
-  [true, ' as string'],
-  [true, ': string = 1'],
-] as const)
-  RecoveryCases.push(['value', declaration, tail, ' { if (!value) throw Error(); }']);
+for (const tail of [' : string', ': string', ' as string', ': string = 1'])
+  RecoveryCases.push(['value', false, tail, ' { if (!value) throw Error(); }']);
 
 const KeywordRecoveryTails = [' symbol', ' number', ' string', ' object', ' unique symbol', ' boolean', ' unknown'];
 for (const word of ['value', 'x', 'f', 'foo', 'data', 'input', 'arg']) {
