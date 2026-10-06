@@ -156,6 +156,19 @@ for (const word of ['value', 'foo', 'foobar', 'f']) {
   }
 }
 
+for (const word of ['value', 'foo', 'foobar', 'f']) {
+  const trailing =
+    word === 'foobar'
+      ? ['boolean', 'unknown']
+      : ['symbol', 'string', 'unique', 'number', 'object', 'boolean', 'unknown'];
+  if (['foo', 'f'].includes(word)) trailing.push('never');
+  if (word === 'f') trailing.push('any');
+  const tails = ['zzz', '123'].flatMap((prefix) => trailing.map((last) => ` ${prefix} ${last}`));
+  if (word !== 'foobar') tails.push(' qq symbol', ' foo symbol');
+  for (const declaration of [true, false])
+    for (const tail of tails) RecoveryCases.push([word, declaration, tail, ' { }']);
+}
+
 const RecoverySamples = RecoveryCases.map(
   ([word, declaration, tail, body, parameter, following, prefix, suffix, recoveredName]) => ({
     word,
