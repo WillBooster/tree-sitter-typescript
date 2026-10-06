@@ -943,7 +943,10 @@ module.exports = function defineGrammar(dialect) {
           optional($.accessibility_modifier),
           optional($.override_modifier),
           optional('readonly'),
-          field('pattern', choice($.pattern, $.this))
+          field(
+            'pattern',
+            choice($.pattern, alias(prec(-1, choice('unknown', 'never', 'unique')), $.identifier), $.this)
+          )
         ),
 
       omitting_type_annotation: ($) => seq('-?:', $.type),

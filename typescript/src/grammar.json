@@ -12114,6 +12114,32 @@
                 "name": "pattern"
               },
               {
+                "type": "ALIAS",
+                "content": {
+                  "type": "PREC",
+                  "value": -1,
+                  "content": {
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "STRING",
+                        "value": "unknown"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "never"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "unique"
+                      }
+                    ]
+                  }
+                },
+                "named": true,
+                "value": "identifier"
+              },
+              {
                 "type": "SYMBOL",
                 "name": "this"
               }
