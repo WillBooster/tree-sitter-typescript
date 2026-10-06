@@ -85,7 +85,7 @@ module.exports = function defineGrammar(dialect) {
 
     precedences: ($, previous) => [
       ...withTypeArgumentsTarget($, previous),
-      ['call', 'instantiation', 'unary', 'binary', $.await_expression, $.arrow_function],
+      ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
       // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
       // expression (`<T>a<B>` before a line break and `[0]`).
       ['member', 'unary'],

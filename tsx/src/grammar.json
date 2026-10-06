@@ -15487,12 +15487,12 @@
         "value": "unary"
       },
       {
-        "type": "STRING",
-        "value": "binary"
-      },
-      {
         "type": "SYMBOL",
         "name": "await_expression"
+      },
+      {
+        "type": "STRING",
+        "value": "binary"
       },
       {
         "type": "SYMBOL",
