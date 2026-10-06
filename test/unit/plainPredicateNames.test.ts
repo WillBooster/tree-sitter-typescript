@@ -562,6 +562,61 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       }
     }
   );
+  test('preserves bare is assertion recovery through name and trivia edits', () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
+    const original = 'declare function f(is: unknown): asserts is; const sentinel = 1;';
+    let source = original;
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      check(tree, source, 'is');
+      for (const name of ['longerName', 'is']) {
+        const start = source.indexOf('asserts ') + 'asserts '.length;
+        const end = source.indexOf(';', start);
+        const replacement = name === 'is' ? name : `${name} /* assertion */`;
+        const next = source.slice(0, start) + replacement + source.slice(end);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: end,
+            newEndIndex: start + replacement.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, end),
+            newEndPosition: position(next, start + replacement.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, name);
+            check(fresh, next, name);
+            for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
+          }
+        );
+        previous.delete();
+        source = next;
+      }
+      expect(source).toBe(original);
+      function check(current: Tree, text: string, name: string): void {
+        expect(current.rootNode.hasError, text).toBe(false);
+        const matches = query.captures(current.rootNode);
+        expect(matches).toHaveLength(1);
+        const node = matches[0]!.node;
+        expect(node.type).toBe('identifier');
+        expect(node.text).toBe(name);
+        const start = text.indexOf('asserts ') + 'asserts '.length;
+        expect(node.startIndex).toBe(start);
+        expect(node.endIndex).toBe(start + name.length);
+        expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
+      }
+    } finally {
+      tree?.delete();
+      query.delete();
+      parser.delete();
+    }
+  });
   test.each(['undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
     'preserves %s predicate ownership through edits',
     (word) => {
