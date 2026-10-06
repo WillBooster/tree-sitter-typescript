@@ -540,7 +540,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
         case LINE_BREAK_AFTER_MODIFIER_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
         case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
-            return before_slash || !scan_word(lexer, "with");
+            if (before_slash || !scan_word(lexer, "with")) return true;
+            return scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT || lexer->lookahead != '{';
         case LINE_BREAK_AFTER_ACCESSOR_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->lookahead == '*' ||
                                      lexer->eof(lexer));
