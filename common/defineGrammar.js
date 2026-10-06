@@ -5,6 +5,7 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'abstract',
   'as',
   'satisfies',
+  'is',
   'accessor',
   'declare',
   'global',
@@ -1147,7 +1148,18 @@ module.exports = function defineGrammar(dialect) {
             choice(
               $.identifier,
               alias(
-                choice('out', 'as', 'satisfies', $.undefined, 'keyof', 'infer', 'readonly', 'abstract', 'asserts'),
+                choice(
+                  'out',
+                  'as',
+                  'satisfies',
+                  $.undefined,
+                  'keyof',
+                  'infer',
+                  'readonly',
+                  'abstract',
+                  'asserts',
+                  'is'
+                ),
                 $.identifier
               ),
               $.this,

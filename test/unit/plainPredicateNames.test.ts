@@ -37,6 +37,30 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     for (const resource of configured) resource.delete();
   });
   test.each([
+    'declare function f(is: unknown): is.value is string;\nconst sentinel = 1;\n',
+    'declare function f(is: unknown): is : string;\nconst sentinel = 1;\n',
+    'declare function f(is: unknown): is number;\nconst sentinel = 1;\n',
+    'declare function f(is: unknown): is ? string : number;\nconst sentinel = 1;\n',
+    'function f(is: unknown): is.value is string { return true; }\nconst sentinel = 1;\n',
+    'function f(is: unknown): is : string { return true; }\nconst sentinel = 1;\n',
+    'function f(is: unknown): is number { return true; }\nconst sentinel = 1;\n',
+    'function f(is: unknown): is ? string : number { return true; }\nconst sentinel = 1;\n',
+    'interface I { m(is: unknown): is.value is string; }\nconst sentinel = 1;\n',
+    'interface I { m(is: unknown): is : string; }\nconst sentinel = 1;\n',
+    'interface I { m(is: unknown): is number; }\nconst sentinel = 1;\n',
+    'interface I { m(is: unknown): is ? string : number; }\nconst sentinel = 1;\n',
+    'class C { m(is: unknown): is.value is string { return true; } }\nconst sentinel = 1;\n',
+    'class C { m(is: unknown): is : string { return true; } }\nconst sentinel = 1;\n',
+    'class C { m(is: unknown): is number { return true; } }\nconst sentinel = 1;\n',
+    'class C { m(is: unknown): is ? string : number { return true; } }\nconst sentinel = 1;\n',
+    'type T = (is: unknown) => is.value is string;\nconst sentinel = 1;\n',
+    'type T = (is: unknown) => is : string;\nconst sentinel = 1;\n',
+    'type T = (is: unknown) => is number;\nconst sentinel = 1;\n',
+    'type T = (is: unknown) => is ? string : number;\nconst sentinel = 1;\n',
+    'interface I { (is: unknown): is.value is string; }\nconst sentinel = 1;\n',
+    'interface I { (is: unknown): is : string; }\nconst sentinel = 1;\n',
+    'interface I { (is: unknown): is number; }\nconst sentinel = 1;\n',
+    'interface I { (is: unknown): is ? string : number; }\nconst sentinel = 1;\n',
     'declare function f(undefined: unknown): undefined is;\nconst sentinel = 1;\n',
     'declare function f(undefined: unknown): undefined.value is string;\nconst sentinel = 1;\n',
     'declare function f(undefined: unknown): undefined ? string : number;\nconst sentinel = 1;\n',
@@ -128,6 +152,66 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       expect(source).toBe(original);
       expect(tree.rootNode.toString()).toBe(initialTree);
       expect(configured.map((q) => captureSnapshot(q, tree!))).toEqual(initialCaptures);
+    } finally {
+      tree?.delete();
+      parser.delete();
+    }
+  });
+  test.each([
+    [false, false],
+    [true, false],
+    [false, true],
+    [true, true],
+  ])('retains is-named predicates through edits (asserts: %s, function type: %s)', (asserts, functionType) => {
+    const parser = new Parser().setLanguage(language);
+    const original = `${functionType ? 'type F = (is: unknown) =>' : 'declare function f(is: unknown):'} ${asserts ? 'asserts ' : ''}is is string;\n`;
+    const start = original.lastIndexOf('is is string');
+    let source = original;
+    let tree: Tree | undefined;
+    try {
+      tree = parser.parse(source)!;
+      checkPredicate(tree, source, 'is');
+      for (const [before, after] of [
+        ['is', 'parameter'],
+        ['parameter', 'is'],
+      ]) {
+        const next = source.slice(0, start) + after + source.slice(start + before!.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before!.length,
+            newEndIndex: start + after!.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before!.length),
+            newEndPosition: position(next, start + after!.length),
+          }),
+          (incremental, fresh) => {
+            for (const current of [incremental, fresh]) checkPredicate(current, next, after!);
+            for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
+          }
+        );
+        previous.delete();
+        source = next;
+      }
+      expect(source).toBe(original);
+      function checkPredicate(current: Tree, text: string, name: string): void {
+        expect(current.rootNode.hasError).toBe(false);
+        const predicate = current.rootNode.descendantsOfType('type_predicate')[0]!;
+        expect(predicate.childForFieldName('name')?.type).toBe('identifier');
+        expect(predicate.childForFieldName('name')?.text).toBe(name);
+        expect(predicate.childForFieldName('name')?.startIndex).toBe(start);
+        expect(predicate.childForFieldName('name')?.endIndex).toBe(start + name.length);
+        expect(predicate.childForFieldName('type')?.text).toBe('string');
+        expect(predicate.childForFieldName('type')?.startIndex).toBe(text.indexOf('string'));
+        expect(current.rootNode.descendantsOfType('asserts_annotation')).toHaveLength(asserts && !functionType ? 1 : 0);
+        expect(current.rootNode.descendantsOfType('type_predicate_annotation')).toHaveLength(
+          !asserts && !functionType ? 1 : 0
+        );
+      }
     } finally {
       tree?.delete();
       parser.delete();

@@ -9085,6 +9085,10 @@
               },
               {
                 "type": "STRING",
+                "value": "is"
+              },
+              {
+                "type": "STRING",
                 "value": "accessor"
               },
               {
@@ -9240,6 +9244,10 @@
         {
           "type": "STRING",
           "value": "satisfies"
+        },
+        {
+          "type": "STRING",
+          "value": "is"
         },
         {
           "type": "STRING",
@@ -13354,6 +13362,10 @@
                     {
                       "type": "STRING",
                       "value": "asserts"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "is"
                     }
                   ]
                 },
