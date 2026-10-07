@@ -1558,14 +1558,16 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     }
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
                 }
+                bool computed_key = frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
+                if (computed_key && !first_operand && !(ascii_word && strcmp(word, "in") == 0)) stack[size - 1] |= TYPE_EXPRESSION_GROUP;
                 bool mapped_operand = frame == COMPUTED_PROPERTY_GROUP_END && ascii_word &&
                     ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
                      (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
-                bool prefix = first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
+                bool prefix = !computed_key && first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
                 operand_pending = prefix;
                 query_operand = prefix && strcmp(word, "typeof") == 0;
-                bool extends_operand = ascii_word && strcmp(word, "extends") == 0;
-                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
+                bool extends_operand = !computed_key && ascii_word && strcmp(word, "extends") == 0;
+                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
                 if (extends_operand || mapped_operand) parameter_position = false;
                 continue;
             }
@@ -1658,6 +1660,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
             else if (c == '{') push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
+            if (computed_expression && !is_whitespace(c) && !(c == ':' && !first_operand)) stack[size - 1] |= TYPE_EXPRESSION_GROUP;
             if (push && computed_expression) push |= TYPE_EXPRESSION_GROUP;
             if (!is_whitespace(c)) {
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
