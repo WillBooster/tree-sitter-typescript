@@ -1572,7 +1572,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
                 member_line_break = true;
             }
-            if (check_type_operands && operand_pending && (c == '.' || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
+            if (check_type_operands && operand_pending && ((c == '.' && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
             advance(lexer);
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
             if (c == end) {
