@@ -545,6 +545,72 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
+  test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership when decimal type operands change', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const namesQuery = new Query(
+      language,
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+    );
+    try {
+      for (const optional of ['', '?']) {
+        for (const type of [
+          'keyof VALUE',
+          'readonly VALUE[]',
+          '{x:keyof VALUE}',
+          '{[K in keyof VALUE]:number}',
+          '`x${keyof VALUE}`',
+          'keyof (()=>VALUE)',
+        ]) {
+          let source = `type F=(${name}${optional}:${type.replace('VALUE', '.5')})=>number;`;
+          let tree: Tree | undefined;
+          let before = '.5';
+          try {
+            tree = parser.parse(source)!;
+            expect(tree.rootNode.hasError).toBe(false);
+            for (const replacement of ['.25', '.5']) {
+              const start = source.indexOf(before),
+                end = start + before.length;
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  for (const current of [incremental, fresh]) {
+                    expect(current.rootNode.hasError).toBe(false);
+                    expect(
+                      namesQuery
+                        .captures(current.rootNode)
+                        .filter(({ node }) => node.text === name)
+                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                    ).toEqual([[name, 8, 8 + name.length]]);
+                  }
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+              before = replacement;
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      }
+    } finally {
+      namesQuery.delete();
+      parser.delete();
+    }
+  });
   test.each(['unknown', 'never', 'unique'])(
     'retains %s operand recovery in object, tuple, generic and function types',
     (name) => {
@@ -621,7 +687,18 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 expect(tree.rootNode.hasError).toBe(false);
                 const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
                 let before: string = operand;
-                for (const replacement of ['.T', '=', '=>', '()', '(/* operand */)', '', '/* operand */', operand]) {
+                for (const replacement of [
+                  '()=>',
+                  '(/* operand */)=>',
+                  '.T',
+                  '=',
+                  '=>',
+                  '()',
+                  '(/* operand */)',
+                  '',
+                  '/* operand */',
+                  operand,
+                ]) {
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   const previous = tree;
