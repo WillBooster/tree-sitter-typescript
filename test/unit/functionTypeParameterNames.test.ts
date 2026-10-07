@@ -127,6 +127,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '{m<K>()}',
               '{[K]:number}',
               '{[K.X]:number}',
+              '[K:T]',
+              '[K?:T]',
+              '{m(K?:T):U}',
               '{[(K.X)]:number}',
               '{[((K.X))]:number}',
               '{[[K.X]]:number}',
@@ -219,6 +222,78 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree?.delete();
               }
             }
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
+    'keeps %s binding ownership through readonly function parameter renames',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          let source = `type F=(${name}${optional}:{a:(K:T)=>U})=>number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            expect(tree.rootNode.hasError).toBe(false);
+            const start = source.indexOf('K');
+            for (const replacement of ['readonly', 'K']) {
+              const before = replacement === 'readonly' ? 'K' : 'readonly';
+              const end = start + before.length;
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  for (const current of [incremental, fresh]) {
+                    expect(current.rootNode.hasError).toBe(false);
+                    expect(
+                      aliasQuery
+                        .captures(current.rootNode)
+                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                    ).toEqual([
+                      ['name', 'type_identifier', 'F', 5, 6],
+                      ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                    ]);
+                    expect(
+                      namesQuery
+                        .captures(current.rootNode)
+                        .filter(({ node }) => node.text === name)
+                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                    ).toEqual([[name, 8, 8 + name.length]]);
+                  }
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+            }
+          } finally {
+            tree?.delete();
           }
         }
       } finally {
@@ -888,6 +963,77 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '/* operand */',
               operand,
             ]) {
+              const end = start + before.length;
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  for (const current of [incremental, fresh]) {
+                    expect(current.rootNode.hasError).toBe(replacement !== operand);
+                    const start = next.indexOf(name);
+                    expect(
+                      namesQuery
+                        .captures(current.rootNode)
+                        .filter(({ node }) => node.text === name)
+                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                    ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
+                  }
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+              before = replacement;
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      }
+    } finally {
+      namesQuery.delete();
+      parser.delete();
+    }
+  });
+  test.each(
+    ['unknown', 'never', 'unique'].flatMap((name) =>
+      (
+        [
+          ['typeof', 'value'],
+          ['keyof', 'Value'],
+          ['readonly', 'Value[]'],
+          ['infer', 'Value'],
+        ] as const
+      ).map(([operator, operand]) => [name, operator, operand] as const)
+    )
+  )('retains %s %s operand recovery through grouped separator edits', (name, operator, operand) => {
+    const parser = new Parser().setLanguage(language);
+    const namesQuery = new Query(
+      language,
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+    );
+    try {
+      for (const optional of ['', '?']) {
+        for (const template of ['[TYPE]', 'A<TYPE>', '(TYPE)[]', '(TYPE)']) {
+          let source = `type F = (${name}${optional}: ${template.replace('TYPE', `${operator} ${operand}`)}) => number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            expect(tree.rootNode.hasError).toBe(false);
+            const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
+            let before: string = operand;
+            for (const replacement of ['?', ':', ';', ',', operand]) {
               const end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
               const previous = tree;

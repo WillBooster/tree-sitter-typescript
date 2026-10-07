@@ -1599,7 +1599,24 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 parameter_position = false;
                 continue;
             }
-            if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
+            if (check_type_operands && operand_pending && !binding_frame && (c == ':' || c == '?' || c == ',' || c == ';')) {
+                if (!parameter_position || (end != ')' && end != ']') || (c != ':' && c != '?')) break;
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) break;
+                if (c == '?') {
+                    if (lexer->lookahead != ':') break;
+                    advance(lexer);
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                }
+                int32_t operand = lexer->lookahead;
+                if (lexer->eof(lexer) || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>') break;
+                first_operand = true;
+                operand_pending = false;
+                query_operand = false;
+                parameter_position = false;
+                continue;
+            }
+            if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&')) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
             advance(lexer);
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
