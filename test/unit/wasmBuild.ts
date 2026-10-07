@@ -16,6 +16,7 @@ export async function loadCurrentWasmBuild(grammar: string): Promise<Language> {
     `${grammar}/grammar.js`,
     `${grammar}/src/parser.c`,
     `${grammar}/src/scanner.c`,
+    `${grammar}/src/tree_sitter/parser.h`,
   ].map((name) => fs.statSync(path.join(Root, name)).mtimeMs);
   if (Math.max(generationInputMtime(Root), ...sources) > fs.statSync(wasmPath).mtimeMs) {
     throw new Error(
