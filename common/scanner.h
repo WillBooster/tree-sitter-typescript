@@ -1574,6 +1574,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 member_line_break = true;
             }
             bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
+            bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
             bool parameter_default = parameter_position && end == ')' && c == '=';
             if (check_type_operands && operand_pending && c == '.' && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) {
                 if (query_operand) break;
@@ -1584,7 +1585,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 parameter_position = false;
                 continue;
             }
-            if (check_type_operands && operand_pending && ((c == '=' && !binding_frame && !parameter_default) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
+            if (check_type_operands && operand_pending && ((c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
             advance(lexer);
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
@@ -1632,6 +1633,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
             else if (c == '{') push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
+            if (push && computed_expression) push |= TYPE_EXPRESSION_GROUP;
             if (!is_whitespace(c)) {
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
