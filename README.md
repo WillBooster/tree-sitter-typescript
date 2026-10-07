@@ -79,7 +79,7 @@ malformed input):
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "1" }
-tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "1" }
+tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "4" }
 ```
 
 ```rust
