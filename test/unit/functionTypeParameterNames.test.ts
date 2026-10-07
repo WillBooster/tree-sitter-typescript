@@ -580,7 +580,18 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           try {
             tree = parser.parse(source)!;
             expect(tree.rootNode.hasError).toBe(false);
-            for (const replacement of ['.25', '.5']) {
+            for (const replacement of [
+              '.25',
+              '-.5',
+              '+.5',
+              '- /* sign */ .5',
+              '+ /* sign */ 1',
+              String.raw`\u0078`,
+              String.raw`\u{78}`,
+              String.raw`\u0061\u0073`,
+              '*',
+              '.5',
+            ]) {
               const start = source.indexOf(before),
                 end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
@@ -646,7 +657,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               tree = parser.parse(source)!;
               expect(tree.rootNode.hasError).toBe(false);
               const start = source.indexOf('Value');
-              for (const replacement of ['', '/* return */', 'Value']) {
+              for (const replacement of ['', '/* return */', '%', '^', '!', '~', '@', '#', '\\', '-', '+', 'Value']) {
                 const end = start + before.length,
                   next = source.slice(0, start) + replacement + source.slice(end);
                 const previous = tree;
@@ -708,6 +719,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     try {
       for (const optional of ['', '?']) {
         for (const template of [
+          'TYPE',
           '{x: TYPE}',
           '[TYPE]',
           'A<TYPE>',
@@ -767,7 +779,26 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             expect(tree.rootNode.hasError).toBe(false);
             const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
             let before: string = operand;
-            for (const replacement of ['.T', '>', '=', '=>', '()', '(/* operand */)', '', '/* operand */', operand]) {
+            for (const replacement of [
+              '%',
+              '^',
+              '!',
+              '~',
+              '@',
+              '#',
+              '\\',
+              '-',
+              '+',
+              '.T',
+              '>',
+              '=',
+              '=>',
+              '()',
+              '(/* operand */)',
+              '',
+              '/* operand */',
+              operand,
+            ]) {
               const end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
               const previous = tree;

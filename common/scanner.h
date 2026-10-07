@@ -1377,6 +1377,7 @@ enum TypeGroupEnd {
 };
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
+static bool scan_type_identifier_operand(TSLexer *lexer);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1534,6 +1535,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 member_line_break = false;
             }
+            if (check_type_operands && operand_pending && c == '\\') {
+                if (!scan_type_identifier_operand(lexer)) break;
+                operand_pending = false;
+                first_operand = false;
+                query_operand = false;
+                continue;
+            }
             if (check_type_operands && is_identifier_part(c)) {
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
@@ -1576,16 +1584,20 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
             bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
             bool parameter_default = parameter_position && end == ')' && c == '=';
-            if (check_type_operands && operand_pending && c == '.' && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) {
-                if (query_operand) break;
+            if (check_type_operands && operand_pending && (c == '.' || c == '-' || c == '+') && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) {
+                if (query_operand || !first_operand) break;
                 advance(lexer);
+                if (c != '.') {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (lexer->lookahead == '.') advance(lexer);
+                }
                 if (!is_ascii_digit(lexer->lookahead)) break;
                 operand_pending = false;
                 first_operand = false;
                 parameter_position = false;
                 continue;
             }
-            if (check_type_operands && operand_pending && ((c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
+            if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
             advance(lexer);
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
@@ -1602,6 +1614,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 if (check_type_operands && operand_pending && parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)) operand_pending = false;
                 if (frame == METHOD_PARAMETER_GROUP_END && operand_pending) break;
+                bool return_identifier = false;
                 bool arrow_header = frame == FUNCTION_PARAMETER_GROUP_END || (check_type_operands && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)));
                 if (arrow_header) {
                     if (end != ')' || (operand_pending && !parameter_position)) break;
@@ -1616,13 +1629,20 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     }
                     if (!return_operand || lexer->eof(lexer)) break;
                     int32_t operand = lexer->lookahead;
-                    if (operand == '.') {
+                    if (operand == '\\') {
+                        if (!scan_type_identifier_operand(lexer)) break;
+                        return_identifier = true;
+                    } else if (operand == '.' || operand == '-' || operand == '+') {
                         advance(lexer);
+                        if (operand != '.') {
+                            if (!scan_default_trivia(lexer, true, false)) break;
+                            if (lexer->lookahead == '.') advance(lexer);
+                        }
                         if (!is_ascii_digit(lexer->lookahead)) break;
-                    } else if (operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>' || operand == '|' || operand == '&' || operand == '?') break;
+                    } else if (operand == '%' || operand == '^' || operand == '!' || operand == '~' || operand == '@' || operand == '#' || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>' || operand == '|' || operand == '&' || operand == '?') break;
                 }
-                operand_pending = arrow_header;
-                first_operand = arrow_header;
+                operand_pending = arrow_header && !return_identifier;
+                first_operand = operand_pending;
                 query_operand = false;
                 if (arrow_header) parameter_position = false;
                 if (--size == 0) { result = true; break; }
@@ -1682,11 +1702,30 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                 } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
                     switch (lexer->lookahead) {
+                        case '\\':
+                            if (!scan_type_identifier_operand(lexer)) return false;
+                            query_operand = false;
+                            first = false;
+                            continue;
+                        case '-':
+                        case '+':
+                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
+                            advance(lexer);
+                            if (!scan_default_trivia(lexer, true, false)) return false;
+                            if (lexer->lookahead == '.') advance(lexer);
+                            if (!is_ascii_digit(lexer->lookahead)) return false;
+                            break;
                         case '.':
-                            if (strcmp(word, "typeof") == 0) return false;
+                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
                             advance(lexer);
                             if (!is_ascii_digit(lexer->lookahead)) return false;
                             break;
+                        case '%':
+                        case '^':
+                        case '!':
+                        case '~':
+                        case '@':
+                        case '#':
                         case ')':
                         case ']':
                         case '}':
@@ -1749,6 +1788,16 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
             }
             if (!lexer->eof(lexer)) advance(lexer);
         }
+    }
+    return true;
+}
+
+static bool scan_type_identifier_operand(TSLexer *lexer) {
+    int32_t character = scan_identifier_character(lexer);
+    if (!is_identifier_part(character) || character == '\\' || is_ascii_digit(character)) return false;
+    while (is_identifier_part(lexer->lookahead)) {
+        character = scan_identifier_character(lexer);
+        if (!is_identifier_part(character) || character == '\\') return false;
     }
     return true;
 }
