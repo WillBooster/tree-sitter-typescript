@@ -1382,7 +1382,7 @@ enum TypeGroupEnd {
     TYPE_EXPRESSION_FUNCTION = 1 << 21,
     TYPE_EXPRESSION_METHOD_BODY = 1 << 22,
     TYPE_EXPRESSION_TYPE = 1 << 23,
-    TYPE_EXPRESSION_PARAMETER = 1 << 24,
+    TYPE_GROUP_PARAMETER = 1 << 24,
 };
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
@@ -1512,7 +1512,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     unsigned size = 1, capacity = 32;
     int32_t *stack = ts_malloc(capacity * sizeof(int32_t));
     if (!stack) return false;
-    stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && close == ')' ? TYPE_OPERAND_GROUP_END : close;
+    stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && close == ')' ? TYPE_OPERAND_GROUP_END | TYPE_GROUP_PARAMETER : close;
     bool result = false;
     bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
     if (type_operands && close == '}' && lexer->lookahead == '|') advance(lexer);
@@ -1527,7 +1527,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             context = stack[size - 1];
         }
-        int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context;
+        int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
         bool check_type_operands = type_operands && !(frame & TYPE_EXPRESSION_GROUP);
         bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
@@ -1594,7 +1594,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 query_operand = prefix && strcmp(word, "typeof") == 0;
                 bool extends_operand = !computed_key && ascii_word && strcmp(word, "extends") == 0;
                 first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
-                if (extends_operand || mapped_operand) parameter_position = false;
+                if (extends_operand || mapped_operand) {
+                    parameter_position = false;
+                    if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+                }
                 continue;
             }
             if (check_expression_operands && is_identifier_part(c)) {
@@ -1651,7 +1654,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 continue;
             }
             if (check_type_operands && operand_pending && !binding_frame && (c == ':' || c == '?' || c == ',' || c == ';')) {
-                if (!parameter_position || (end != ')' && end != ']') || (c != ':' && c != '?')) break;
+                if (!parameter_position || (frame == TYPE_OPERAND_GROUP_END && !(context & TYPE_GROUP_PARAMETER)) || (end != ')' && end != ']') || (c != ':' && c != '?')) break;
                 advance(lexer);
                 if (!scan_default_trivia(lexer, true, false)) break;
                 if (c == '?') {
@@ -1661,6 +1664,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 int32_t operand = lexer->lookahead;
                 if (lexer->eof(lexer) || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>') break;
+                if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
                 first_operand = true;
                 operand_pending = false;
                 query_operand = false;
@@ -1669,18 +1673,25 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&')) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
-            if (check_type_operands && parameter_position && c == ':' && frame == TYPE_OPERAND_GROUP_END && size > 1 && (stack[size - 2] & TYPE_EXPRESSION_TYPE)) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
+            if (check_type_operands && (context & TYPE_GROUP_PARAMETER) && c == ':' && frame == TYPE_OPERAND_GROUP_END) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
             bool expression_annotation = check_expression_operands && c == ':' &&
-                ((end == ')' && (first_operand || (context & TYPE_EXPRESSION_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
+                ((end == ')' && (first_operand || (context & TYPE_GROUP_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
             if (expression_annotation) {
                 stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
                 stack[size - 1] |= TYPE_EXPRESSION_TYPE;
             }
             if (!consumed_operator) advance(lexer);
+            if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && (c == '|' || c == '&' || c == '=' || c == '<' || (c == '[' && !first_operand))) stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+            if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && parameter_position && first_operand && c == '.' && lexer->lookahead == '.') {
+                advance(lexer);
+                if (lexer->lookahead != '.') break;
+                advance(lexer);
+                continue;
+            }
             if (c == '=' && lexer->lookahead != '>') stack[size - 1] &= ~TYPE_EXPRESSION_TYPE;
             if (check_expression_operands && end == ')') {
-                if (c == '=' || c == '?' || c == ':') stack[size - 1] &= ~TYPE_EXPRESSION_PARAMETER;
-                else if (c == ',') stack[size - 1] |= TYPE_EXPRESSION_PARAMETER;
+                if (c == '=' || c == '?' || c == ':') stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+                else if (c == ',') stack[size - 1] |= TYPE_GROUP_PARAMETER;
             }
             bool expression_postfix = (computed_expression || check_expression_operands) && (c == '+' || c == '-') && lexer->lookahead == c && !expression_operand && !first_operand;
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
@@ -1772,11 +1783,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (c == '{' && !(frame & TYPE_EXPRESSION_BODY) && !method_body) push = OBJECT_PROPERTY_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_PROPERTY;
                 if (method_body) stack[size - 1] &= ~TYPE_EXPRESSION_METHOD_BODY;
                 if (c == '(' && (member_name || (frame & TYPE_EXPRESSION_FUNCTION))) {
-                    push = METHOD_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_PARAMETER;
+                    push = METHOD_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_GROUP_PARAMETER;
                     stack[size - 1] &= ~TYPE_EXPRESSION_FUNCTION;
                 }
                 if (c == ',' && (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END) stack[size - 1] |= TYPE_EXPRESSION_PROPERTY;
-                if (c == '(') push |= TYPE_EXPRESSION_PARAMETER;
+                if (c == '(') push |= TYPE_GROUP_PARAMETER;
                 if (push) stack[size - 1] &= ~TYPE_EXPRESSION_BODY;
                 stack[size - 1] &= ~TYPE_EXPRESSION_EMPTY_GROUP;
                 if (expression_postfix && lexer->lookahead == c) advance(lexer);
@@ -1795,7 +1806,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (!is_whitespace(c)) {
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
-                parameter_position = c == '(' || c == '[' || c == '{' || c == ',' || member_separator || push == TYPE_PARAMETER_GROUP_END || push == METHOD_TYPE_PARAMETER_GROUP_END || (c == '?' && frame == OBJECT_PROPERTY_GROUP_END && parameter_position);
+                parameter_position = c == '(' || c == '[' || c == '{' || c == ',' || member_separator || push == TYPE_PARAMETER_GROUP_END || push == METHOD_TYPE_PARAMETER_GROUP_END || (c == '?' && (frame == OBJECT_PROPERTY_GROUP_END || frame == TYPE_OPERAND_GROUP_END) && parameter_position);
                 operand_pending = expression_annotation;
                 query_operand = false;
             }
@@ -1807,6 +1818,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (!grown) break;
                 stack = grown;
             }
+            if ((push & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !(push & TYPE_EXPRESSION_GROUP)) push |= TYPE_GROUP_PARAMETER;
             stack[size++] = push | (frame & TYPE_EXPRESSION_GROUP);
         }
     }

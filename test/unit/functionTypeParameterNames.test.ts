@@ -1035,6 +1035,89 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
+    'keeps %s binding ownership through incomplete nested type arrow edits',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const [opening, closing, recoveryKind] of [
+            ['{', '}', 'function_type'],
+            ['{|', '}', 'function_type'],
+            ['{', '|}', 'parenthesized_type'],
+            ['{|', '|}', 'function_type'],
+          ]) {
+            let source = `type F=(${name}${optional}:${opening}p:(a:T)=>U${closing})=>number;`;
+            let tree: Tree | undefined;
+            try {
+              tree = parser.parse(source)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              const start = source.indexOf('(a:T)') + 5;
+              let before = '=>U';
+              for (const replacement of ['', '=>U', '', '=>U']) {
+                const end = start + before.length;
+                const next = source.slice(0, start) + replacement + source.slice(end);
+                const previous = tree;
+                tree = compareEditedTree(
+                  parser,
+                  previous,
+                  next,
+                  new Edit({
+                    startIndex: start,
+                    oldEndIndex: end,
+                    newEndIndex: start + replacement.length,
+                    startPosition: position(source, start),
+                    oldEndPosition: position(source, end),
+                    newEndPosition: position(next, start + replacement.length),
+                  }),
+                  (incremental, fresh) => {
+                    for (const current of [incremental, fresh]) {
+                      expect(current.rootNode.hasError).toBe(replacement === '');
+                      const valueKind = replacement === '' ? recoveryKind : 'function_type';
+                      const valueEnd =
+                        valueKind === 'parenthesized_type' ? next.lastIndexOf(')=>number') + 1 : next.length - 1;
+                      expect(
+                        aliasQuery
+                          .captures(current.rootNode)
+                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                      ).toEqual([
+                        ['name', 'type_identifier', 'F', 5, 6],
+                        ['value', valueKind, next.slice(7, valueEnd), 7, valueEnd],
+                      ]);
+                      expect(
+                        namesQuery
+                          .captures(current.rootNode)
+                          .filter(({ node }) => node.text === name)
+                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                      ).toEqual(replacement === '' ? [] : [[name, 8, 8 + name.length]]);
+                    }
+                  },
+                  true
+                );
+                previous.delete();
+                source = next;
+                before = replacement;
+              }
+            } finally {
+              tree?.delete();
+            }
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
     'keeps %s binding ownership through incomplete return property edits',
     (name) => {
       const parser = new Parser().setLanguage(language);
