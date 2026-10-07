@@ -207,6 +207,95 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
+    'keeps %s binding ownership through contextual mapped operand renames',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const contextual of ['as']) {
+            for (const type of [
+              '{[P in typeof K]:number}',
+              '{[P in typeof K.T]:number}',
+              '{[P in typeof K extends T ? A:B]:number}',
+              '{[P in typeof K as T]:number}',
+              '{[P in keyof K]:number}',
+              '{[P in keyof K.T]:number}',
+              '{[P in keyof K<T>]:number}',
+              '{[P in keyof K[]]:number}',
+              '{[P in keyof K as T]:number}',
+              '{[P in keyof K extends T ? A:B]:number}',
+              '{[P in readonly K[]]:number}',
+              '{[P in infer K]:number}',
+            ]) {
+              let source = `type F=(${name}${optional}:${type})=>number;`;
+              let tree: Tree | undefined;
+              try {
+                tree = parser.parse(source)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                const start = source.indexOf('K');
+                for (const replacement of [contextual, 'K']) {
+                  const before = replacement === contextual ? 'K' : contextual;
+                  const end = start + before.length;
+                  const next = source.slice(0, start) + replacement + source.slice(end);
+                  const previous = tree;
+                  tree = compareEditedTree(
+                    parser,
+                    previous,
+                    next,
+                    new Edit({
+                      startIndex: start,
+                      oldEndIndex: end,
+                      newEndIndex: start + replacement.length,
+                      startPosition: position(source, start),
+                      oldEndPosition: position(source, end),
+                      newEndPosition: position(next, start + replacement.length),
+                    }),
+                    (incremental, fresh) => {
+                      for (const current of [incremental, fresh]) {
+                        expect(current.rootNode.hasError).toBe(false);
+                        expect(
+                          aliasQuery
+                            .captures(current.rootNode)
+                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                        ).toEqual([
+                          ['name', 'type_identifier', 'F', 5, 6],
+                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                        ]);
+                        expect(
+                          namesQuery
+                            .captures(current.rootNode)
+                            .filter(({ node }) => node.text === name)
+                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                        ).toEqual([[name, 8, 8 + name.length]]);
+                      }
+                    },
+                    true
+                  );
+                  previous.delete();
+                  source = next;
+                }
+              } finally {
+                tree?.delete();
+              }
+            }
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
     'keeps %s binding ownership through contextual generic parameter renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
@@ -483,6 +572,20 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '{a:T extends U ? X /*\n gap */ :TYPE}',
               '{a:T extends U /*\n gap */ ? TYPE :X; m<keyof>():number}',
               '{a:T extends U /*\n gap */ ? X :TYPE; m<keyof>():number}',
+              '{[K in TYPE]:number}',
+              '{[K in T as TYPE]:number}',
+              '{[keyof in TYPE]:number}',
+              '{[infer in TYPE]:number}',
+              '{[K in TYPE as K]:number}',
+              '{[K in T | TYPE]:number}',
+              '{outer:{[K in TYPE]:number}}',
+              '{[K in T as TYPE]:number; m<keyof>():number}',
+              '`x${TYPE}`',
+              '`x${TYPE | T}`',
+              '`x${T | TYPE}`',
+              '`x${T extends U ? TYPE : V}`',
+              '`x${T extends U ? V : TYPE}`',
+              '`x${{p:TYPE}}`',
               '() => TYPE',
               'new () => TYPE',
               '{x:T | TYPE}',
@@ -493,8 +596,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               try {
                 tree = parser.parse(source)!;
                 expect(tree.rootNode.hasError).toBe(false);
+                const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
                 for (const replacement of ['', '/* operand */', operand]) {
-                  const start = source.indexOf(operator) + operator.length + 1;
                   const end =
                     start +
                     (source.slice(start).startsWith(operand)

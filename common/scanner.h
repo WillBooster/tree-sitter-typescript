@@ -1371,6 +1371,7 @@ enum TypeGroupEnd {
     OBJECT_PROPERTY_GROUP_END = '}' | (5 << 8),
     COMPUTED_PROPERTY_GROUP_END = ']' | (6 << 8),
     PROPERTY_NAME_GROUP = 7 << 8,
+    TYPE_SUBSTITUTION_GROUP_END = '}' | (8 << 8),
 };
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
@@ -1501,7 +1502,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     if (!stack) return false;
     stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : close;
     bool result = false;
-    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = true, member_line_break = false;
+    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
     while (!lexer->eof(lexer)) {
         int32_t c = lexer->lookahead, frame = stack[size - 1], end = frame & TYPE_GROUP_END_MASK, push = 0;
         if (end == '\'' || end == '"' || end == '`') {
@@ -1525,12 +1526,27 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
+                if (frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && operand_pending && ascii_word && strcmp(word, "as") == 0) {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (is_identifier_part(lexer->lookahead)) {
+                        char next[16] = {0};
+                        if (!scan_identifier(lexer, next, sizeof(next), false) || (strcmp(next, "extends") != 0 && strcmp(next, "as") != 0)) break;
+                        operand_pending = false;
+                        query_operand = false;
+                        first_operand = true;
+                        continue;
+                    }
+                    if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
+                }
+                bool mapped_operand = frame == COMPUTED_PROPERTY_GROUP_END && ascii_word &&
+                    ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
+                     (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
                 bool prefix = first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
                 operand_pending = prefix;
                 query_operand = prefix && strcmp(word, "typeof") == 0;
                 bool extends_operand = ascii_word && strcmp(word, "extends") == 0;
-                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || (first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
-                if (extends_operand) parameter_position = false;
+                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
+                if (extends_operand || mapped_operand) parameter_position = false;
                 continue;
             }
             if (c == '/') {
@@ -1683,7 +1699,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                 if (part == '\\' && !lexer->eof(lexer)) advance(lexer);
                 else if (c == '`' && part == '$' && lexer->lookahead == '{') {
                     advance(lexer);
-                    if (!scan_type_group(lexer, '}', false, true)) return true;
+                    if (!scan_type_group(lexer, allow_expression ? '}' : TYPE_SUBSTITUTION_GROUP_END, !allow_expression, true)) return allow_expression;
                 }
             }
             if (!lexer->eof(lexer)) advance(lexer);
