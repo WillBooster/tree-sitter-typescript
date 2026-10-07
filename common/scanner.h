@@ -1490,7 +1490,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
     if (!stack) return false;
     stack[0] = close;
     bool result = false;
-    bool first_operand = true, operand_pending = false, query_operand = false;
+    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = true;
     while (!lexer->eof(lexer)) {
         int32_t c = lexer->lookahead, end = stack[size - 1], push = 0;
         if (end == '\'' || end == '"' || end == '`') {
@@ -1506,7 +1506,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
                 bool prefix = first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
                 operand_pending = prefix;
                 query_operand = prefix && strcmp(word, "typeof") == 0;
-                first_operand = prefix && !query_operand && strcmp(word, "infer") != 0;
+                bool extends_operand = ascii_word && strcmp(word, "extends") == 0;
+                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand;
+                if (extends_operand) parameter_position = false;
                 continue;
             }
             if (c == '/') {
@@ -1514,6 +1516,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
                 if (skip_comment(lexer, &comment, false) == NO_COMMENT) break;
                 continue;
             }
+            if (type_operands && operand_pending && (c == '|' || c == '&' || ((query_operand || !parameter_position) && (c == ':' || c == '?')))) break;
             advance(lexer);
             if (c == end) {
                 if (type_operands && operand_pending && end == ')') {
@@ -1533,7 +1536,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
             else if (c == '<' || c == '(' || c == '[' || c == '{') push = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
             if (!is_whitespace(c)) {
-                first_operand = c == '(';
+                first_operand = c == '(' || c == '|' || c == '&' || c == '?' || c == ':';
+                parameter_position = c == '(' || c == ',';
                 operand_pending = false;
                 query_operand = false;
             }
@@ -1593,8 +1597,9 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                     continue;
                 }
             }
-            if (ascii_word && strcmp(word, "extends") == 0) saw_extends = true;
-            first = false;
+            bool extends_operand = ascii_word && strcmp(word, "extends") == 0;
+            if (extends_operand) saw_extends = true;
+            first = !allow_expression && extends_operand;
             continue;
         }
         first = false;
@@ -1602,12 +1607,16 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
         if (c == ':') {
             if (conditional_depth == 0) return false;
             conditional_depth--;
+            first = !allow_expression;
         } else if (c == '?' && (saw_extends || allow_expression)) {
             if (allow_expression && lexer->lookahead == '?') advance(lexer);
             else if (allow_expression && lexer->lookahead == '.') {
                 advance(lexer);
                 if (is_ascii_digit(lexer->lookahead)) conditional_depth++;
             } else conditional_depth++;
+            first = !allow_expression;
+        } else if (!allow_expression && (c == '|' || c == '&')) {
+            first = true;
         } else if (c == '=') {
             if (lexer->lookahead != '>') return true;
             advance(lexer);
