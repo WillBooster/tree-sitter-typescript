@@ -1540,7 +1540,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
             if (!is_whitespace(c)) {
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=';
-                parameter_position = c == '(' || c == ',';
+                parameter_position = c == '(' || c == '[' || c == '{' || c == ',';
                 operand_pending = false;
                 query_operand = false;
             }
