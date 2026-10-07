@@ -40,8 +40,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       );
       try {
         for (const optional of ['', '?']) {
-          for (const contextual of ['keyof', 'readonly', 'infer']) {
-            let source = `type F=(${name}${optional}:<${contextual}>()=>number)=>number;`;
+          for (const header of ['keyof', 'readonly', 'infer'].flatMap((contextual) => [
+            `<${contextual}>`,
+            `new <${contextual}>`,
+            `abstract new <${contextual}>`,
+          ])) {
+            let source = `type F=(${name}${optional}:${header}()=>number)=>number;`;
             let tree: Tree | undefined;
             let before = '=>';
             try {
@@ -122,16 +126,35 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '{outer:{m?<K>():number}}',
               '[{m<K>():number}]',
               'A<{m<K>():number}>',
+              '{a:number; m<K>():number}',
+              '{a:number\nm<K>():number}',
+              '{a:number\r\nm<K>():number}',
+              '{a:number, m<K>():number}',
+              '{a:number; "m"<K>():number}',
+              "{'m'<K>():number}",
+              '{"m"?<K>():number}',
+              "{'m'?<K>():number}",
+              '{outer:{a:number; m<K>():number}}',
+              '[{a:number; m<K>():number}]',
+              'A<{a:number; m<K>():number}>',
+              '{readonly [K]:number}',
+              '{[K]:number} extends X ? A:B',
+              '{a:number; <K>():number}',
+              '{a:number; new<K>():number}',
+              '{a:number; [member]<K>():number}',
+              '{a:number /* gap */\nm<K>():number}',
+              '{a:number /*\n gap */ m<K>():number}',
+              '{a:number; m?<K>():number}',
             ]) {
               let source = `type F=(${name}${optional}:${type})=>number;`;
               let tree: Tree | undefined;
               try {
                 tree = parser.parse(source)!;
                 expect(tree.rootNode.hasError).toBe(false);
+                const start = source.indexOf('K');
                 for (const replacement of [contextual, 'K']) {
                   const before = replacement === contextual ? 'K' : contextual;
-                  const start = source.indexOf(before),
-                    end = start + before.length;
+                  const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   const previous = tree;
                   tree = compareEditedTree(
@@ -207,6 +230,14 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '<T,K>(x:T)=>number',
               '<K extends T>()=>number',
               '<K=T>()=>number',
+              'new <K>()=>number',
+              'abstract new <K>()=>number',
+              'new <T,K>()=>number',
+              'new <K>(x:T)=>number',
+              '(x:new <K>()=>number)=>number',
+              '{x:new <K>()=>number}',
+              '[new <K>()=>number]',
+              'A<new <K>()=>number>',
             ]) {
               let source = `type F=(${name}${optional}:${type})=>number;`;
               let tree: Tree | undefined;
@@ -431,6 +462,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               '[TYPE]',
               'A<TYPE>',
               '{[k:string]: TYPE}',
+              '{a: TYPE, m<keyof>():number}',
+              '{a: TYPE; m<keyof>():number}',
+              '{a: TYPE\nm<keyof>():number}',
+              '{a: TYPE, "m"<keyof>():number}',
+              '{outer:{a: TYPE; m<keyof>():number}}',
               '() => TYPE',
               'new () => TYPE',
               '{x:T | TYPE}',
