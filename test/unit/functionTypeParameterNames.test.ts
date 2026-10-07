@@ -31,6 +31,154 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
   }, 30_000);
   afterAll(() => query?.delete());
   test.each(['unknown', 'never', 'unique'])(
+    'retains %s type-operator recovery through operand removal and restoration',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const [operator, operand] of [
+            ['typeof', 'value'],
+            ['keyof', 'Value'],
+            ['readonly', 'Value[]'],
+            ['infer', 'Value'],
+          ] as const) {
+            let source = `type F = (${name}${optional}: ${operator} ${operand}) => number;`;
+            let tree: Tree | undefined;
+            try {
+              tree = parser.parse(source)!;
+              check(tree, source, false);
+              for (const replacement of ['', '/* operand */', operand]) {
+                const start = source.indexOf(operator) + operator.length + 1;
+                const end = source.indexOf(') =>');
+                const next = source.slice(0, start) + replacement + source.slice(end);
+                const previous = tree;
+                tree = compareEditedTree(
+                  parser,
+                  previous,
+                  next,
+                  new Edit({
+                    startIndex: start,
+                    oldEndIndex: end,
+                    newEndIndex: start + replacement.length,
+                    startPosition: position(source, start),
+                    oldEndPosition: position(source, end),
+                    newEndPosition: position(next, start + replacement.length),
+                  }),
+                  (incremental, fresh) => {
+                    check(incremental, next, replacement !== operand);
+                    check(fresh, next, replacement !== operand);
+                  },
+                  true
+                );
+                previous.delete();
+                source = next;
+              }
+              function check(current: Tree, text: string, missing: boolean): void {
+                expect(current.rootNode.hasError).toBe(missing);
+                const parenthesized = missing && name === 'unknown' && operator !== 'readonly';
+                const end = parenthesized ? text.indexOf(') =>') + 1 : text.length - 1;
+                expect(
+                  aliasQuery
+                    .captures(current.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', parenthesized ? 'parenthesized_type' : 'function_type', text.slice(9, end), 9, end],
+                ]);
+                if (missing && operator === 'readonly') {
+                  const parameter = current.rootNode.descendantsOfType('required_parameter')[0]!;
+                  const pattern = parameter.childForFieldName('pattern')!;
+                  expect(pattern.text).toBe(operator);
+                  expect(pattern.startIndex).toBe(text.indexOf(operator));
+                  expect(pattern.endIndex).toBe(text.indexOf(operator) + operator.length);
+                } else if (missing) {
+                  expect(current.rootNode.descendantsOfType(['required_parameter', 'optional_parameter'])).toHaveLength(
+                    0
+                  );
+                }
+              }
+            } finally {
+              tree?.delete();
+            }
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])('retains %s nested type-query recovery through operand edits', (name) => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const optional of ['', '?']) {
+        for (const wrapper of ['(', '((']) {
+          let source = `type F = (${name}${optional}: ${wrapper}typeof value${')'.repeat(wrapper.length)}) => number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            check(tree, source, false);
+            for (const replacement of ['', '/* operand */', 'value']) {
+              const start = source.indexOf('typeof ') + 7;
+              const end = source.indexOf(')', start);
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  check(incremental, next, replacement !== 'value');
+                  check(fresh, next, replacement !== 'value');
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+            }
+            function check(current: Tree, text: string, missing: boolean): void {
+              expect(current.rootNode.hasError).toBe(missing);
+              const alias = current.rootNode.descendantsOfType('type_alias_declaration')[0]!;
+              expect(alias.childForFieldName('name')!.text).toBe('F');
+              const value = alias.childForFieldName('value')!;
+              expect(value.type).toBe('function_type');
+              expect(value.text).toBe(text.slice(9, -1));
+              expect(value.startIndex).toBe(9);
+              expect(value.endIndex).toBe(text.length - 1);
+              const parameters = value.childForFieldName('parameters')!;
+              const parameter = parameters.descendantsOfType(
+                missing ? 'required_parameter' : optional ? 'optional_parameter' : 'required_parameter'
+              )[0]!;
+              const pattern = parameter.childForFieldName('pattern')!;
+              const start = missing ? text.indexOf(wrapper + 'typeof') : text.indexOf(name);
+              const end = missing ? text.indexOf(') =>') : start + name.length;
+              expect(pattern.type).toBe(missing ? 'parenthesized_expression' : 'identifier');
+              expect(pattern.text).toBe(text.slice(start, end));
+              expect(pattern.startIndex).toBe(start);
+              expect(pattern.endIndex).toBe(end);
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+  test.each(['unknown', 'never', 'unique'])(
     'retains %s callback bodies through conditional and colon edits',
     (name) => {
       const parser = new Parser().setLanguage(language);

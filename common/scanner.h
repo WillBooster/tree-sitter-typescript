@@ -1362,7 +1362,7 @@ static bool scan_await_keyword(TSLexer *lexer) {
 
 static bool scan_generic_function_type(TSLexer *lexer);
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression);
-static bool scan_type_group(TSLexer *lexer, int32_t close);
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1415,7 +1415,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         } else {
             return false;
         }
-        if (!scan_type_group(lexer, ')') || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+        if (!scan_type_group(lexer, ')', false) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
         advance(lexer);
         if (lexer->lookahead != '>') return false;
         advance(lexer);
@@ -1477,19 +1477,20 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
 static bool scan_generic_function_type(TSLexer *lexer) {
     bool comment = false;
     advance(lexer);
-    if (!scan_type_group(lexer, '>') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
+    if (!scan_type_group(lexer, '>', false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
     advance(lexer);
-    if (!scan_type_group(lexer, ')') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
+    if (!scan_type_group(lexer, ')', false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
     advance(lexer);
     return lexer->lookahead == '>';
 }
 
-static bool scan_type_group(TSLexer *lexer, int32_t close) {
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
     unsigned size = 1, capacity = 32;
     int32_t *stack = ts_malloc(capacity * sizeof(int32_t));
     if (!stack) return false;
     stack[0] = close;
     bool result = false;
+    bool first_operand = true, operand_pending = false, query_operand = false;
     while (!lexer->eof(lexer)) {
         int32_t c = lexer->lookahead, end = stack[size - 1], push = 0;
         if (end == '\'' || end == '"' || end == '`') {
@@ -1498,6 +1499,16 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
             if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
             else if (end == '`' && c == '$' && lexer->lookahead == '{') { advance(lexer); push = '}'; }
         } else {
+            if (type_operands && end == ')' && is_identifier_part(c)) {
+                char word[16] = {0};
+                bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+                if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
+                bool prefix = first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
+                operand_pending = prefix;
+                query_operand = prefix && strcmp(word, "typeof") == 0;
+                first_operand = prefix && !query_operand && strcmp(word, "infer") != 0;
+                continue;
+            }
             if (c == '/') {
                 bool comment = false;
                 if (skip_comment(lexer, &comment, false) == NO_COMMENT) break;
@@ -1505,6 +1516,15 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
             }
             advance(lexer);
             if (c == end) {
+                if (type_operands && operand_pending && end == ')') {
+                    if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') break;
+                    advance(lexer);
+                    if (lexer->lookahead != '>') break;
+                    advance(lexer);
+                }
+                operand_pending = false;
+                first_operand = false;
+                query_operand = false;
                 if (--size == 0) { result = true; break; }
                 continue;
             }
@@ -1512,6 +1532,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
             else if (c == '=') { if (lexer->lookahead == '>') advance(lexer); }
             else if (c == '<' || c == '(' || c == '[' || c == '{') push = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
+            if (!is_whitespace(c)) {
+                first_operand = c == '(';
+                operand_pending = false;
+                query_operand = false;
+            }
         }
         if (push) {
             if (size == capacity) {
@@ -1531,6 +1556,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
     unsigned conditional_depth = 0;
     bool saw_extends = false;
     bool first = true;
+    bool query_operand = false;
     while (!lexer->eof(lexer)) {
         if (!scan_default_trivia(lexer, true, false)) return true;
         int32_t c = lexer->lookahead;
@@ -1538,8 +1564,34 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-            if (!allow_expression && first && ascii_word && strcmp(word, "unique") == 0) {
-                if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+            if (query_operand) {
+                if (ascii_word && strcmp(word, "typeof") == 0) return false;
+                query_operand = false;
+            } else if (!allow_expression && first && ascii_word) {
+                if (strcmp(word, "unique") == 0) {
+                    if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+                } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
+                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+                    switch (lexer->lookahead) {
+                        case ')':
+                        case ']':
+                        case '}':
+                        case ',':
+                        case ';':
+                        case ':':
+                        case '=':
+                        case '>':
+                        case '|':
+                        case '&':
+                        case '?':
+                            return false;
+                        default:
+                            break;
+                    }
+                    query_operand = strcmp(word, "typeof") == 0;
+                    first = !query_operand && strcmp(word, "infer") != 0;
+                    continue;
+                }
             }
             if (ascii_word && strcmp(word, "extends") == 0) saw_extends = true;
             first = false;
@@ -1561,7 +1613,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
             advance(lexer);
         } else if (c == '<' || c == '(' || c == '[' || c == '{') {
             int32_t close = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
-            if (!scan_type_group(lexer, close)) return true;
+            if (!scan_type_group(lexer, close, !allow_expression)) return allow_expression;
         } else if (c == '\'' || c == '"' || c == '`') {
             while (!lexer->eof(lexer) && lexer->lookahead != c) {
                 int32_t part = lexer->lookahead;
@@ -1569,7 +1621,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                 if (part == '\\' && !lexer->eof(lexer)) advance(lexer);
                 else if (c == '`' && part == '$' && lexer->lookahead == '{') {
                     advance(lexer);
-                    if (!scan_type_group(lexer, '}')) return true;
+                    if (!scan_type_group(lexer, '}', false)) return true;
                 }
             }
             if (!lexer->eof(lexer)) advance(lexer);
