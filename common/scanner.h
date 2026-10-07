@@ -1627,6 +1627,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
             bool expression_operand = (frame & TYPE_EXPRESSION_OPERAND) != 0;
             bool parameter_default = parameter_position && end == ')' && c == '=';
+            if (check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && first_operand && !parameter_position && (c == '}' || c == ',' || c == ';')) break;
             if (check_type_operands && operand_pending && (c == '.' || c == '-' || c == '+') && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) {
                 if (query_operand || !first_operand) break;
                 advance(lexer);
