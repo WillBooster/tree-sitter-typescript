@@ -567,6 +567,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           '{[K in keyof VALUE]:number}',
           '`x${keyof VALUE}`',
           'keyof (()=>VALUE)',
+          'keyof (()=> | VALUE)',
+          'keyof (()=> & VALUE)',
+          '{x:()=> | VALUE}',
+          '{x:()=> & VALUE}',
+          '{[K in keyof (()=> | VALUE)]:number}',
+          '`x${keyof (()=> & VALUE)}`',
         ]) {
           let source = `type F=(${name}${optional}:${type.replace('VALUE', '.5')})=>number;`;
           let tree: Tree | undefined;
@@ -618,140 +624,193 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test.each(['unknown', 'never', 'unique'])(
-    'retains %s operand recovery in object, tuple, generic and function types',
-    (name) => {
-      const parser = new Parser().setLanguage(language);
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
-      try {
-        for (const optional of ['', '?']) {
-          for (const [operator, operand] of [
-            ['typeof', 'value'],
-            ['keyof', 'Value'],
-            ['readonly', 'Value[]'],
-            ['infer', 'Value'],
-          ] as const) {
-            for (const template of [
-              '{x: TYPE}',
-              '[TYPE]',
-              'A<TYPE>',
-              '{[k:string]: TYPE}',
-              '{a: TYPE, m<keyof>():number}',
-              '{a: TYPE; m<keyof>():number}',
-              '{a: TYPE\nm<keyof>():number}',
-              '{a: TYPE, "m"<keyof>():number}',
-              '{outer:{a: TYPE; m<keyof>():number}}',
-              '{a:T extends U\n? TYPE :X}',
-              '{a:T extends U\n? X :TYPE}',
-              '{a:T extends\nTYPE ? X:Y}',
-              '{a:T\n| TYPE}',
-              '{a:T\n& TYPE}',
-              '{a:T extends U ? X\n:TYPE}',
-              '{a:T extends U\n? TYPE :X; m<keyof>():number}',
-              '{a:T extends U\n? X :TYPE; m<keyof>():number}',
-              '{a:T extends U /*\n gap */ ? TYPE :X}',
-              '{a:T extends U /*\n gap */ ? X :TYPE}',
-              '{a:T extends /*\n gap */ TYPE ? X:Y}',
-              '{a:T /*\n gap */ | TYPE}',
-              '{a:T /*\n gap */ & TYPE}',
-              '{a:T extends U ? X /*\n gap */ :TYPE}',
-              '{a:T extends U /*\n gap */ ? TYPE :X; m<keyof>():number}',
-              '{a:T extends U /*\n gap */ ? X :TYPE; m<keyof>():number}',
-              '{[K in TYPE]:number}',
-              '{[K in T as TYPE]:number}',
-              '{[keyof in TYPE]:number}',
-              '{[infer in TYPE]:number}',
-              '{[K in TYPE as K]:number}',
-              '{[K in T | TYPE]:number}',
-              '{outer:{[K in TYPE]:number}}',
-              '{[K in T as TYPE]:number; m<keyof>():number}',
-              '{p:`x${TYPE}`}',
-              '[`x${TYPE}`]',
-              'A<`x${TYPE}`>',
-              '{p:`x${TYPE | T}`}',
-              '[`x${T | TYPE}`]',
-              'A<`x${T extends U ? TYPE : V}`>',
-              '{p:`x${{p:TYPE}}`}',
-              '`x${`y${TYPE}`}`',
-              '`x${TYPE}`',
-              '`x${TYPE | T}`',
-              '`x${T | TYPE}`',
-              '`x${T extends U ? TYPE : V}`',
-              '`x${T extends U ? V : TYPE}`',
-              '`x${{p:TYPE}}`',
-              '() => TYPE',
-              'new () => TYPE',
-              '{x:T | TYPE}',
-              '(x: TYPE) => number',
-            ]) {
-              let source = `type F = (${name}${optional}: ${template.replace('TYPE', `${operator} ${operand}`)}) => number;`;
-              let tree: Tree | undefined;
-              try {
-                tree = parser.parse(source)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
-                let before: string = operand;
-                for (const replacement of [
-                  '()=>',
-                  '(/* operand */)=>',
-                  '.T',
-                  '>',
-                  '=',
-                  '=>',
-                  '()',
-                  '(/* operand */)',
-                  '',
-                  '/* operand */',
-                  operand,
-                ]) {
-                  const end = start + before.length;
-                  const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(replacement !== operand);
-                        const start = next.indexOf(name);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
-                  source = next;
-                  before = replacement;
-                }
-              } finally {
-                tree?.delete();
+  test.each(['unknown', 'never', 'unique'])('requires return operands after leading markers for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const namesQuery = new Query(
+      language,
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+    );
+    try {
+      for (const optional of ['', '?'])
+        for (const marker of ['', '|', '&', '| &'])
+          for (const template of [
+            'keyof (()=>MARK Value)',
+            '{x:()=>MARK Value}',
+            '{[K in keyof (()=>MARK Value)]:number}',
+            '`x${keyof (()=>MARK Value)}`',
+          ]) {
+            let source = `type F=(${name}${optional}:${template.replace('MARK', marker)})=>number;`;
+            let tree: Tree | undefined;
+            let before = 'Value';
+            try {
+              tree = parser.parse(source)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              const start = source.indexOf('Value');
+              for (const replacement of ['', '/* return */', 'Value']) {
+                const end = start + before.length,
+                  next = source.slice(0, start) + replacement + source.slice(end);
+                const previous = tree;
+                tree = compareEditedTree(
+                  parser,
+                  previous,
+                  next,
+                  new Edit({
+                    startIndex: start,
+                    oldEndIndex: end,
+                    newEndIndex: start + replacement.length,
+                    startPosition: position(source, start),
+                    oldEndPosition: position(source, end),
+                    newEndPosition: position(next, start + replacement.length),
+                  }),
+                  (incremental, fresh) => {
+                    for (const current of [incremental, fresh]) {
+                      expect(current.rootNode.hasError).toBe(replacement !== 'Value');
+                      expect(
+                        namesQuery
+                          .captures(current.rootNode)
+                          .filter(({ node }) => node.text === name)
+                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                      ).toEqual(replacement === 'Value' ? [[name, 8, 8 + name.length]] : []);
+                    }
+                  },
+                  true
+                );
+                previous.delete();
+                source = next;
+                before = replacement;
               }
+            } finally {
+              tree?.delete();
             }
           }
-        }
-      } finally {
-        namesQuery.delete();
-        parser.delete();
-      }
+    } finally {
+      namesQuery.delete();
+      parser.delete();
     }
-  );
+  });
+  test.each(
+    ['unknown', 'never', 'unique'].flatMap((name) =>
+      (
+        [
+          ['typeof', 'value'],
+          ['keyof', 'Value'],
+          ['readonly', 'Value[]'],
+          ['infer', 'Value'],
+        ] as const
+      ).map(([operator, operand]) => [name, operator, operand] as const)
+    )
+  )('retains %s %s operand recovery in object, tuple, generic and function types', (name, operator, operand) => {
+    const parser = new Parser().setLanguage(language);
+    const namesQuery = new Query(
+      language,
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+    );
+    try {
+      for (const optional of ['', '?']) {
+        for (const template of [
+          '{x: TYPE}',
+          '[TYPE]',
+          'A<TYPE>',
+          '{[k:string]: TYPE}',
+          '{a: TYPE, m<keyof>():number}',
+          '{a: TYPE; m<keyof>():number}',
+          '{a: TYPE\nm<keyof>():number}',
+          '{a: TYPE, "m"<keyof>():number}',
+          '{outer:{a: TYPE; m<keyof>():number}}',
+          '{a:T extends U\n? TYPE :X}',
+          '{a:T extends U\n? X :TYPE}',
+          '{a:T extends\nTYPE ? X:Y}',
+          '{a:T\n| TYPE}',
+          '{a:T\n& TYPE}',
+          '{a:T extends U ? X\n:TYPE}',
+          '{a:T extends U\n? TYPE :X; m<keyof>():number}',
+          '{a:T extends U\n? X :TYPE; m<keyof>():number}',
+          '{a:T extends U /*\n gap */ ? TYPE :X}',
+          '{a:T extends U /*\n gap */ ? X :TYPE}',
+          '{a:T extends /*\n gap */ TYPE ? X:Y}',
+          '{a:T /*\n gap */ | TYPE}',
+          '{a:T /*\n gap */ & TYPE}',
+          '{a:T extends U ? X /*\n gap */ :TYPE}',
+          '{a:T extends U /*\n gap */ ? TYPE :X; m<keyof>():number}',
+          '{a:T extends U /*\n gap */ ? X :TYPE; m<keyof>():number}',
+          '{[K in TYPE]:number}',
+          '{[K in T as TYPE]:number}',
+          '{[keyof in TYPE]:number}',
+          '{[infer in TYPE]:number}',
+          '{[K in TYPE as K]:number}',
+          '{[K in T | TYPE]:number}',
+          '{outer:{[K in TYPE]:number}}',
+          '{[K in T as TYPE]:number; m<keyof>():number}',
+          '{p:`x${TYPE}`}',
+          '[`x${TYPE}`]',
+          'A<`x${TYPE}`>',
+          '{p:`x${TYPE | T}`}',
+          '[`x${T | TYPE}`]',
+          'A<`x${T extends U ? TYPE : V}`>',
+          '{p:`x${{p:TYPE}}`}',
+          '`x${`y${TYPE}`}`',
+          '`x${TYPE}`',
+          '`x${TYPE | T}`',
+          '`x${T | TYPE}`',
+          '`x${T extends U ? TYPE : V}`',
+          '`x${T extends U ? V : TYPE}`',
+          '`x${{p:TYPE}}`',
+          '() => TYPE',
+          'new () => TYPE',
+          '{x:T | TYPE}',
+          '(x: TYPE) => number',
+        ]) {
+          let source = `type F = (${name}${optional}: ${template.replace('TYPE', `${operator} ${operand}`)}) => number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            expect(tree.rootNode.hasError).toBe(false);
+            const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
+            let before: string = operand;
+            for (const replacement of ['.T', '>', '=', '=>', '()', '(/* operand */)', '', '/* operand */', operand]) {
+              const end = start + before.length;
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  for (const current of [incremental, fresh]) {
+                    expect(current.rootNode.hasError).toBe(replacement !== operand);
+                    const start = next.indexOf(name);
+                    expect(
+                      namesQuery
+                        .captures(current.rootNode)
+                        .filter(({ node }) => node.text === name)
+                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                    ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
+                  }
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+              before = replacement;
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      }
+    } finally {
+      namesQuery.delete();
+      parser.delete();
+    }
+  });
   test.each(['unknown', 'never', 'unique'])(
     'retains %s operator recovery at union and conditional operand positions',
     (name) => {

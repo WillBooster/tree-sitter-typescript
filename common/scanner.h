@@ -1609,7 +1609,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     advance(lexer);
                     if (lexer->lookahead != '>') break;
                     advance(lexer);
-                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) break;
+                    bool return_operand = scan_default_trivia(lexer, true, false);
+                    while (return_operand && (lexer->lookahead == '|' || lexer->lookahead == '&')) {
+                        advance(lexer);
+                        return_operand = scan_default_trivia(lexer, true, false);
+                    }
+                    if (!return_operand || lexer->eof(lexer)) break;
                     int32_t operand = lexer->lookahead;
                     if (operand == '.') {
                         advance(lexer);
@@ -1629,7 +1634,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             else if (c == '=') { if (lexer->lookahead == '>') advance(lexer); }
             else if (c == '<') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_TYPE_PARAMETER_GROUP_END : check_type_operands && first_operand ? TYPE_PARAMETER_GROUP_END : '>';
-            else if (c == '(') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)) ? TYPE_OPERAND_GROUP_END : ')';
+            else if (c == '(') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || first_operand) ? TYPE_OPERAND_GROUP_END : ')';
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
             else if (c == '{') push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
