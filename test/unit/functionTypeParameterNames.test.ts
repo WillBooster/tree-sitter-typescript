@@ -31,6 +31,150 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
   }, 30_000);
   afterAll(() => query?.delete());
   test.each(['unknown', 'never', 'unique'])(
+    'retains %s annotation recovery when a block comment becomes an HTML line comment',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      try {
+        for (const marker of ['<!-- c -->', '--> c']) {
+          let source = `type F = (${name}: /* c */ T) => void;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            for (const replacement of [marker, '/* c */']) {
+              const start = source.indexOf(':') + 2;
+              const end = start + (source.includes('/* c */') ? 7 : marker.length);
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  for (const current of [incremental, fresh]) {
+                    expect(current.rootNode.hasError).toBe(replacement === marker);
+                    const valueStart = next.indexOf('('),
+                      valueEnd = next.length - 1;
+                    expect(
+                      aliasQuery
+                        .captures(current.rootNode)
+                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                    ).toEqual([
+                      ['name', 'type_identifier', 'F', 5, 6],
+                      ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
+                    ]);
+                  }
+                },
+                true
+              );
+              previous.delete();
+              source = next;
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
+    'retains %s operand recovery in object, tuple, generic and function types',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const [operator, operand] of [
+            ['typeof', 'value'],
+            ['keyof', 'Value'],
+            ['readonly', 'Value[]'],
+            ['infer', 'Value'],
+          ] as const) {
+            for (const template of [
+              '{x: TYPE}',
+              '[TYPE]',
+              'A<TYPE>',
+              '{[k:string]: TYPE}',
+              '() => TYPE',
+              'new () => TYPE',
+              '{x:T | TYPE}',
+              '(x: TYPE) => number',
+            ]) {
+              let source = `type F = (${name}${optional}: ${template.replace('TYPE', `${operator} ${operand}`)}) => number;`;
+              let tree: Tree | undefined;
+              try {
+                tree = parser.parse(source)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                for (const replacement of ['', '/* operand */', operand]) {
+                  const start = source.indexOf(operator) + operator.length + 1;
+                  const end =
+                    start +
+                    (source.slice(start).startsWith(operand)
+                      ? operand.length
+                      : source.slice(start).startsWith('/* operand */')
+                        ? 13
+                        : 0);
+                  const next = source.slice(0, start) + replacement + source.slice(end);
+                  const previous = tree;
+                  tree = compareEditedTree(
+                    parser,
+                    previous,
+                    next,
+                    new Edit({
+                      startIndex: start,
+                      oldEndIndex: end,
+                      newEndIndex: start + replacement.length,
+                      startPosition: position(source, start),
+                      oldEndPosition: position(source, end),
+                      newEndPosition: position(next, start + replacement.length),
+                    }),
+                    (incremental, fresh) => {
+                      for (const current of [incremental, fresh]) {
+                        expect(current.rootNode.hasError).toBe(replacement !== operand);
+                        const start = next.indexOf(name);
+                        expect(
+                          namesQuery
+                            .captures(current.rootNode)
+                            .filter(({ node }) => node.text === name)
+                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                        ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
+                      }
+                    },
+                    true
+                  );
+                  previous.delete();
+                  source = next;
+                }
+              } finally {
+                tree?.delete();
+              }
+            }
+          }
+        }
+      } finally {
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
     'retains %s operator recovery at union and conditional operand positions',
     (name) => {
       const parser = new Parser().setLanguage(language);

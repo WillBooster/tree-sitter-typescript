@@ -1362,7 +1362,8 @@ static bool scan_await_keyword(TSLexer *lexer) {
 
 static bool scan_generic_function_type(TSLexer *lexer);
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression);
-static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands);
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
+static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1415,7 +1416,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         } else {
             return false;
         }
-        if (!scan_type_group(lexer, ')', false) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+        if (!scan_type_group(lexer, ')', false, true) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
         advance(lexer);
         if (lexer->lookahead != '>') return false;
         advance(lexer);
@@ -1477,14 +1478,14 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
 static bool scan_generic_function_type(TSLexer *lexer) {
     bool comment = false;
     advance(lexer);
-    if (!scan_type_group(lexer, '>', false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
+    if (!scan_type_group(lexer, '>', false, false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
     advance(lexer);
-    if (!scan_type_group(lexer, ')', false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
+    if (!scan_type_group(lexer, ')', false, false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
     advance(lexer);
     return lexer->lookahead == '>';
 }
 
-static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments) {
     unsigned size = 1, capacity = 32;
     int32_t *stack = ts_malloc(capacity * sizeof(int32_t));
     if (!stack) return false;
@@ -1499,7 +1500,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
             if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
             else if (end == '`' && c == '$' && lexer->lookahead == '{') { advance(lexer); push = '}'; }
         } else {
-            if (type_operands && end == ')' && is_identifier_part(c)) {
+            if (type_operands && is_identifier_part(c)) {
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
@@ -1516,10 +1517,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
                 if (skip_comment(lexer, &comment, false) == NO_COMMENT) break;
                 continue;
             }
-            if (type_operands && operand_pending && (c == '|' || c == '&' || ((query_operand || !parameter_position) && (c == ':' || c == '?')))) break;
+            if (type_operands && operand_pending && (c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?')))) break;
             advance(lexer);
+            if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
             if (c == end) {
-                if (type_operands && operand_pending && end == ')') {
+                if (type_operands && operand_pending) {
+                    if (end != ')' || !parameter_position) break;
                     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') break;
                     advance(lexer);
                     if (lexer->lookahead != '>') break;
@@ -1536,7 +1539,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands) {
             else if (c == '<' || c == '(' || c == '[' || c == '{') push = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
             if (!is_whitespace(c)) {
-                first_operand = c == '(' || c == '|' || c == '&' || c == '?' || c == ':';
+                first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=';
                 parameter_position = c == '(' || c == ',';
                 operand_pending = false;
                 query_operand = false;
@@ -1602,8 +1605,9 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
             first = !allow_expression && extends_operand;
             continue;
         }
-        first = false;
         advance(lexer);
+        if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
+        first = false;
         if (c == ':') {
             if (conditional_depth == 0) return false;
             conditional_depth--;
@@ -1620,9 +1624,10 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
         } else if (c == '=') {
             if (lexer->lookahead != '>') return true;
             advance(lexer);
+            first = !allow_expression;
         } else if (c == '<' || c == '(' || c == '[' || c == '{') {
             int32_t close = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
-            if (!scan_type_group(lexer, close, !allow_expression)) return allow_expression;
+            if (!scan_type_group(lexer, close, !allow_expression, true)) return allow_expression;
         } else if (c == '\'' || c == '"' || c == '`') {
             while (!lexer->eof(lexer) && lexer->lookahead != c) {
                 int32_t part = lexer->lookahead;
@@ -1630,11 +1635,20 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                 if (part == '\\' && !lexer->eof(lexer)) advance(lexer);
                 else if (c == '`' && part == '$' && lexer->lookahead == '{') {
                     advance(lexer);
-                    if (!scan_type_group(lexer, '}', false)) return true;
+                    if (!scan_type_group(lexer, '}', false, true)) return true;
                 }
             }
             if (!lexer->eof(lexer)) advance(lexer);
         }
+    }
+    return true;
+}
+
+static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening) {
+    const char *tail = opening == '<' ? "!--" : "->";
+    for (; *tail; tail++) {
+        if (lexer->lookahead != *tail) return false;
+        advance(lexer);
     }
     return true;
 }
