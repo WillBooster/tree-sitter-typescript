@@ -1501,7 +1501,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     if (!stack) return false;
     stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : close;
     bool result = false;
-    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = true;
+    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = true, member_line_break = false;
     while (!lexer->eof(lexer)) {
         int32_t c = lexer->lookahead, frame = stack[size - 1], end = frame & TYPE_GROUP_END_MASK, push = 0;
         if (end == '\'' || end == '"' || end == '`') {
@@ -1514,6 +1514,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
             else if (end == '`' && c == '$' && lexer->lookahead == '{') { advance(lexer); push = '}'; }
         } else {
+            if (member_line_break && !is_whitespace(c) && c != '/') {
+                if (is_identifier_part(c) || c == '\'' || c == '"' || c == '<' || c == '(' || c == '[') {
+                    first_operand = true;
+                    parameter_position = true;
+                }
+                member_line_break = false;
+            }
             if (type_operands && is_identifier_part(c)) {
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
@@ -1531,14 +1538,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 CommentResult comment_result = skip_comment(lexer, &comment, false);
                 if (comment_result == NO_COMMENT) break;
                 if (comment_result == COMMENT_WITH_LINE_TERMINATOR && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
-                    first_operand = true;
-                    parameter_position = true;
+                    member_line_break = true;
                 }
                 continue;
             }
             if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
-                first_operand = true;
-                parameter_position = true;
+                member_line_break = true;
             }
             if (type_operands && operand_pending && (c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
             advance(lexer);
