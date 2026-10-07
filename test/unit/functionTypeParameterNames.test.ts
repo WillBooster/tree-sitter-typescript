@@ -113,6 +113,10 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           for (const contextual of ['keyof', 'readonly', 'infer']) {
             for (const type of [
               '{m<K>():number}',
+              '{m<K=string>():number}',
+              '<K=string>()=>number',
+              'new<K=string>()=>number',
+              '{[K=1]:number}',
               '{<K>():number}',
               '{new<K>():number}',
               '{[member]<K>():number}',
@@ -614,7 +618,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 expect(tree.rootNode.hasError).toBe(false);
                 const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
                 let before: string = operand;
-                for (const replacement of ['.T', '', '/* operand */', operand]) {
+                for (const replacement of ['.T', '=', '=>', '()', '(/* operand */)', '', '/* operand */', operand]) {
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   const previous = tree;
