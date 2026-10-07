@@ -1664,7 +1664,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (expression_annotation) {
                 stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
                 stack[size - 1] |= TYPE_EXPRESSION_TYPE;
-                if ((frame & TYPE_GROUP_ROLE_MASK) == ')') stack[size - 1] = FUNCTION_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_TYPE;
+                if ((frame & TYPE_GROUP_ROLE_MASK) == ')' && !(context & TYPE_EXPRESSION_METHOD_BODY)) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_TYPE;
             }
             advance(lexer);
             if (c == '=' && lexer->lookahead != '>') stack[size - 1] &= ~TYPE_EXPRESSION_TYPE;
