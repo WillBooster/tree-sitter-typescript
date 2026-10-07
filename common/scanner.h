@@ -1373,10 +1373,14 @@ enum TypeGroupEnd {
     PROPERTY_NAME_GROUP = 7 << 8,
     TYPE_SUBSTITUTION_GROUP_END = '}' | (8 << 8),
     TYPE_OPERAND_GROUP_END = ')' | (9 << 8),
+    TYPE_GROUP_ROLE_MASK = 0xffff,
     TYPE_EXPRESSION_GROUP = 1 << 16,
     TYPE_EXPRESSION_OPERAND = 1 << 17,
     TYPE_EXPRESSION_PROPERTY = 1 << 18,
     TYPE_EXPRESSION_EMPTY_GROUP = 1 << 19,
+    TYPE_EXPRESSION_BODY = 1 << 20,
+    TYPE_EXPRESSION_FUNCTION = 1 << 21,
+    TYPE_EXPRESSION_METHOD_BODY = 1 << 22,
 };
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
@@ -1541,7 +1545,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (((check_type_operands && (operand_pending || (first_operand && frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position))) || (check_expression_operands && (frame & TYPE_EXPRESSION_OPERAND))) && c == '\\') {
                 if (!scan_type_identifier_operand(lexer)) break;
-                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY | TYPE_EXPRESSION_EMPTY_GROUP);
+                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
                 operand_pending = false;
                 first_operand = false;
                 query_operand = false;
@@ -1583,8 +1587,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 bool expression_prefix = !(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word &&
-                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0);
-                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY | TYPE_EXPRESSION_EMPTY_GROUP);
+                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "void") == 0 || strcmp(word, "delete") == 0);
+                bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
+                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
+                if (!member_name) stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
+                if (!(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word && strcmp(word, "function") == 0) stack[size - 1] |= TYPE_EXPRESSION_FUNCTION;
                 if (expression_prefix) stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
                 first_operand = expression_prefix;
                 operand_pending = false;
@@ -1644,7 +1651,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
             if (c == end) {
                 bool expression_arrow = check_expression_operands && expression_operand && (frame & TYPE_EXPRESSION_EMPTY_GROUP) && end == ')';
-                if (check_expression_operands && expression_operand && !expression_arrow) break;
+                if (check_expression_operands && ((expression_operand && !expression_arrow) || (frame & TYPE_EXPRESSION_METHOD_BODY))) break;
                 if (check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && first_operand) break;
                 if (check_type_operands && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END)) {
                     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '(') break;
@@ -1692,14 +1699,20 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 query_operand = false;
                 if (arrow_header) parameter_position = false;
                 if (--size == 0) { result = true; break; }
-                if (expression_arrow) stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
+                if (expression_arrow) stack[size - 1] |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_BODY;
+                if (check_expression_operands && (frame & TYPE_GROUP_ROLE_MASK) == METHOD_PARAMETER_GROUP_END) stack[size - 1] |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_METHOD_BODY;
                 continue;
             }
             if (c == '\'' || c == '"' || c == '`') {
                 push = c | (check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? PROPERTY_NAME_GROUP : 0);
                 if (c == '`' && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position) push |= TYPE_EXPRESSION_GROUP;
             }
-            else if (c == '=') { if (lexer->lookahead == '>') advance(lexer); }
+            else if (c == '=') {
+                if (lexer->lookahead == '>') {
+                    advance(lexer);
+                    if (check_expression_operands || computed_expression) stack[size - 1] |= TYPE_EXPRESSION_BODY;
+                }
+            }
             else if (c == '<') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_TYPE_PARAMETER_GROUP_END : check_type_operands && first_operand ? TYPE_PARAMETER_GROUP_END : '>';
             else if (c == '(') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || first_operand) ? TYPE_OPERAND_GROUP_END : ')';
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
@@ -1708,17 +1721,28 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (computed_expression && !is_whitespace(c) && !(c == ':' && !first_operand)) stack[size - 1] |= TYPE_EXPRESSION_GROUP;
             if (push && computed_expression) push |= TYPE_EXPRESSION_GROUP;
             if ((computed_expression || check_expression_operands) && !is_whitespace(c)) {
+                bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
+                bool method_body = c == '{' && (frame & TYPE_EXPRESSION_METHOD_BODY) && !first_operand;
+                if (c == '{' && !(frame & TYPE_EXPRESSION_BODY) && !method_body) push = OBJECT_PROPERTY_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_PROPERTY;
+                if (method_body) stack[size - 1] &= ~TYPE_EXPRESSION_METHOD_BODY;
+                if (c == '(' && (member_name || (frame & TYPE_EXPRESSION_FUNCTION))) {
+                    push = METHOD_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP;
+                    stack[size - 1] &= ~TYPE_EXPRESSION_FUNCTION;
+                }
+                if (c == ',' && (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END) stack[size - 1] |= TYPE_EXPRESSION_PROPERTY;
+                if (push) stack[size - 1] &= ~TYPE_EXPRESSION_BODY;
                 stack[size - 1] &= ~TYPE_EXPRESSION_EMPTY_GROUP;
                 if (expression_postfix && lexer->lookahead == c) advance(lexer);
-                if (!expression_postfix && (c == '+' || c == '-' || c == '*' || c == '%' || c == '^' || c == '|' || c == '&' || c == '=' || c == '>' || c == '?' || c == '~' || (c == '!' && lexer->lookahead == '=') || (c == ':' && (end != '}' || (frame & ~(TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY | TYPE_EXPRESSION_EMPTY_GROUP)) == TYPE_SUBSTITUTION_GROUP_END)) || (c == ',' && end == ']' && (frame & ~TYPE_EXPRESSION_GROUP) == COMPUTED_PROPERTY_GROUP_END))) {
+                if (!expression_postfix && (c == '+' || c == '-' || (c == '*' && !member_name && !(frame & TYPE_EXPRESSION_FUNCTION)) || c == '%' || c == '^' || c == '|' || c == '&' || c == '=' || c == '>' || c == '?' || c == '~' || (c == '!' && lexer->lookahead == '=') || (c == ':' && (end != '}' || (frame & TYPE_GROUP_ROLE_MASK) == TYPE_SUBSTITUTION_GROUP_END || (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END)) || (c == ',' && end == ']' && (frame & TYPE_GROUP_ROLE_MASK) == COMPUTED_PROPERTY_GROUP_END))) {
                     stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
                     stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
                 } else if (c == '.') {
                     stack[size - 1] |= TYPE_EXPRESSION_PROPERTY;
                     if (is_ascii_digit(lexer->lookahead)) stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
                 } else if (push) {
-                    stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY);
-                    if (c == '(' && ((expression_operand && !(frame & TYPE_EXPRESSION_PROPERTY)) || (computed_expression && first_operand))) push |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP;
+                    stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
+                    if (!member_name || c != '[') stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
+                    if (c == '(' && (push & TYPE_GROUP_ROLE_MASK) != METHOD_PARAMETER_GROUP_END && ((expression_operand && !(frame & TYPE_EXPRESSION_PROPERTY)) || (computed_expression && first_operand))) push |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP;
                 }
             }
             if (!is_whitespace(c)) {
