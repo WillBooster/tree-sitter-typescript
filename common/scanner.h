@@ -1587,7 +1587,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 bool expression_prefix = !(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word &&
-                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "void") == 0 || strcmp(word, "delete") == 0);
+                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || (strcmp(word, "void") == 0 && !(frame & TYPE_EXPRESSION_METHOD_BODY)) || strcmp(word, "delete") == 0);
                 bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
                 stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
                 if (!member_name) stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
