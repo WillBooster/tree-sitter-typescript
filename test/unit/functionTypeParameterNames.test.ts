@@ -708,6 +708,95 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
+    'keeps %s binding ownership through computed parameter-type renames',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const type of [
+            '{[value | {m(a:K){}}]:number}',
+            '{[value | function(a:K){}]:number}',
+            '{[value | ((a:K)=>1)]:number}',
+            '{[value | {x:{m(a:K){}}}]:number}',
+            '{[value | {set x(v:K){}}]:number}',
+            '{[value | {m(a:K,b:T){}}]:number}',
+            '{[value | function(a:{p:K}){}]:number}',
+            '{[value | ((a:K[])=>1)]:number}',
+            '{[value | function({a=1}:K){}]:number}',
+            '{[value | (({a=1}:K)=>1)]:number}',
+            '{[value | {m({a=1}:K){}}]:number}',
+            '{[value | function(a:{p:K},b:(x:T)=>T){}]:number}',
+            '{[value | ((a:K=flag?void other:delete obj.x)=>a)]:number}',
+          ]) {
+            let source = `type F=(${name}${optional}:${type})=>number;`;
+            let tree: Tree | undefined;
+            try {
+              tree = parser.parse(source)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              const start = source.indexOf('K');
+              let before = 'K';
+              for (const replacement of ['void', 'delete', 'K']) {
+                const end = start + before.length;
+                const next = source.slice(0, start) + replacement + source.slice(end);
+                const previous = tree;
+                tree = compareEditedTree(
+                  parser,
+                  previous,
+                  next,
+                  new Edit({
+                    startIndex: start,
+                    oldEndIndex: end,
+                    newEndIndex: start + replacement.length,
+                    startPosition: position(source, start),
+                    oldEndPosition: position(source, end),
+                    newEndPosition: position(next, start + replacement.length),
+                  }),
+                  (incremental, fresh) => {
+                    for (const current of [incremental, fresh]) {
+                      expect(current.rootNode.hasError).toBe(false);
+                      expect(
+                        aliasQuery
+                          .captures(current.rootNode)
+                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                      ).toEqual([
+                        ['name', 'type_identifier', 'F', 5, 6],
+                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                      ]);
+                      expect(
+                        namesQuery
+                          .captures(current.rootNode)
+                          .filter(({ node }) => node.text === name)
+                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                      ).toEqual([[name, 8, 8 + name.length]]);
+                    }
+                  },
+                  true
+                );
+                previous.delete();
+                source = next;
+                before = replacement;
+              }
+            } finally {
+              tree?.delete();
+            }
+          }
+        }
+      } finally {
+        aliasQuery.delete();
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
     'keeps %s binding ownership through contextual mapped operand renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
