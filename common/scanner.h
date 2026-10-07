@@ -1660,7 +1660,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&')) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
             bool expression_annotation = check_expression_operands && c == ':' &&
-                ((end == ')' && (parameter_position || first_operand || (context & TYPE_EXPRESSION_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
+                ((end == ')' && (first_operand || (context & TYPE_EXPRESSION_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
             if (expression_annotation) {
                 stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
                 stack[size - 1] |= TYPE_EXPRESSION_TYPE;
