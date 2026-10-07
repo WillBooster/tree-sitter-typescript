@@ -97,6 +97,70 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
+    'requires the ordinary generic header continuation before accepting %s as an outer binding',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const header of ['<U>', '<U,V>', '<U extends T>']) {
+            for (const template of ['TYPE', '{member:TYPE}', 'A<TYPE>']) {
+              let source = `type F=(${name}${optional}:${template.replace('TYPE', header + '(x:U)=>U')})=>number;`;
+              let tree: Tree | undefined;
+              let before = '(x:U)=>U';
+              try {
+                tree = parser.parse(source)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                for (const replacement of ['', '(x:U)', '(x:U)/* arrow */', '(x:U)=>U']) {
+                  const start = source.indexOf(header) + header.length,
+                    end = start + before.length;
+                  const next = source.slice(0, start) + replacement + source.slice(end);
+                  const previous = tree;
+                  tree = compareEditedTree(
+                    parser,
+                    previous,
+                    next,
+                    new Edit({
+                      startIndex: start,
+                      oldEndIndex: end,
+                      newEndIndex: start + replacement.length,
+                      startPosition: position(source, start),
+                      oldEndPosition: position(source, end),
+                      newEndPosition: position(next, start + replacement.length),
+                    }),
+                    (incremental, fresh) => {
+                      for (const current of [incremental, fresh]) {
+                        expect(current.rootNode.hasError).toBe(replacement !== '(x:U)=>U');
+                        expect(
+                          namesQuery
+                            .captures(current.rootNode)
+                            .filter(({ node }) => node.text === name)
+                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                        ).toEqual(replacement === '(x:U)=>U' ? [[name, 8, 8 + name.length]] : []);
+                      }
+                    },
+                    true
+                  );
+                  previous.delete();
+                  source = next;
+                  before = replacement;
+                }
+              } finally {
+                tree?.delete();
+              }
+            }
+          }
+        }
+      } finally {
+        namesQuery.delete();
+        parser.delete();
+      }
+    }
+  );
+  test.each(['unknown', 'never', 'unique'])(
     'keeps %s binding ownership through contextual method and property renames',
     (name) => {
       const parser = new Parser().setLanguage(language);

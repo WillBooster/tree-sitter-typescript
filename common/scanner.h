@@ -1646,7 +1646,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool expression_arrow = check_expression_operands && expression_operand && (frame & TYPE_EXPRESSION_EMPTY_GROUP) && end == ')';
                 if (check_expression_operands && expression_operand && !expression_arrow) break;
                 if (check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && first_operand) break;
-                if (check_type_operands && operand_pending && parameter_position && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END)) {
+                if (check_type_operands && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END)) {
                     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '(') break;
                     advance(lexer);
                     stack[size - 1] = frame == METHOD_TYPE_PARAMETER_GROUP_END ? METHOD_PARAMETER_GROUP_END : FUNCTION_PARAMETER_GROUP_END;
