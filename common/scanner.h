@@ -1572,7 +1572,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
                 member_line_break = true;
             }
-            if (check_type_operands && operand_pending && (c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
+            if (check_type_operands && operand_pending && (c == '.' || c == '|' || c == '&' || (!parameter_position && (c == ':' || c == '?' || c == ',' || c == ';')))) break;
             advance(lexer);
             if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
             if (c == end) {
@@ -1656,6 +1656,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
                 } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
                     switch (lexer->lookahead) {
+                        case '.':
                         case ')':
                         case ']':
                         case '}':

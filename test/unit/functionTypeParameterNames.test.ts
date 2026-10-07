@@ -608,14 +608,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree = parser.parse(source)!;
                 expect(tree.rootNode.hasError).toBe(false);
                 const start = source.indexOf(`${operator} ${operand}`) + operator.length + 1;
-                for (const replacement of ['', '/* operand */', operand]) {
-                  const end =
-                    start +
-                    (source.slice(start).startsWith(operand)
-                      ? operand.length
-                      : source.slice(start).startsWith('/* operand */')
-                        ? 13
-                        : 0);
+                let before: string = operand;
+                for (const replacement of ['.T', '', '/* operand */', operand]) {
+                  const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   const previous = tree;
                   tree = compareEditedTree(
@@ -646,6 +641,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   );
                   previous.delete();
                   source = next;
+                  before = replacement;
                 }
               } finally {
                 tree?.delete();
