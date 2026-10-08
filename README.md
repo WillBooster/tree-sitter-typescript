@@ -78,7 +78,7 @@ fuzzed with. The compact ABI 16 parser requires runtime 1.3.0 or later:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "1.3.0" }
-tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "4" }
+tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "6" }
 ```
 
 ```rust
