@@ -2508,7 +2508,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] ||
-         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n' || lexer->lookahead == 'i' || lexer->lookahead == 'r'))) && !valid_symbols[ERROR_RECOVERY]) {
+         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
         if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
             lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
