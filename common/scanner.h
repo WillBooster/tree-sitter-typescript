@@ -1395,6 +1395,8 @@ typedef struct {
     bool infer_name;
     bool infer_constraint;
     bool property;
+    bool operand_required;
+    bool exact_object;
     bool binding_type;
     bool default_value;
     bool default_parameter;
@@ -1562,7 +1564,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     bool result = false;
     bool slot_named = true, slot_annotation = false;
     bool first_operand = close != UNTYPED_PARAMETER_GROUP_END, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
-    if (type_operands && close == '}' && lexer->lookahead == '|') advance(lexer);
+    if (type_operands && close == '}' && lexer->lookahead == '|') {
+        stack[0].exact_object = true;
+        advance(lexer);
+    }
     while (!lexer->eof(lexer)) {
         TypeGroupFrame *group = &stack[size - 1];
         int32_t c = lexer->lookahead, context = group->context;
@@ -1577,6 +1582,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
+        bool exact_object = false;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && slot_named && !slot_annotation &&
             (is_identifier_part(c) || c == '\\')) break;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
@@ -1639,6 +1645,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 first_operand = false;
                 query_operand = false;
                 if (complete_conditionals && check_type_operands && !group->default_value) {
+                    group->operand_required = false;
                     group->infer_constraint = group->infer_name;
                     group->infer_name = false;
                     group->property = false;
@@ -1676,6 +1683,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool extends_operand = !computed_key && ascii_word && strcmp(word, "extends") == 0 &&
                     (!complete_conditionals || (!first_operand && !operand_pending && !group->property));
                 if (complete_conditionals && !group->default_value) {
+                    group->operand_required = prefix || extends_operand || mapped_operand ||
+                        (!computed_key && !group->property && first_operand && ascii_word &&
+                         (strcmp(word, "new") == 0 || strcmp(word, "import") == 0));
                     bool constraint_position = parameter_position && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END);
                     if (extends_operand && !constraint_position && !group->infer_constraint) group->question_pending = true;
                     group->infer_constraint = group->infer_name;
@@ -1719,6 +1729,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 member_line_break = true;
             }
             bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
+            bool pending_parameter = c == end && end == ')' && parameter_position &&
+                (frame == TYPE_OPERAND_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
+            if (complete_conditionals && check_type_operands && !computed_expression && !group->default_value &&
+                (c == end || c == ',' || c == ';') && group->operand_required && !pending_parameter) break;
             if (complete_conditionals && check_type_operands && !group->default_value && !is_whitespace(c)) {
                 group->infer_name = false;
                 group->infer_constraint = false;
@@ -1754,7 +1768,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->default_value = false;
                 group->default_parameter = false;
             }
-            bool consumed_operator = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && c == '|';
+            bool consumed_operator = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && (!complete_conditionals || group->exact_object) && c == '|';
             if (consumed_operator) {
                 advance(lexer);
                 if (lexer->lookahead == '}') {
@@ -1803,12 +1817,18 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 stack[size - 1].context &= ~TYPE_EXPRESSION_OPERAND;
                 stack[size - 1].context |= TYPE_EXPRESSION_TYPE;
             }
+            if (complete_conditionals && check_type_operands && !computed_expression && !group->default_value &&
+                (frame != OBJECT_PROPERTY_GROUP_END || group->binding_type) && (c == '|' || c == '&' || c == '.')) {
+                group->operand_required = true;
+            }
             if (!consumed_operator) advance(lexer);
             if (!group->default_value && lexer->lookahead != '>' &&
                 (parameter_default || (check_type_operands && c == '=' &&
                  (frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)))) {
-                if (complete_conditionals && (group->question_pending || group->conditional_depth ||
+                if (complete_conditionals && ((group->operand_required && !parameter_default) ||
+                    group->question_pending || group->conditional_depth ||
                     (group->conditional_branch && (first_operand || group->property)))) break;
+                group->operand_required = false;
                 group->conditional_branch = false;
                 group->default_value = true;
                 group->default_parameter = true;
@@ -1911,7 +1931,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
             else if (c == '{') {
                 push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
-                if (check_type_operands && !computed_expression && lexer->lookahead == '|') advance(lexer);
+                if (check_type_operands && !computed_expression && lexer->lookahead == '|') {
+                    advance(lexer);
+                    exact_object = true;
+                }
             }
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
             if (computed_expression && !is_whitespace(c) && !(c == ':' && !first_operand)) stack[size - 1].context |= TYPE_EXPRESSION_GROUP;
@@ -1957,6 +1980,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
         }
         if (push) {
+            group->operand_required = false;
             if (size == capacity) {
                 capacity *= 2;
                 TypeGroupFrame *grown = ts_realloc(stack, capacity * sizeof(TypeGroupFrame));
@@ -1965,7 +1989,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if ((push & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !(push & TYPE_EXPRESSION_GROUP)) push |= TYPE_GROUP_PARAMETER;
             bool default_value = stack[size - 1].default_value;
-            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value};
+            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object};
         }
     }
     ts_free(stack);
