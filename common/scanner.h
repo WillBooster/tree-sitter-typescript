@@ -53,6 +53,8 @@ enum TokenType {
     NAMESPACE_EXPRESSION_END,
     ABSTRACT_CONSTRUCTOR_PREFIX,
     JSX_CLOSING_RECOVERY_IDENTIFIER,
+    PREDEFINED_PARAMETER_NAME,
+    PREDEFINED_ANNOTATED_NAME,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -67,7 +69,7 @@ typedef struct {
 } Scanner;
 
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
-static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks);
+static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
@@ -1359,6 +1361,32 @@ static bool scan_await_keyword(TSLexer *lexer) {
 }
 
 static bool scan_generic_function_type(TSLexer *lexer);
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression);
+enum TypeGroupEnd {
+    TYPE_GROUP_END_MASK = 0xff,
+    TYPE_PARAMETER_GROUP_END = '>' | (1 << 8),
+    FUNCTION_PARAMETER_GROUP_END = ')' | (2 << 8),
+    METHOD_TYPE_PARAMETER_GROUP_END = '>' | (3 << 8),
+    METHOD_PARAMETER_GROUP_END = ')' | (4 << 8),
+    OBJECT_PROPERTY_GROUP_END = '}' | (5 << 8),
+    COMPUTED_PROPERTY_GROUP_END = ']' | (6 << 8),
+    PROPERTY_NAME_GROUP = 7 << 8,
+    TYPE_SUBSTITUTION_GROUP_END = '}' | (8 << 8),
+    TYPE_OPERAND_GROUP_END = ')' | (9 << 8),
+    TYPE_GROUP_ROLE_MASK = 0xffff,
+    TYPE_EXPRESSION_GROUP = 1 << 16,
+    TYPE_EXPRESSION_OPERAND = 1 << 17,
+    TYPE_EXPRESSION_PROPERTY = 1 << 18,
+    TYPE_EXPRESSION_EMPTY_GROUP = 1 << 19,
+    TYPE_EXPRESSION_BODY = 1 << 20,
+    TYPE_EXPRESSION_FUNCTION = 1 << 21,
+    TYPE_EXPRESSION_METHOD_BODY = 1 << 22,
+    TYPE_EXPRESSION_TYPE = 1 << 23,
+    TYPE_GROUP_PARAMETER = 1 << 24,
+};
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments);
+static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
+static bool scan_type_identifier_operand(TSLexer *lexer);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1366,10 +1394,75 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
     bool comment = false;
-    if (lexer->lookahead == '#') advance(lexer);
+    bool private_name = lexer->lookahead == '#';
+    if (private_name) advance(lexer);
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+    if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !private_name && ascii_word &&
+        (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0)) {
+        lexer->mark_end(lexer);
+        if (!scan_default_trivia(lexer, true, true)) return false;
+        bool optional_parameter = lexer->lookahead == '?';
+        if (optional_parameter) {
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, true)) return false;
+        }
+        if (lexer->lookahead != ':') return false;
+        if (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, false)) return false;
+            while (lexer->lookahead == '?') {
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) return false;
+            }
+            if (lexer->eof(lexer)) return false;
+            switch (lexer->lookahead) {
+                case ')':
+                case ']':
+                case '}':
+                case ',':
+                case ';':
+                case '=':
+                case ':':
+                case '>':
+                    return false;
+                default:
+                    break;
+            }
+            if (!scan_annotated_type_colons(lexer, false)) return false;
+        }
+        if (!optional_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+            lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
+        } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
+            lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+        } else {
+            return false;
+        }
+        if (!scan_type_group(lexer, ')', false, true) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+        advance(lexer);
+        if (lexer->lookahead != '>') return false;
+        advance(lexer);
+        if (optional_parameter) {
+            if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+            switch (lexer->lookahead) {
+                case ')':
+                case ']':
+                case '}':
+                case ',':
+                case ';':
+                case ':':
+                case '=':
+                case '>':
+                    return false;
+                default:
+                    break;
+            }
+        }
+        if (!scan_annotated_type_colons(lexer, true)) return false;
+        return true;
+    }
+    if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
     if (unqualified && ascii_word) {
         static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
@@ -1405,46 +1498,318 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     return true;
 }
 
-static bool scan_type_group(TSLexer *lexer, int32_t close);
-
 static bool scan_generic_function_type(TSLexer *lexer) {
     bool comment = false;
     advance(lexer);
-    if (!scan_type_group(lexer, '>') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
+    if (!scan_type_group(lexer, '>', false, false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
     advance(lexer);
-    if (!scan_type_group(lexer, ')') || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
+    if (!scan_type_group(lexer, ')', false, false) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
     advance(lexer);
     return lexer->lookahead == '>';
 }
 
-static bool scan_type_group(TSLexer *lexer, int32_t close) {
+static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments) {
     unsigned size = 1, capacity = 32;
     int32_t *stack = ts_malloc(capacity * sizeof(int32_t));
     if (!stack) return false;
-    stack[0] = close;
+    stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && close == ')' ? TYPE_OPERAND_GROUP_END | TYPE_GROUP_PARAMETER : close;
     bool result = false;
+    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
+    if (type_operands && close == '}' && lexer->lookahead == '|') advance(lexer);
     while (!lexer->eof(lexer)) {
-        int32_t c = lexer->lookahead, end = stack[size - 1], push = 0;
+        int32_t c = lexer->lookahead, context = stack[size - 1];
+        if (context & TYPE_EXPRESSION_TYPE) {
+            if ((context & TYPE_EXPRESSION_METHOD_BODY) && !first_operand && c == '{') {
+                stack[size - 1] &= ~(TYPE_EXPRESSION_TYPE | TYPE_EXPRESSION_METHOD_BODY);
+                stack[size - 1] |= TYPE_EXPRESSION_BODY;
+            } else if (((context & TYPE_GROUP_ROLE_MASK) == METHOD_PARAMETER_GROUP_END || (context & TYPE_GROUP_ROLE_MASK) == FUNCTION_PARAMETER_GROUP_END) && c == ',') {
+                stack[size - 1] &= ~TYPE_EXPRESSION_TYPE;
+            }
+            context = stack[size - 1];
+        }
+        int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
+        int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
+        bool check_type_operands = type_operands && !(frame & TYPE_EXPRESSION_GROUP);
+        bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
         if (end == '\'' || end == '"' || end == '`') {
             advance(lexer);
-            if (c == end) { size--; continue; }
+            if (c == end) {
+                size--;
+                if ((frame & ~TYPE_GROUP_END_MASK) == PROPERTY_NAME_GROUP) parameter_position = true;
+                continue;
+            }
             if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
-            else if (end == '`' && c == '$' && lexer->lookahead == '{') { advance(lexer); push = '}'; }
+            else if (end == '`' && c == '$' && lexer->lookahead == '{') {
+                advance(lexer);
+                push = check_type_operands || check_expression_operands ? TYPE_SUBSTITUTION_GROUP_END : '}';
+                if (check_type_operands) {
+                    first_operand = true;
+                    operand_pending = false;
+                    query_operand = false;
+                    parameter_position = false;
+                }
+            }
         } else {
+            if (member_line_break && !is_whitespace(c) && c != '/') {
+                if (is_identifier_part(c) || c == '\'' || c == '"' || c == '<' || c == '(' || c == '[') {
+                    first_operand = true;
+                    parameter_position = true;
+                }
+                member_line_break = false;
+            }
+            if (((check_type_operands && (operand_pending || (first_operand && frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position))) || (check_expression_operands && (frame & TYPE_EXPRESSION_OPERAND))) && c == '\\') {
+                if (!scan_type_identifier_operand(lexer)) break;
+                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_PROPERTY | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
+                operand_pending = false;
+                first_operand = false;
+                query_operand = false;
+                continue;
+            }
+            if (check_type_operands && is_identifier_part(c)) {
+                char word[16] = {0};
+                bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+                if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
+                if (frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && operand_pending && ascii_word && strcmp(word, "as") == 0) {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (is_identifier_part(lexer->lookahead)) {
+                        char next[16] = {0};
+                        if (!scan_identifier(lexer, next, sizeof(next), false) || (strcmp(next, "extends") != 0 && strcmp(next, "as") != 0)) break;
+                        operand_pending = false;
+                        query_operand = false;
+                        first_operand = true;
+                        continue;
+                    }
+                    if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
+                }
+                bool computed_key = frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
+                if (computed_key && !first_operand && !(ascii_word && strcmp(word, "in") == 0)) {
+                    stack[size - 1] |= TYPE_EXPRESSION_GROUP;
+                    if (ascii_word && strcmp(word, "instanceof") == 0) stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
+                }
+                bool mapped_operand = frame == COMPUTED_PROPERTY_GROUP_END && ascii_word &&
+                    ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
+                     (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
+                bool prefix = !computed_key && first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
+                operand_pending = prefix;
+                query_operand = prefix && strcmp(word, "typeof") == 0;
+                bool extends_operand = !computed_key && ascii_word && strcmp(word, "extends") == 0;
+                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
+                if (extends_operand || mapped_operand) {
+                    parameter_position = false;
+                    if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+                }
+                continue;
+            }
+            if (check_expression_operands && is_identifier_part(c)) {
+                char word[16] = {0};
+                bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+                bool expression_prefix = !(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word &&
+                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "void") == 0 || strcmp(word, "delete") == 0);
+                bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
+                stack[size - 1] &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
+                if (!member_name) stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
+                if (!(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word && strcmp(word, "function") == 0) stack[size - 1] |= TYPE_EXPRESSION_FUNCTION;
+                if (expression_prefix) stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
+                first_operand = expression_prefix;
+                operand_pending = false;
+                query_operand = false;
+                continue;
+            }
             if (c == '/') {
                 bool comment = false;
-                if (skip_comment(lexer, &comment, false) == NO_COMMENT) break;
+                CommentResult comment_result = skip_comment(lexer, &comment, false);
+                if (comment_result == NO_COMMENT) break;
+                if (comment_result == COMMENT_WITH_LINE_TERMINATOR && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
+                    member_line_break = true;
+                }
                 continue;
             }
-            advance(lexer);
+            if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
+                member_line_break = true;
+            }
+            bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
+            bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
+            bool expression_operand = (frame & TYPE_EXPRESSION_OPERAND) != 0;
+            bool parameter_default = parameter_position && end == ')' && c == '=';
+            bool consumed_operator = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && c == '|';
+            if (consumed_operator) {
+                advance(lexer);
+                if (lexer->lookahead == '}') {
+                    c = '}';
+                    consumed_operator = false;
+                }
+            }
+            if (check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && first_operand && !parameter_position && (c == '}' || c == ',' || c == ';')) break;
+            if (check_type_operands && operand_pending && (c == '.' || c == '-' || c == '+') && !(parameter_position && frame == COMPUTED_PROPERTY_GROUP_END)) {
+                if (query_operand || !first_operand) break;
+                advance(lexer);
+                if (c != '.') {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (lexer->lookahead == '.') advance(lexer);
+                }
+                if (!is_ascii_digit(lexer->lookahead)) break;
+                operand_pending = false;
+                first_operand = false;
+                parameter_position = false;
+                continue;
+            }
+            if (check_type_operands && operand_pending && !binding_frame && (c == ':' || c == '?' || c == ',' || c == ';')) {
+                if (!parameter_position || (frame == TYPE_OPERAND_GROUP_END && !(context & TYPE_GROUP_PARAMETER)) || (end != ')' && end != ']') || (c != ':' && c != '?')) break;
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) break;
+                if (c == '?') {
+                    if (lexer->lookahead != ':') break;
+                    advance(lexer);
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                }
+                int32_t operand = lexer->lookahead;
+                if (lexer->eof(lexer) || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>') break;
+                if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
+                first_operand = true;
+                operand_pending = false;
+                query_operand = false;
+                parameter_position = false;
+                continue;
+            }
+            if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&')) break;
+            if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
+            if (check_type_operands && (context & TYPE_GROUP_PARAMETER) && c == ':' && frame == TYPE_OPERAND_GROUP_END) stack[size - 1] = FUNCTION_PARAMETER_GROUP_END;
+            bool expression_annotation = check_expression_operands && c == ':' &&
+                ((end == ')' && (first_operand || (context & TYPE_GROUP_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
+            if (expression_annotation) {
+                stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
+                stack[size - 1] |= TYPE_EXPRESSION_TYPE;
+            }
+            if (!consumed_operator) advance(lexer);
+            if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && (c == '|' || c == '&' || c == '=' || c == '<' || (c == '[' && !first_operand))) stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+            if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && parameter_position && first_operand && c == '.' && lexer->lookahead == '.') {
+                advance(lexer);
+                if (lexer->lookahead != '.') break;
+                advance(lexer);
+                continue;
+            }
+            if (c == '=' && lexer->lookahead != '>') stack[size - 1] &= ~TYPE_EXPRESSION_TYPE;
+            if (check_expression_operands && end == ')') {
+                if (c == '=' || c == '?' || c == ':') stack[size - 1] &= ~TYPE_GROUP_PARAMETER;
+                else if (c == ',') stack[size - 1] |= TYPE_GROUP_PARAMETER;
+            }
+            bool expression_postfix = (computed_expression || check_expression_operands) && (c == '+' || c == '-') && lexer->lookahead == c && !expression_operand && !first_operand;
+            if (html_comments && (c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) break;
             if (c == end) {
+                bool expression_arrow = (context & TYPE_EXPRESSION_GROUP) && ((frame & TYPE_GROUP_ROLE_MASK) == FUNCTION_PARAMETER_GROUP_END || (check_expression_operands && expression_operand && (frame & TYPE_EXPRESSION_EMPTY_GROUP) && end == ')'));
+                if ((context & TYPE_EXPRESSION_METHOD_BODY) || (check_expression_operands && expression_operand && !expression_arrow)) break;
+                if (check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && first_operand) break;
+                if (check_type_operands && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END)) {
+                    if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '(') break;
+                    advance(lexer);
+                    stack[size - 1] = frame == METHOD_TYPE_PARAMETER_GROUP_END ? METHOD_PARAMETER_GROUP_END : FUNCTION_PARAMETER_GROUP_END;
+                    operand_pending = false;
+                    first_operand = true;
+                    query_operand = false;
+                    parameter_position = true;
+                    continue;
+                }
+                if (check_type_operands && operand_pending && parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)) operand_pending = false;
+                if (frame == METHOD_PARAMETER_GROUP_END && operand_pending) break;
+                if (expression_arrow && end == ')') {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (lexer->lookahead == ':') expression_arrow = false;
+                }
+                bool return_identifier = false;
+                bool arrow_header = expression_arrow || frame == FUNCTION_PARAMETER_GROUP_END || (check_type_operands && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)));
+                if (arrow_header) {
+                    if (end != ')' || (operand_pending && !parameter_position)) break;
+                    if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') break;
+                    advance(lexer);
+                    if (lexer->lookahead != '>') break;
+                    advance(lexer);
+                    bool return_operand = scan_default_trivia(lexer, true, false);
+                    while (!expression_arrow && return_operand && (lexer->lookahead == '|' || lexer->lookahead == '&')) {
+                        advance(lexer);
+                        return_operand = scan_default_trivia(lexer, true, false);
+                    }
+                    if (!return_operand || lexer->eof(lexer)) break;
+                    int32_t operand = lexer->lookahead;
+                    if (expression_arrow) {
+                        if (operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>' || operand == '|' || operand == '&' || operand == '?') break;
+                    } else if (operand == '\\') {
+                        if (!scan_type_identifier_operand(lexer)) break;
+                        return_identifier = true;
+                    } else if (operand == '.' || operand == '-' || operand == '+') {
+                        advance(lexer);
+                        if (operand != '.') {
+                            if (!scan_default_trivia(lexer, true, false)) break;
+                            if (lexer->lookahead == '.') advance(lexer);
+                        }
+                        if (!is_ascii_digit(lexer->lookahead)) break;
+                    } else if (operand == '%' || operand == '^' || operand == '!' || operand == '~' || operand == '@' || operand == '#' || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>' || operand == '|' || operand == '&' || operand == '?') break;
+                }
+                operand_pending = arrow_header && !return_identifier;
+                first_operand = operand_pending;
+                query_operand = false;
+                if (arrow_header) parameter_position = false;
                 if (--size == 0) { result = true; break; }
+                if (expression_arrow) stack[size - 1] |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_BODY;
+                if ((context & TYPE_EXPRESSION_GROUP) && (frame & TYPE_GROUP_ROLE_MASK) == METHOD_PARAMETER_GROUP_END) stack[size - 1] |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_METHOD_BODY;
                 continue;
             }
-            if (c == '\'' || c == '"' || c == '`') push = c;
-            else if (c == '=') { if (lexer->lookahead == '>') advance(lexer); }
-            else if (c == '<' || c == '(' || c == '[' || c == '{') push = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
+            if (c == '\'' || c == '"' || c == '`') {
+                push = c | (check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? PROPERTY_NAME_GROUP : 0);
+                if (c == '`' && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position) push |= TYPE_EXPRESSION_GROUP;
+            }
+            else if (c == '=') {
+                if (lexer->lookahead == '>') {
+                    advance(lexer);
+                    if (context & TYPE_EXPRESSION_TYPE) {
+                        stack[size - 1] &= ~TYPE_EXPRESSION_TYPE;
+                        stack[size - 1] |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_BODY;
+                    }
+                    if (check_expression_operands || computed_expression) stack[size - 1] |= TYPE_EXPRESSION_BODY;
+                }
+            }
+            else if (c == '<') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_TYPE_PARAMETER_GROUP_END : check_type_operands && first_operand ? TYPE_PARAMETER_GROUP_END : '>';
+            else if (c == '(') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || first_operand) ? TYPE_OPERAND_GROUP_END : ')';
+            else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
+            else if (c == '{') {
+                push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
+                if (check_type_operands && !computed_expression && lexer->lookahead == '|') advance(lexer);
+            }
             else if (c == ')' || c == ']' || c == '}' || (c == ';' && end == '>')) break;
+            if (computed_expression && !is_whitespace(c) && !(c == ':' && !first_operand)) stack[size - 1] |= TYPE_EXPRESSION_GROUP;
+            if (push && computed_expression) push |= TYPE_EXPRESSION_GROUP;
+            if ((computed_expression || check_expression_operands) && !is_whitespace(c)) {
+                bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
+                bool method_body = c == '{' && (frame & TYPE_EXPRESSION_METHOD_BODY) && !first_operand;
+                if (c == '{' && !(frame & TYPE_EXPRESSION_BODY) && !method_body) push = OBJECT_PROPERTY_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_EXPRESSION_PROPERTY;
+                if (method_body) stack[size - 1] &= ~TYPE_EXPRESSION_METHOD_BODY;
+                if (c == '(' && (member_name || (frame & TYPE_EXPRESSION_FUNCTION))) {
+                    push = METHOD_PARAMETER_GROUP_END | TYPE_EXPRESSION_GROUP | TYPE_GROUP_PARAMETER;
+                    stack[size - 1] &= ~TYPE_EXPRESSION_FUNCTION;
+                }
+                if (c == ',' && (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END) stack[size - 1] |= TYPE_EXPRESSION_PROPERTY;
+                if (c == '(') push |= TYPE_GROUP_PARAMETER;
+                if (push) stack[size - 1] &= ~TYPE_EXPRESSION_BODY;
+                stack[size - 1] &= ~TYPE_EXPRESSION_EMPTY_GROUP;
+                if (expression_postfix && lexer->lookahead == c) advance(lexer);
+                if (!expression_postfix && (c == '+' || c == '-' || (c == '*' && !member_name && !(frame & TYPE_EXPRESSION_FUNCTION)) || c == '%' || c == '^' || c == '|' || c == '&' || c == '=' || c == '>' || c == '?' || c == '~' || (c == '!' && lexer->lookahead == '=') || (c == ':' && (end != '}' || (frame & TYPE_GROUP_ROLE_MASK) == TYPE_SUBSTITUTION_GROUP_END || (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END)) || (c == ',' && end == ']' && (frame & TYPE_GROUP_ROLE_MASK) == COMPUTED_PROPERTY_GROUP_END))) {
+                    stack[size - 1] |= TYPE_EXPRESSION_OPERAND;
+                    stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
+                } else if (c == '.') {
+                    stack[size - 1] |= TYPE_EXPRESSION_PROPERTY;
+                    if (is_ascii_digit(lexer->lookahead)) stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
+                } else if (push) {
+                    stack[size - 1] &= ~TYPE_EXPRESSION_OPERAND;
+                    if (!member_name || c != '[') stack[size - 1] &= ~TYPE_EXPRESSION_PROPERTY;
+                    if (c == '(' && (push & TYPE_GROUP_ROLE_MASK) != METHOD_PARAMETER_GROUP_END && ((expression_operand && !(frame & TYPE_EXPRESSION_PROPERTY)) || (computed_expression && first_operand))) push |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP;
+                }
+            }
+            if (!is_whitespace(c)) {
+                bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
+                first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
+                parameter_position = c == '(' || c == '[' || c == '{' || c == ',' || member_separator || push == TYPE_PARAMETER_GROUP_END || push == METHOD_TYPE_PARAMETER_GROUP_END || (c == '?' && (frame == OBJECT_PROPERTY_GROUP_END || frame == TYPE_OPERAND_GROUP_END) && parameter_position);
+                operand_pending = expression_annotation;
+                query_operand = false;
+            }
         }
         if (push) {
             if (size == capacity) {
@@ -1453,11 +1818,142 @@ static bool scan_type_group(TSLexer *lexer, int32_t close) {
                 if (!grown) break;
                 stack = grown;
             }
-            stack[size++] = push;
+            if ((push & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !(push & TYPE_EXPRESSION_GROUP)) push |= TYPE_GROUP_PARAMETER;
+            stack[size++] = push | (frame & TYPE_EXPRESSION_GROUP);
         }
     }
     ts_free(stack);
     return result;
+}
+
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression) {
+    unsigned conditional_depth = 0;
+    bool saw_extends = false;
+    bool first = true;
+    bool query_operand = false;
+    while (!lexer->eof(lexer)) {
+        if (!scan_default_trivia(lexer, true, false)) return true;
+        int32_t c = lexer->lookahead;
+        if (c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return true;
+        if (is_identifier_part(c)) {
+            char word[16] = {0};
+            bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+            if (query_operand) {
+                if (ascii_word && strcmp(word, "typeof") == 0) return false;
+                query_operand = false;
+            } else if (!allow_expression && first && ascii_word) {
+                if (strcmp(word, "unique") == 0) {
+                    if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+                } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
+                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+                    switch (lexer->lookahead) {
+                        case '\\':
+                            if (!scan_type_identifier_operand(lexer)) return false;
+                            query_operand = false;
+                            first = false;
+                            continue;
+                        case '-':
+                        case '+':
+                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
+                            advance(lexer);
+                            if (!scan_default_trivia(lexer, true, false)) return false;
+                            if (lexer->lookahead == '.') advance(lexer);
+                            if (!is_ascii_digit(lexer->lookahead)) return false;
+                            break;
+                        case '.':
+                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
+                            advance(lexer);
+                            if (!is_ascii_digit(lexer->lookahead)) return false;
+                            break;
+                        case '%':
+                        case '^':
+                        case '!':
+                        case '~':
+                        case '@':
+                        case '#':
+                        case ')':
+                        case ']':
+                        case '}':
+                        case ',':
+                        case ';':
+                        case ':':
+                        case '=':
+                        case '>':
+                        case '|':
+                        case '&':
+                        case '?':
+                            return false;
+                        default:
+                            break;
+                    }
+                    query_operand = strcmp(word, "typeof") == 0;
+                    first = !query_operand && strcmp(word, "infer") != 0;
+                    continue;
+                }
+            }
+            bool extends_operand = ascii_word && strcmp(word, "extends") == 0;
+            if (extends_operand) saw_extends = true;
+            first = !allow_expression && (extends_operand || (first && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0)));
+            continue;
+        }
+        bool generic_parameters = !allow_expression && first && c == '<';
+        advance(lexer);
+        if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
+        first = false;
+        if (c == ':') {
+            if (conditional_depth == 0) return false;
+            conditional_depth--;
+            first = !allow_expression;
+        } else if (c == '?' && (saw_extends || allow_expression)) {
+            if (allow_expression && lexer->lookahead == '?') advance(lexer);
+            else if (allow_expression && lexer->lookahead == '.') {
+                advance(lexer);
+                if (is_ascii_digit(lexer->lookahead)) conditional_depth++;
+            } else conditional_depth++;
+            first = !allow_expression;
+        } else if (!allow_expression && (c == '|' || c == '&')) {
+            first = true;
+        } else if (c == '=') {
+            if (lexer->lookahead != '>') return true;
+            advance(lexer);
+            first = !allow_expression;
+        } else if (c == '<' || c == '(' || c == '[' || c == '{') {
+            int32_t close = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
+            if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true)) return allow_expression;
+            first = generic_parameters || (!allow_expression && c == '(');
+        } else if (c == '\'' || c == '"' || c == '`') {
+            while (!lexer->eof(lexer) && lexer->lookahead != c) {
+                int32_t part = lexer->lookahead;
+                advance(lexer);
+                if (part == '\\' && !lexer->eof(lexer)) advance(lexer);
+                else if (c == '`' && part == '$' && lexer->lookahead == '{') {
+                    advance(lexer);
+                    if (!scan_type_group(lexer, allow_expression ? '}' : TYPE_SUBSTITUTION_GROUP_END, !allow_expression, true)) return allow_expression;
+                }
+            }
+            if (!lexer->eof(lexer)) advance(lexer);
+        }
+    }
+    return true;
+}
+
+static bool scan_type_identifier_operand(TSLexer *lexer) {
+    int32_t character = scan_identifier_character(lexer);
+    if (!is_identifier_part(character) || character == '\\' || is_ascii_digit(character)) return false;
+    while (is_identifier_part(lexer->lookahead)) {
+        character = scan_identifier_character(lexer);
+        if (!is_identifier_part(character) || character == '\\') return false;
+    }
+    return true;
+}
+
+static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening) {
+    const char *tail = opening == '<' ? "!--" : "->";
+    for (; *tail; tail++) {
+        if (lexer->lookahead != *tail) return false;
+        advance(lexer);
+    }
+    return true;
 }
 
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
@@ -1631,9 +2127,12 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return ret;
     }
 
-    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) && !valid_symbols[ERROR_RECOVERY]) {
+    if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] ||
+         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
-        if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX) scanner->heritage_type_pending = false;
+        if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
+            lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
+            lexer->result_symbol != PREDEFINED_ANNOTATED_NAME) scanner->heritage_type_pending = false;
         return result;
     }
 
@@ -1671,6 +2170,10 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
     if (valid_symbols[JSX_CLOSING_RECOVERY_IDENTIFIER] && !valid_symbols[ERROR_RECOVERY]) {
         return scan_jsx_closing_recovery_identifier(lexer);
+    }
+    if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
+        (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
+        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
     return false;
 }
@@ -1756,7 +2259,7 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
     lexer->mark_end(lexer);
     lexer->result_symbol = EXPORT_DEFAULT;
     scanner->default_declaration_pending = false;
-    if (!scan_default_trivia(lexer, true)) return true;
+    if (!scan_default_trivia(lexer, true, true)) return true;
     if (lexer->lookahead == '@') {
         scanner->default_declaration_pending = true;
     } else {
@@ -1764,11 +2267,11 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
         if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
         if (strcmp(word, "function") == 0 || strcmp(word, "class") == 0) {
             scanner->default_declaration_pending = true;
-        } else if (strcmp(word, "abstract") == 0 && scan_default_trivia(lexer, false)) {
+        } else if (strcmp(word, "abstract") == 0 && scan_default_trivia(lexer, false, true)) {
             memset(word, 0, sizeof(word));
             scanner->default_declaration_pending =
                 scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "class") == 0;
-        } else if (strcmp(word, "async") == 0 && scan_default_trivia(lexer, false)) {
+        } else if (strcmp(word, "async") == 0 && scan_default_trivia(lexer, false, true)) {
             memset(word, 0, sizeof(word));
             scanner->default_declaration_pending =
                 scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "function") == 0;
@@ -1785,11 +2288,11 @@ static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer) {
     advance(lexer);
     if (is_identifier_part(lexer->lookahead) || lexer->lookahead == '-') return false;
     lexer->mark_end(lexer);
-    if (!scan_default_trivia(lexer, true)) {
+    if (!scan_default_trivia(lexer, true, true)) {
         if (!lexer->eof(lexer)) return false;
     } else if (lexer->lookahead == '.' || lexer->lookahead == ':') {
         advance(lexer);
-        if (!scan_default_trivia(lexer, true)) {
+        if (!scan_default_trivia(lexer, true, true)) {
             if (!lexer->eof(lexer)) return false;
         } else if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
             return false;
@@ -1801,7 +2304,7 @@ static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer) {
     return true;
 }
 
-static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks) {
+static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments) {
     for (;;) {
         while (is_whitespace(lexer->lookahead)) {
             if (!allow_line_breaks && is_line_terminator(lexer->lookahead)) return false;
@@ -1829,7 +2332,7 @@ static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks) {
                 continue;
             }
             if (lexer->lookahead != '/') return false;
-        } else if (lexer->lookahead == '<' || lexer->lookahead == '-') {
+        } else if (html_comments && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
             const char *opening = lexer->lookahead == '<' ? "<!--" : "-->";
             for (; *opening; opening++) {
                 if (lexer->lookahead != *opening) return false;
