@@ -220,6 +220,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             'infer extends',
             'T extends extends ? T:extends',
             '(x:T)=>extends',
+            'T.is<U>',
+            'T.is<U>[]',
+            'x is T.is<U>',
+            'asserts x is T.is<U>',
           ]) {
             for (const trivia of ['', ' /* c */ ', '\n']) {
               let source = `type is=number;type F=${generic}(${name}${optional})=>${trivia}${result};`;

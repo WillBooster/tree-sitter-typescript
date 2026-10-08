@@ -1902,7 +1902,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 if (lexer->lookahead != '(' && !(strcmp(word, "new") == 0 && lexer->lookahead == '<')) return false;
             }
             abstract_constructor = return_operand && !member_property && ascii_word && strcmp(word, "abstract") == 0;
-            bool predicate_operator = !return_operand && ascii_word && strcmp(word, "is") == 0;
+            bool predicate_operator = !return_operand && !member_property && ascii_word && strcmp(word, "is") == 0;
             bool extends_operand = ascii_word && strcmp(word, "extends") == 0 &&
                 (!untyped_return || (!return_operand && !member_property));
             bool asserts_prefix = !member_property && (predicate_start || !return_operand) && ascii_word && strcmp(word, "asserts") == 0;
