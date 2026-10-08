@@ -1563,7 +1563,18 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
             if (c == ',') break;
             if (c != ')' && c != '/' && !is_whitespace(c)) {
-                if ((is_identifier_part(c) && !is_ascii_digit(c)) || c == '[' || c == '{' || c == '.') slot_named = true;
+                if (c == '.') {
+                    unsigned dots = 0;
+                    while (dots < 3 && lexer->lookahead == '.') {
+                        advance(lexer);
+                        dots++;
+                    }
+                    if (dots != 3 || !scan_default_trivia(lexer, true, false)) break;
+                    if (lexer->lookahead != '[' && lexer->lookahead != '{' && !scan_type_identifier_operand(lexer)) break;
+                    slot_named = true;
+                    continue;
+                }
+                if ((is_identifier_part(c) && !is_ascii_digit(c)) || c == '[' || c == '{') slot_named = true;
                 else break;
             }
         }
@@ -1877,14 +1888,14 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
     bool query_operand = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false;
     while (!lexer->eof(lexer)) {
         bool line_break = false;
-        if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return true;
+        if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
         int32_t c = lexer->lookahead;
-        if (c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return true;
-        if (untyped_return && c == '?' && !saw_extends) return true;
+        if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
+        if (untyped_return && c == '?' && !saw_extends) return !return_operand && !member_property;
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-            if (untyped_return && line_break && !return_operand && !member_property &&
+            if (untyped_return && line_break && conditional_depth == 0 && !return_operand && !member_property &&
                 !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
                                   (abstract_constructor && strcmp(word, "new") == 0)))) return true;
             if (untyped_return && !member_property && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "import") == 0)) {
@@ -1958,6 +1969,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             continue;
         }
         bool generic_parameters = !allow_expression && first && c == '<';
+        bool pending_operand = return_operand || member_property;
         advance(lexer);
         if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
         member_property = c == '.';
@@ -1982,7 +1994,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             first = true;
             return_operand = true;
         } else if (c == '=') {
-            if (lexer->lookahead != '>') return true;
+            if (lexer->lookahead != '>') return !untyped_return || (!pending_operand && conditional_depth == 0);
             advance(lexer);
             first = !allow_expression;
             return_operand = first;
@@ -2007,7 +2019,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             } else advance(lexer);
         }
     }
-    return true;
+    return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
 }
 
 static bool scan_type_identifier_operand(TSLexer *lexer) {

@@ -159,6 +159,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
       [$.infer_type],
       [$.infer_type, $.type_predicate],
@@ -1382,9 +1383,20 @@ module.exports = function defineGrammar(dialect) {
           field('return_type', alias($._arrow_type_annotation, $.type_annotation))
         ),
 
-      _arrow_type_annotation: ($) => seq(':', alias($._arrow_predefined_return_type, $.parenthesized_type)),
+      _arrow_type_annotation: ($) =>
+        seq(
+          ':',
+          choice(
+            alias($._arrow_predefined_return_type, $.parenthesized_type),
+            seq($._arrow_predefined_function_start, $.function_type)
+          )
+        ),
 
-      _arrow_predefined_return_type: ($) => seq($._arrow_predefined_return_start, '(', $.predefined_type, ')'),
+      _arrow_predefined_parent_start: ($) => prec.dynamic(1, $._arrow_predefined_return_start),
+
+      _arrow_predefined_function_start: ($) => prec.dynamic(0, $._arrow_predefined_return_start),
+
+      _arrow_predefined_return_type: ($) => seq($._arrow_predefined_parent_start, '(', $.predefined_type, ')'),
 
       _call_signature: ($) =>
         seq(
