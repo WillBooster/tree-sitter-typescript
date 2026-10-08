@@ -27,7 +27,7 @@ annotations.
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files.
+for `.tsx` files. Both compact ABI 16 parsers require runtime 1.3.0 or later.
 
 In Node.js and Bun:
 
@@ -73,12 +73,11 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with (the grammar also loads in the upstream `tree-sitter` crate 0.27, whose error recovery never ends on some
-malformed input):
+fuzzed with. The compact ABI 16 parser requires runtime 1.3.0 or later:
 
 ```toml
 [dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "1" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "1.3.0" }
 tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "4" }
 ```
 
@@ -112,6 +111,13 @@ runtime this package ships. The first run downloads that CLI from its GitHub Rel
 `typescript-reference` API (TypeScript 5.9.3), which supplies the global-augmentation lookahead vocabulary.
 The native TypeScript package remains the type checker. Run `bun run generate-keywords` after changing the reference;
 verification checks the committed header with `bun run check-keywords`.
+
+`bun run generate` records a fresh ABI 16 generation profile from the applicable `test/corpus` cases and Git-tracked
+files in `examples/`, then generates compact parser tables. The parser also embeds metadata from `tree-sitter.json`. After changing a grammar,
+`tree-sitter.json`, a corpus case, or a tracked example,
+regenerate and commit `typescript/src/` and `tsx/src/`. Stage added or removed examples with `git add -A examples` before generation so the profile uses the intended file list.
+Profiles in `.tmp/generation-profiles/` are temporary and must not be committed. `bun run build-wasm`, `bun run build/ci`,
+and the release build regenerate the parsers before compiling them.
 
 `bun run test` runs:
 
