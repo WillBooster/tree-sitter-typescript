@@ -27,7 +27,7 @@
     "*.wasm"
   ],
   "scripts": {
-    "build-wasm": "script/generate && script/tree-sitter build --wasm typescript && script/tree-sitter build --wasm tsx",
+    "build-wasm": "script/generate --build-wasm",
     "build/ci": "bun run build-wasm",
     "check-keywords": "bun scripts/generateGlobalKeywords.ts --check",
     "cleanup": "bun run check-keywords && bun wb lint --fix --format",
