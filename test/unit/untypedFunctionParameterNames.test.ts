@@ -140,6 +140,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F=(${name})=>import("x").T;`,
           `type F=(${name})=>number\n/foo/.test("");`,
           `type F=(${name})=>abstract\nnumber;`,
+          `type F=(${name})=>number\nimport "x";`,
+          `type F=(${name})=>abstract\nimport "x";`,
+          `type F=(${name})=>(number)\nimport {x} from "x";`,
         ]) {
           const ordinary = source.replace(name, 'x'.repeat(name.length));
           const actual = parser.parse(source)!;
@@ -183,7 +186,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                 expect(value.childForFieldName('return_type')!.namedChildren.find((node) => !node.isExtra)!.type).toBe(
                   'parenthesized_type'
                 );
-                expect(value.childForFieldName('body')).toBeDefined();
+                expect(value.childForFieldName('body'), source).not.toBeNull();
                 const initialSnapshot = snapshot(tree.rootNode);
                 const arrowStart = source.indexOf('=>');
                 for (const [before, after] of [
