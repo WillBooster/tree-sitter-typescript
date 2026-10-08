@@ -2025,7 +2025,10 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (untyped_return && (c == ':' || (c == '?' && saw_extends)) && pending_operand) return false;
         advance(lexer);
         if (untyped_return && c == '?') {
-            if (lexer->lookahead == '.') return false;
+            if (lexer->lookahead == '.') {
+                advance(lexer);
+                if (!saw_extends || !is_ascii_digit(lexer->lookahead)) return false;
+            }
             if (!saw_extends) return !pending_operand;
         }
         if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
