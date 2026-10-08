@@ -1423,15 +1423,17 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !private_name && ascii_word &&
-        (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0)) {
+        (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0)) {
         lexer->mark_end(lexer);
         if (!scan_default_trivia(lexer, true, true)) return false;
         bool optional_parameter = lexer->lookahead == '?';
+        if (strcmp(word, "readonly") == 0 && !optional_parameter) return false;
         if (optional_parameter) {
             advance(lexer);
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
         bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
+        if (untyped_parameter && (strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0)) return false;
         if (!untyped_parameter && lexer->lookahead != ':') return false;
         if (!untyped_parameter && (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME])) {
             advance(lexer);
@@ -2506,7 +2508,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] ||
-         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
+         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n' || lexer->lookahead == 'i' || lexer->lookahead == 'r'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
         if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
             lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
