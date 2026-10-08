@@ -77,6 +77,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   'T extends U ?',
                   'T extends U ? T :',
                   'T extends U ? T',
+                  'a?.b',
+                  'a ?.b',
+                  'a?.b ? c : d',
+                  'T extends U ? a?.b:c',
                   'new',
                   'new /* incomplete */',
                   'abstract new',
@@ -188,6 +192,100 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   );
 
+  test.each(['unknown', 'never', 'unique'])('retains contextual type operands and edits for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const generic of ['', '<T>']) {
+        for (const optional of ['', '?']) {
+          for (const result of [
+            'is',
+            'T | is',
+            'T & is',
+            'x is is',
+            'asserts is',
+            'asserts x is is',
+            'keyof is',
+            'typeof is',
+            'infer is',
+            'readonly is[]',
+            'T extends U ? T:is',
+            '(x:T)=>is',
+            'keyof asserts',
+            'typeof infer',
+            'infer keyof',
+            'extends',
+            'T | extends',
+            'x is extends',
+            'typeof extends',
+            'infer extends',
+            'T extends extends ? T:extends',
+            '(x:T)=>extends',
+          ]) {
+            for (const trivia of ['', ' /* c */ ', '\n']) {
+              let source = `type is=number;type F=${generic}(${name}${optional})=>${trivia}${result};`;
+              let tree: Tree | undefined = parser.parse(source)!;
+              const reference = parser.parse(source.replace(name, 'x'.repeat(name.length)))!;
+              const target = result.endsWith('extends')
+                ? 'extends'
+                : result.includes('is')
+                  ? 'is'
+                  : result.split(' ').at(-1)!;
+              const start = source.lastIndexOf(target);
+              let previous = target;
+              try {
+                expect(tree.rootNode.hasError, source).toBe(false);
+                expect(snapshot(tree.rootNode), source).toEqual(snapshot(reference.rootNode));
+                for (const query of queries) {
+                  expect(query.captures(tree.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
+                    query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
+                  );
+                }
+                const initialSnapshot = snapshot(tree.rootNode);
+                for (const replacement of ['Result', target]) {
+                  const next = source.slice(0, start) + replacement + source.slice(start + previous.length);
+                  const previousTree = tree;
+                  tree = undefined;
+                  try {
+                    tree = compareEditedTree(
+                      parser,
+                      previousTree,
+                      next,
+                      new Edit({
+                        startIndex: start,
+                        oldEndIndex: start + previous.length,
+                        newEndIndex: start + replacement.length,
+                        startPosition: position(source, start),
+                        oldEndPosition: position(source, start + previous.length),
+                        newEndPosition: position(next, start + replacement.length),
+                      }),
+                      (incremental, fresh) => {
+                        for (const query of queries) {
+                          expect(
+                            query.captures(incremental.rootNode).map(({ name, node }) => [name, snapshot(node)])
+                          ).toEqual(query.captures(fresh.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+                        }
+                      }
+                    );
+                  } finally {
+                    previousTree.delete();
+                  }
+                  source = next;
+                  previous = replacement;
+                }
+                expect(snapshot(tree.rootNode)).toEqual(initialSnapshot);
+              } finally {
+                tree?.delete();
+                reference.delete();
+              }
+            }
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test.each(['unknown', 'never'])('preserves parenthesized arrow return annotations and edits for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -220,7 +318,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       try {
         for (const parameters of ['()', '(a)', '<T>(a:T)']) {
           for (const trivia of ['', ' /* c */ ', '\n']) {
-            for (const body of ['void=>1', 'void=>{}', ...(name === 'unique' ? ['number=>a'] : [])]) {
+            for (const body of [
+              'void=>1',
+              'void=>{}',
+              'extends=>1',
+              'extends=>{}',
+              ...(name === 'unique' ? ['number=>a'] : []),
+            ]) {
               const source = `const f=${parameters}:${trivia}(${trivia}${name}${trivia})${trivia}=>${trivia}${body};`;
               checkArrowEdits(parser, source, name, queries, (tree) => {
                 expect(tree.rootNode.hasError, source).toBe(false);
