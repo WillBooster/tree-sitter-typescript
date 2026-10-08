@@ -1584,7 +1584,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
-        bool exact_object = false;
+        bool exact_object = false, optional_chain_dot = false;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && slot_named && !slot_annotation &&
             (is_identifier_part(c) || c == '\\')) break;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
@@ -1883,6 +1883,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                         advance(lexer);
                         optional_chain = !is_ascii_digit(lexer->lookahead);
                         group->property = optional_chain;
+                        optional_chain_dot = optional_chain;
                     }
                     if (!optional_chain) {
                         group->question_pending = false;
@@ -2050,6 +2051,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
                 parameter_position = c == '(' || c == '[' || c == '{' || c == ',' || member_separator || push == TYPE_PARAMETER_GROUP_END || push == METHOD_TYPE_PARAMETER_GROUP_END || (c == '?' && (frame == OBJECT_PROPERTY_GROUP_END || frame == TYPE_OPERAND_GROUP_END) && parameter_position);
+                if (optional_chain_dot) {
+                    first_operand = false;
+                    parameter_position = false;
+                }
                 operand_pending = expression_annotation;
                 query_operand = false;
             }
