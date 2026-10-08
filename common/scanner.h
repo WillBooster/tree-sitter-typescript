@@ -1408,8 +1408,9 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             advance(lexer);
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
-        if (lexer->lookahead != ':') return false;
-        if (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+        bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
+        if (!untyped_parameter && lexer->lookahead != ':') return false;
+        if (!untyped_parameter && (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME])) {
             advance(lexer);
             if (!scan_default_trivia(lexer, true, false)) return false;
             while (lexer->lookahead == '?') {
@@ -1432,7 +1433,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             }
             if (!scan_annotated_type_colons(lexer, false)) return false;
         }
-        if (!optional_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
+        if (!optional_parameter && !untyped_parameter && valid_symbols[PREDEFINED_ANNOTATED_NAME]) {
             lexer->result_symbol = PREDEFINED_ANNOTATED_NAME;
         } else if (valid_symbols[PREDEFINED_PARAMETER_NAME]) {
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
@@ -1443,7 +1444,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         advance(lexer);
         if (lexer->lookahead != '>') return false;
         advance(lexer);
-        if (optional_parameter) {
+        if (optional_parameter || untyped_parameter) {
             if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
             switch (lexer->lookahead) {
                 case ')':
