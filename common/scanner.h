@@ -1969,7 +1969,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 }
             }
             if (extends_operand) saw_extends = true;
-            first = !allow_expression && (extends_operand || (first && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0)));
+            first = !allow_expression && ((untyped_return && predicate_operator) || extends_operand || (first && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0)));
             continue;
         }
         bool generic_parameters = !allow_expression && first && c == '<';

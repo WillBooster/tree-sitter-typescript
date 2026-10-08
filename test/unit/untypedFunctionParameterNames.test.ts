@@ -403,6 +403,14 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         [`type F=(${name})=>T | U;`, 'U'],
         [`type F=(${name})=>T & U;`, 'U'],
         [`type F=(${name}, ...rest)=>number;`, 'rest'],
+        [`type F=(${name})=>x is keyof U;`, 'U'],
+        [`type F=(${name})=>x is typeof U;`, 'U'],
+        [`type F=(${name})=>x is infer U;`, 'U'],
+        [`type F=(${name})=>x is readonly U[];`, 'U[]'],
+        [`type F=(${name})=>asserts x is keyof U;`, 'U'],
+        [`type F=(${name})=>asserts x is typeof U;`, 'U'],
+        [`type F=(${name})=>asserts x is infer U;`, 'U'],
+        [`type F=(${name})=>asserts x is readonly U[];`, 'U[]'],
       ] as const) {
         let currentSource: string = source;
         let tree: Tree | undefined = parser.parse(currentSource)!;
