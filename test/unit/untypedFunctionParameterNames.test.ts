@@ -62,6 +62,14 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   'infer',
                   'unique',
                   '()',
+                  'new',
+                  'new /* incomplete */',
+                  'abstract new',
+                  'import',
+                  'import /* incomplete */',
+                  '"abc',
+                  "'abc",
+                  '`abc',
                 ]
               : continuation === ')'
                 ? [',,)', ', /* missing parameter */ ,)', ', other:T,,)']
@@ -115,6 +123,40 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
+  test.each(['unknown', 'never', 'unique'])(
+    'retains bindings in conditional types and constructor returns for %s',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      try {
+        for (const source of [
+          `type F<T> = T extends (${name})=>number ? true:false;`,
+          `type F<T> = T extends (${name})=>infer R ? R:never;`,
+          `type F=(${name})=>new()=>T;`,
+          `type F=(${name})=>abstract new()=>T;`,
+          `type F=(${name})=>import("x").T;`,
+        ]) {
+          const ordinary = source.replace(name, 'x'.repeat(name.length));
+          const actual = parser.parse(source)!;
+          const reference = parser.parse(ordinary)!;
+          try {
+            expect(actual.rootNode.hasError).toBe(false);
+            expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
+            for (const query of queries) {
+              expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
+                query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
+              );
+            }
+          } finally {
+            actual.delete();
+            reference.delete();
+          }
+        }
+      } finally {
+        parser.delete();
+      }
+    }
+  );
+
   test.each(['unknown', 'never', 'unique'])('retains canonical bindings and edits for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     const bindings = new Query(
@@ -125,7 +167,14 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       for (const generic of ['', '<T>']) {
         for (const optional of ['', '?']) {
           for (const trivia of ['', ' /* binding */ ', '\n']) {
-            for (const header of ['BINDING', 'BINDING, other:T', 'other:T, BINDING', 'BINDING, other?:T']) {
+            for (const header of [
+              'BINDING',
+              'BINDING, other:T',
+              'other:T, BINDING',
+              'BINDING, other?:T',
+              'BINDING, other?, third?',
+              'BINDING, other?,',
+            ]) {
               const parameters = header.replace('BINDING', name + trivia + optional);
               const source = `type F=${generic}(${parameters})=>unknown;`;
               const start = source.indexOf(name),
