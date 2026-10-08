@@ -5,6 +5,10 @@ type Guard = (value: unknown) => value is string;
 type InferStringGuard = (infer: unknown) => infer is string;
 type InferArrayGuard = (infer: unknown) => infer is string[];
 type InferUnionGuard = (infer: unknown) => infer is number | string;
+type KeyofStringGuard = (keyof: unknown) => keyof is string;
+type KeyofArrayGuard = (keyof: unknown) => keyof is string[];
+type KeyofSymbolGuard = (keyof: unknown) => keyof is unique symbol;
+type KeyofUnionGuard = (keyof: unknown) => keyof is number | string;
 interface Guards { isReadonly(readonly: unknown): readonly is string; }
 class AbstractGuard { isString(abstract: unknown): abstract is string { return typeof abstract === 'string'; } }
 declare function isAsserts(asserts: unknown): asserts is string;

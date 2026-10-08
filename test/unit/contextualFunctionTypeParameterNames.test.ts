@@ -8,10 +8,17 @@ const Names = [
   { name: 'infer', optional: '', returnType: 'U' },
   { name: 'infer', optional: '?', returnType: 'U' },
   { name: 'readonly', optional: '?', returnType: 'U' },
+  { name: 'keyof', optional: '', returnType: 'U' },
+  { name: 'keyof', optional: '?', returnType: 'U' },
   ...['string', 'string[]', 'number | string'].map((type) => ({
     name: 'infer',
     optional: '',
     returnType: `infer is ${type}`,
+  })),
+  ...['string', 'string[]', 'unique symbol', 'number | string'].map((type) => ({
+    name: 'keyof',
+    optional: '',
+    returnType: `keyof is ${type}`,
   })),
 ];
 const Contexts = [
