@@ -1710,7 +1710,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     group->question_pending = false;
                     group->conditional_depth++;
                     group->conditional_branch = true;
-                } else if (c == ':' && !binding_frame) {
+                } else if (c == ':' && (!binding_frame || group->conditional_depth)) {
                     if (group->question_pending || (group->conditional_branch && (first_operand || group->property))) break;
                     if (group->conditional_depth) group->conditional_depth--;
                 }
@@ -1792,6 +1792,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '(') break;
                     advance(lexer);
                     stack[size - 1].context = frame == METHOD_TYPE_PARAMETER_GROUP_END ? METHOD_PARAMETER_GROUP_END : FUNCTION_PARAMETER_GROUP_END;
+                    group->conditional_branch = false;
                     operand_pending = false;
                     first_operand = true;
                     query_operand = false;
