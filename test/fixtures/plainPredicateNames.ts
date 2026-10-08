@@ -2,6 +2,9 @@ declare function isUndefined(undefined: unknown): undefined is string;
 function isKeyof(keyof: unknown): keyof is string { return typeof keyof === 'string'; }
 declare function isInfer(infer: unknown): infer is string;
 type Guard = (value: unknown) => value is string;
+type InferStringGuard = (infer: unknown) => infer is string;
+type InferArrayGuard = (infer: unknown) => infer is string[];
+type InferUnionGuard = (infer: unknown) => infer is number | string;
 interface Guards { isReadonly(readonly: unknown): readonly is string; }
 class AbstractGuard { isString(abstract: unknown): abstract is string { return typeof abstract === 'string'; } }
 declare function isAsserts(asserts: unknown): asserts is string;
