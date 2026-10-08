@@ -1884,17 +1884,17 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
 
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return) {
     unsigned conditional_depth = 0;
-    bool saw_extends = false;
+    bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
     bool query_operand = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false, predicate_start = first;
     while (!lexer->eof(lexer)) {
         bool line_break = false;
-        if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
+        if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         int32_t c = lexer->lookahead;
-        if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
+        if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
-            if (untyped_return && line_break && conditional_depth == 0 && !return_operand && !member_property &&
+            if (untyped_return && line_break && conditional_depth == 0 && !conditional_question_pending && !return_operand && !member_property &&
                 !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
                                   (abstract_constructor && strcmp(word, "new") == 0)))) return true;
             if (untyped_return && !member_property && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "import") == 0)) {
@@ -1907,6 +1907,9 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 (!untyped_return || (!return_operand && !member_property));
             bool asserts_prefix = !member_property && (predicate_start || !return_operand) && ascii_word && strcmp(word, "asserts") == 0;
             bool type_prefix = first || !return_operand;
+            bool infer_extends = infer_constraint;
+            infer_constraint = infer_name;
+            infer_name = untyped_return && !member_property && type_prefix && ascii_word && strcmp(word, "infer") == 0;
             return_operand = !member_property && ascii_word &&
                 (asserts_prefix || predicate_operator || extends_operand || (type_prefix && (strcmp(word, "infer") == 0 ||
                  strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 ||
@@ -1928,6 +1931,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                             query_operand = false;
                             first = false;
                             return_operand = false;
+                            infer_constraint = infer_name;
+                            infer_name = false;
                             continue;
                         case '-':
                         case '+':
@@ -1968,7 +1973,10 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                     continue;
                 }
             }
-            if (extends_operand) saw_extends = true;
+            if (extends_operand) {
+                saw_extends = true;
+                if (untyped_return && !infer_extends) conditional_question_pending = true;
+            }
             first = !allow_expression && ((untyped_return && predicate_operator) || extends_operand || (first && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0)));
             continue;
         }
@@ -1982,6 +1990,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
         member_property = c == '.';
         predicate_name = false;
+        infer_name = false;
+        infer_constraint = false;
         first = false;
         return_operand = false;
         abstract_constructor = false;
@@ -1992,6 +2002,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             first = !allow_expression;
             return_operand = first;
         } else if (c == '?' && (saw_extends || allow_expression)) {
+            conditional_question_pending = false;
             if (allow_expression && lexer->lookahead == '?') advance(lexer);
             else if (allow_expression && lexer->lookahead == '.') {
                 advance(lexer);
@@ -2003,7 +2014,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             first = true;
             return_operand = true;
         } else if (c == '=') {
-            if (lexer->lookahead != '>') return !untyped_return || (!pending_operand && conditional_depth == 0);
+            if (lexer->lookahead != '>') return !untyped_return || (!pending_operand && conditional_depth == 0 && !conditional_question_pending);
             advance(lexer);
             first = !allow_expression;
             return_operand = first;
@@ -2030,7 +2041,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             } else advance(lexer);
         }
     }
-    return !untyped_return || (!return_operand && !member_property && conditional_depth == 0);
+    return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
 }
 
 static bool scan_type_identifier_operand(TSLexer *lexer) {

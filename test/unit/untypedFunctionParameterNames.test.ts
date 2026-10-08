@@ -224,6 +224,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             'T.is<U>[]',
             'x is T.is<U>',
             'asserts x is T.is<U>',
+            'infer R extends U',
+            'infer R extends infer U extends V',
+            'infer R extends U ? A:B',
+            'T extends infer R extends U ? R:V',
           ]) {
             for (const trivia of ['', ' /* c */ ', '\n']) {
               let source = `type is=number;type F=${generic}(${name}${optional})=>${trivia}${result};`;
@@ -233,7 +237,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                 ? 'extends'
                 : result.includes('is')
                   ? 'is'
-                  : result.split(' ').at(-1)!;
+                  : result.split(/[\s:]/).at(-1)!;
               const start = source.lastIndexOf(target);
               let previous = target;
               try {
@@ -407,6 +411,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         [`type F=(${name})=>T | U;`, 'U'],
         [`type F=(${name})=>T & U;`, 'U'],
         [`type F=(${name}, ...rest)=>number;`, 'rest'],
+        [`type F=(${name})=>T extends U ? T:U;`, ' ? T:U'],
+        [`type F=(${name})=>(x:T)=>T extends U ? T:U;`, ' ? T:U'],
+        [`type F=(${name})=>x is T extends U ? T:U;`, ' ? T:U'],
+        [`type F=(${name})=>T extends U ? V:W extends Z ? X:Y;`, ' ? X:Y'],
         [`type F=(${name})=>x is keyof U;`, 'U'],
         [`type F=(${name})=>x is typeof U;`, 'U'],
         [`type F=(${name})=>x is infer U;`, 'U'],
