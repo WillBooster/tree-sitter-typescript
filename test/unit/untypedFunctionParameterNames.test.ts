@@ -62,6 +62,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   'infer',
                   'unique',
                   '()',
+                  'asserts import',
+                  'asserts new',
+                  'x is import',
+                  'infer import',
                   'new',
                   'new /* incomplete */',
                   'abstract new',
@@ -72,7 +76,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   '`abc',
                 ]
               : continuation === ')'
-                ? [',,)', ', /* missing parameter */ ,)', ', other:T,,)']
+                ? [',,)', ', /* missing parameter */ ,)', ', other:T,,)', ', ?)', ', 1)', ', :x)']
                 : [''];
           for (const replacement of [...incomplete, continuation]) {
             const next = source.slice(0, start) + replacement + source.slice(start + previous.length);
@@ -124,7 +128,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
   });
 
   test.each(['unknown', 'never', 'unique'])(
-    'retains bindings in conditional types and constructor returns for %s',
+    'retains bindings in conditional types and return statement boundaries for %s',
     (name) => {
       const parser = new Parser().setLanguage(language);
       try {
@@ -134,6 +138,8 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F=(${name})=>new()=>T;`,
           `type F=(${name})=>abstract new()=>T;`,
           `type F=(${name})=>import("x").T;`,
+          `type F=(${name})=>number\n/foo/.test("");`,
+          `type F=(${name})=>abstract\nnumber;`,
         ]) {
           const ordinary = source.replace(name, 'x'.repeat(name.length));
           const actual = parser.parse(source)!;
@@ -152,6 +158,82 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           }
         }
       } finally {
+        parser.delete();
+      }
+    }
+  );
+
+  test.each(['unknown', 'never', 'unique'])(
+    'preserves parenthesized arrow return annotations and edits for %s',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const bindings = new Query(
+        language,
+        '[(required_parameter pattern: (pattern/identifier) @name) (optional_parameter pattern: (pattern/identifier) @name)]'
+      );
+      try {
+        for (const parameters of ['()', '(a)']) {
+          for (const trivia of ['', ' /* c */ ', '\n']) {
+            for (const body of ['{}', 'a', 'number=>a']) {
+              let source = `const f=${parameters}:${trivia}(${trivia}${name}${trivia})${trivia}=>${trivia}${body};`;
+              let tree: Tree | undefined = parser.parse(source)!;
+              try {
+                const value = tree.rootNode.namedChildren[0]!.namedChildren[0]!.childForFieldName('value')!;
+                expect(value?.type, source).toBe('arrow_function');
+                expect(value.childForFieldName('return_type')!.namedChildren.find((node) => !node.isExtra)!.type).toBe(
+                  'parenthesized_type'
+                );
+                expect(value.childForFieldName('body')).toBeDefined();
+                const initialSnapshot = snapshot(tree.rootNode);
+                const arrowStart = source.indexOf('=>');
+                for (const [before, after] of [
+                  [name, 'number'],
+                  ['number', name],
+                  ['=>', ''],
+                  ['', '=>'],
+                ] as const) {
+                  const start = before === '' ? arrowStart : source.indexOf(before);
+                  const next = source.slice(0, start) + after + source.slice(start + before.length);
+                  const previousTree = tree;
+                  tree = undefined;
+                  try {
+                    tree = compareEditedTree(
+                      parser,
+                      previousTree,
+                      next,
+                      new Edit({
+                        startIndex: start,
+                        oldEndIndex: start + before.length,
+                        newEndIndex: start + after.length,
+                        startPosition: position(source, start),
+                        oldEndPosition: position(source, start + before.length),
+                        newEndPosition: position(next, start + after.length),
+                      }),
+                      (incremental, fresh) => {
+                        expect(
+                          bindings.captures(incremental.rootNode).filter(({ node }) => node.text === name)
+                        ).toEqual([]);
+                        for (const query of queries)
+                          expect(
+                            query.captures(incremental.rootNode).map(({ name, node }) => [name, snapshot(node)])
+                          ).toEqual(query.captures(fresh.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+                      },
+                      true
+                    );
+                  } finally {
+                    previousTree.delete();
+                  }
+                  source = next;
+                }
+                expect(snapshot(tree.rootNode)).toEqual(initialSnapshot);
+              } finally {
+                tree?.delete();
+              }
+            }
+          }
+        }
+      } finally {
+        bindings.delete();
         parser.delete();
       }
     }

@@ -4288,6 +4288,10 @@
       "required": true,
       "types": [
         {
+          "type": "predefined_type",
+          "named": true
+        },
+        {
           "type": "type",
           "named": true
         }
@@ -5115,6 +5119,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "parenthesized_type",
+          "named": true
+        },
         {
           "type": "type",
           "named": true

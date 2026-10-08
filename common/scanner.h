@@ -55,6 +55,7 @@ enum TokenType {
     JSX_CLOSING_RECOVERY_IDENTIFIER,
     PREDEFINED_PARAMETER_NAME,
     PREDEFINED_ANNOTATED_NAME,
+    ARROW_PREDEFINED_RETURN_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -1477,20 +1478,6 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             if (operand == '\\') {
                 if (!scan_type_identifier_operand(lexer)) return false;
                 return_identifier = true;
-            } else if (operand == 'n' || operand == 'a') {
-                char return_word[16] = {0};
-                bool ascii_return = scan_identifier(lexer, return_word, sizeof(return_word), false);
-                if (!scan_default_trivia(lexer, true, false)) return false;
-                if (ascii_return && strcmp(return_word, "abstract") == 0 && lexer->lookahead == 'n') {
-                    memset(return_word, 0, sizeof(return_word));
-                    if (!scan_identifier(lexer, return_word, sizeof(return_word), false) || strcmp(return_word, "new") != 0) return false;
-                    if (!scan_default_trivia(lexer, true, false)) return false;
-                }
-                if (ascii_return && strcmp(return_word, "new") == 0) {
-                    if (lexer->lookahead != '(' && lexer->lookahead != '<') return false;
-                } else {
-                    return_identifier = true;
-                }
             } else if (operand == '.' || operand == '-' || operand == '+') {
                 advance(lexer);
                 if (operand != '.') {
@@ -1571,7 +1558,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
-        if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named && c == ',') break;
+        if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
+            if (c == ',') break;
+            if (c != ')' && c != '/' && !is_whitespace(c)) {
+                if ((is_identifier_part(c) && !is_ascii_digit(c)) || c == '[' || c == '{' || c == '.') slot_named = true;
+                else break;
+            }
+        }
         bool check_type_operands = type_operands && !(frame & TYPE_EXPRESSION_GROUP);
         bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
         if (end == '\'' || end == '"' || end == '`') {
@@ -1849,7 +1842,6 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (!is_whitespace(c)) {
                 if (close == UNTYPED_PARAMETER_GROUP_END && size == 1) {
                     if (c == ',') slot_named = false;
-                    else if (is_identifier_part(c) || c == '[' || c == '{' || c == '.') slot_named = true;
                 }
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
@@ -1876,7 +1868,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return) {
     unsigned conditional_depth = 0;
     bool saw_extends = false;
-    bool query_operand = false;
+    bool query_operand = false, member_property = false, predicate_name = false;
     while (!lexer->eof(lexer)) {
         if (!scan_default_trivia(lexer, true, false)) return true;
         int32_t c = lexer->lookahead;
@@ -1885,14 +1877,17 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+            if (untyped_return && !member_property && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "import") == 0)) {
+                if (predicate_name || !scan_default_trivia(lexer, true, false)) return false;
+                if (lexer->lookahead != '(' && !(strcmp(word, "new") == 0 && lexer->lookahead == '<')) return false;
+            }
+            predicate_name = untyped_return && !member_property && ascii_word && strcmp(word, "asserts") == 0;
+            member_property = false;
             if (query_operand) {
                 if (ascii_word && strcmp(word, "typeof") == 0) return false;
                 query_operand = false;
             } else if (!allow_expression && first && ascii_word) {
-                if (untyped_return && (strcmp(word, "new") == 0 || strcmp(word, "import") == 0)) {
-                    if (!scan_default_trivia(lexer, true, false)) return false;
-                    if (lexer->lookahead != '(' && !(strcmp(word, "new") == 0 && lexer->lookahead == '<')) return false;
-                } else if (strcmp(word, "unique") == 0) {
+                if (strcmp(word, "unique") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
                 } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
@@ -1949,6 +1944,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         bool generic_parameters = !allow_expression && first && c == '<';
         advance(lexer);
         if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
+        member_property = c == '.';
+        predicate_name = false;
         first = false;
         if (c == ':') {
             if (conditional_depth == 0) return false;
@@ -2008,8 +2005,31 @@ static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening) {
     return true;
 }
 
+static bool scan_arrow_predefined_return_start(TSLexer *lexer) {
+    while (is_whitespace(lexer->lookahead)) skip(lexer);
+    lexer->mark_end(lexer);
+    if (lexer->lookahead != '(') return false;
+    advance(lexer);
+    if (!scan_default_trivia(lexer, true, true)) return false;
+    char word[16] = {0};
+    if (!scan_identifier(lexer, word, sizeof(word), false) ||
+        (strcmp(word, "unknown") != 0 && strcmp(word, "never") != 0 && strcmp(word, "unique") != 0)) return false;
+    if (!scan_default_trivia(lexer, true, true) || lexer->lookahead != ')') return false;
+    advance(lexer);
+    if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+    advance(lexer);
+    if (lexer->lookahead != '>') return false;
+    lexer->result_symbol = ARROW_PREDEFINED_RETURN_START;
+    return true;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if (valid_symbols[ARROW_PREDEFINED_RETURN_START] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == '(') return scan_arrow_predefined_return_start(lexer);
+    }
 
     if (valid_symbols[REGEX_FLAGS_START] && !valid_symbols[AUTOMATIC_SEMICOLON]) {
         if (lexer->lookahead != '/') return false;

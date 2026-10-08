@@ -80,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $._jsx_closing_recovery_identifier,
       $._predefined_parameter_name,
       $._predefined_annotated_name,
+      $._arrow_predefined_return_start,
     ],
 
     supertypes: ($, previous) => [...previous, $.type, $.primary_type],
@@ -1372,6 +1373,19 @@ module.exports = function defineGrammar(dialect) {
           choice(optional($._line_break_after_field), field('type', $.type_annotation))
         ),
 
+      arrow_function: ($, previous) => choice(previous, replaceArrowCallSignature(previous, $._arrow_call_signature)),
+
+      _arrow_call_signature: ($) =>
+        seq(
+          field('type_parameters', optional($.type_parameters)),
+          field('parameters', $.formal_parameters),
+          field('return_type', alias($._arrow_type_annotation, $.type_annotation))
+        ),
+
+      _arrow_type_annotation: ($) => seq(':', alias($._arrow_predefined_return_type, $.parenthesized_type)),
+
+      _arrow_predefined_return_type: ($) => seq($._arrow_predefined_return_start, '(', $.predefined_type, ')'),
+
       _call_signature: ($) =>
         seq(
           field('type_parameters', optional($.type_parameters)),
@@ -1548,4 +1562,13 @@ function typeQueryMember($, generic) {
       choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
     )
   );
+}
+
+function replaceArrowCallSignature(rule, replacement) {
+  if (rule.type === 'SYMBOL' && rule.name === '_call_signature') return replacement;
+  return {
+    ...rule,
+    ...(rule.members ? { members: rule.members.map((member) => replaceArrowCallSignature(member, replacement)) } : {}),
+    ...(rule.content ? { content: replaceArrowCallSignature(rule.content, replacement) } : {}),
+  };
 }
