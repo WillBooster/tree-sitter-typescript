@@ -2043,7 +2043,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (untyped_return && (c == ':' || (c == '?' && saw_extends)) && pending_operand) return false;
         if (untyped_return && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || c == '*' || c == '+' || c == '-')) {
             if (line_break && !pending_operand && !conditional_depth && !conditional_question_pending &&
-                (c == '+' || c == '-' || c == '!' || c == '~' || c == '#')) return true;
+                (c == '+' || c == '-' || c == '!' || c == '~' || c == '#' || c == '@')) return true;
             if ((c != '+' && c != '-') || !return_operand) return false;
             advance(lexer);
             if (!scan_default_trivia(lexer, true, false)) return false;
