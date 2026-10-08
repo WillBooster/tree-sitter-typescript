@@ -34,13 +34,39 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const parser = new Parser().setLanguage(language);
     const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
     try {
-      for (const continuation of ['=>', 'number']) {
+      for (const continuation of ['=>', 'number', ')']) {
         let source = `type F=(${name})=>number;`;
         let tree: Tree | undefined = parser.parse(source)!;
         const start = source.indexOf(continuation);
         let previous = continuation;
         try {
-          for (const replacement of ['', continuation]) {
+          const incomplete =
+            continuation === 'number'
+              ? [
+                  '',
+                  '!',
+                  '~',
+                  '%',
+                  '^',
+                  '@',
+                  '#',
+                  '+',
+                  '-',
+                  '.',
+                  String.raw`\x`,
+                  '|',
+                  '&',
+                  'keyof',
+                  'typeof',
+                  'readonly',
+                  'infer',
+                  'unique',
+                  '()',
+                ]
+              : continuation === ')'
+                ? [',,)', ', /* missing parameter */ ,)', ', other:T,,)']
+                : [''];
+          for (const replacement of [...incomplete, continuation]) {
             const next = source.slice(0, start) + replacement + source.slice(start + previous.length);
             const previousTree = tree;
             tree = undefined;
@@ -58,10 +84,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   newEndPosition: position(next, start + replacement.length),
                 }),
                 (incremental, fresh) => {
-                  expect(incremental.rootNode.hasError).toBe(replacement === '');
-                  expect(bindings.captures(incremental.rootNode).map(({ node }) => node.text)).toEqual(
-                    replacement === '' ? [] : [name]
-                  );
+                  expect(incremental.rootNode.hasError).toBe(replacement !== continuation);
+                  expect(
+                    bindings
+                      .captures(incremental.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => node.text)
+                  ).toEqual(replacement !== continuation ? [] : [name]);
                   for (const query of queries) {
                     expect(
                       query.captures(incremental.rootNode).map(({ name, node }) => [name, snapshot(node)])

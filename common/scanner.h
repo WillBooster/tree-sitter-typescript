@@ -1373,6 +1373,7 @@ enum TypeGroupEnd {
     PROPERTY_NAME_GROUP = 7 << 8,
     TYPE_SUBSTITUTION_GROUP_END = '}' | (8 << 8),
     TYPE_OPERAND_GROUP_END = ')' | (9 << 8),
+    UNTYPED_PARAMETER_GROUP_END = ')' | (10 << 8),
     TYPE_GROUP_ROLE_MASK = 0xffff,
     TYPE_EXPRESSION_GROUP = 1 << 16,
     TYPE_EXPRESSION_OPERAND = 1 << 17,
@@ -1440,12 +1441,18 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         } else {
             return false;
         }
-        if (!scan_type_group(lexer, ')', false, true) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+        if (!scan_type_group(lexer, untyped_parameter ? UNTYPED_PARAMETER_GROUP_END : ')', false, true) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
         advance(lexer);
         if (lexer->lookahead != '>') return false;
         advance(lexer);
         if (optional_parameter || untyped_parameter) {
             if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+            if (untyped_parameter) {
+                while (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '?') {
+                    advance(lexer);
+                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+                }
+            }
             switch (lexer->lookahead) {
                 case ')':
                 case ']':
@@ -1460,7 +1467,23 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                     break;
             }
         }
-        if (!scan_annotated_type_colons(lexer, true)) return false;
+        bool return_identifier = false;
+        if (untyped_parameter) {
+            int32_t operand = lexer->lookahead;
+            if (operand == '%' || operand == '^' || operand == '!' || operand == '~' || operand == '@' || operand == '#') return false;
+            if (operand == '\\') {
+                if (!scan_type_identifier_operand(lexer)) return false;
+                return_identifier = true;
+            } else if (operand == '.' || operand == '-' || operand == '+') {
+                advance(lexer);
+                if (operand != '.') {
+                    if (!scan_default_trivia(lexer, true, false)) return false;
+                    if (lexer->lookahead == '.') advance(lexer);
+                }
+                if (!is_ascii_digit(lexer->lookahead)) return false;
+            }
+        }
+        if (!scan_annotated_type_colons(lexer, !untyped_parameter || return_identifier)) return false;
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
@@ -1515,7 +1538,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     if (!stack) return false;
     stack[0] = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && close == ')' ? TYPE_OPERAND_GROUP_END | TYPE_GROUP_PARAMETER : close;
     bool result = false;
-    bool first_operand = true, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
+    bool first_operand = close != UNTYPED_PARAMETER_GROUP_END, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
     if (type_operands && close == '}' && lexer->lookahead == '|') advance(lexer);
     while (!lexer->eof(lexer)) {
         int32_t c = lexer->lookahead, context = stack[size - 1];
@@ -1530,6 +1553,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
+        if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && first_operand && c == ',') break;
         bool check_type_operands = type_operands && !(frame & TYPE_EXPRESSION_GROUP);
         bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
         if (end == '\'' || end == '"' || end == '`') {
