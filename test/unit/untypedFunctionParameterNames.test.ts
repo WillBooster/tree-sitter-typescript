@@ -79,6 +79,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   'T extends U ? T',
                   'a?.1:b',
                   'a?.0:b',
+                  '(x=T extends U)=>U',
+                  '(x=T extends U ? V)=>U',
+                  '(x=T extends U ? V:W)=>U',
+                  '{m(x=T extends U):void}',
+                  '(x=a ? b)=>U',
+                  '(x=a ? b :)=>U',
+                  '(x=a ? :c)=>U',
                   '[T |]',
                   '{p:T |}',
                   '{p:T &}',
@@ -260,6 +267,23 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'infer is',
     'readonly is[]',
     '(readonly)=>U',
+    '(x=a ? b : c)=>U',
+    '(x=a ?? b)=>U',
+    '(x=a?.extends)=>U',
+    '(x={extends:a})=>U',
+    '(x=class extends T {})=>U',
+    '(x=class C extends T {})=>U',
+    '(x=class C<T extends U> extends V {})=>U',
+    '(x=fn<T extends U ? V:W>())=>U',
+    '(x=(a:T extends U ? V:W)=>a)=>U',
+    '(x=a as (T extends U ? V:W))=>U',
+    '(x=a satisfies (T extends U ? V:W))=>U',
+    '(x=function F<T extends U>(a:T){return a})=>U',
+    '(x=async function F<T extends U>(a:T){return a})=>U',
+    '(x={m():T extends U ? V:W{return a}})=>U',
+    '(x=a ? b:c.extends)=>U',
+    '(x=a ? b:c?.readonly)=>U',
+
     'T extends U ? T:is',
     '(x:T)=>is',
     'keyof asserts',
@@ -305,11 +329,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
               let source = `type is=number;type F=${generic}(${name}${optional})=>${trivia}${result};`;
               let tree: Tree | undefined = parser.parse(source)!;
               const reference = parser.parse(source.replace(name, 'x'.repeat(name.length)))!;
+              const identifiers = result.match(/[A-Za-z_$][\w$]*/g)!;
               const target = result.endsWith('extends')
                 ? 'extends'
-                : result.includes('is')
+                : identifiers.includes('is')
                   ? 'is'
-                  : result.match(/[A-Za-z_$][\w$]*/g)!.at(-1)!;
+                  : identifiers.at(-1)!;
               const start = source.lastIndexOf(target);
               let previous = target;
               try {

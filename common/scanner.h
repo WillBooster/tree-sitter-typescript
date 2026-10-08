@@ -1400,6 +1400,8 @@ typedef struct {
     bool binding_type;
     bool default_value;
     bool default_parameter;
+    bool default_declaration_header;
+    bool default_type;
 } TypeGroupFrame;
 
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, bool *pending_return, bool complete_conditionals);
@@ -1671,6 +1673,29 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     }
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
                 }
+                bool default_member = complete_conditionals && group->default_value && group->property;
+                bool default_assertion = complete_conditionals && group->default_value && !group->property &&
+                    !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&
+                    (strcmp(word, "as") == 0 || strcmp(word, "satisfies") == 0);
+                if (complete_conditionals && group->default_value) {
+                    bool member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
+                    if (!group->property && !member_name && ascii_word && strcmp(word, "extends") == 0 &&
+                        !group->default_declaration_header && !group->default_type && end != '>') break;
+                    if (!group->property && !member_name && ascii_word && (strcmp(word, "class") == 0 || strcmp(word, "function") == 0)) {
+                        group->default_declaration_header = true;
+                    }
+                    if (default_assertion) group->default_type = true;
+                    if (group->default_type || end == '>') {
+                        if (!group->property && ascii_word && strcmp(word, "extends") == 0 &&
+                            !group->default_declaration_header && !group->infer_constraint &&
+                            !(parameter_position && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END))) {
+                            group->question_pending = true;
+                        }
+                        group->infer_constraint = group->infer_name;
+                        group->infer_name = !group->property && ascii_word && strcmp(word, "infer") == 0;
+                    }
+                    group->property = false;
+                }
                 bool computed_key = frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
                 if (computed_key && !first_operand && !(ascii_word && strcmp(word, "in") == 0)) {
                     stack[size - 1].context |= TYPE_EXPRESSION_GROUP;
@@ -1679,8 +1704,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool mapped_operand = frame == COMPUTED_PROPERTY_GROUP_END && ascii_word &&
                     ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
                      (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
-                bool prefix = !computed_key && first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
-                bool extends_operand = !computed_key && ascii_word && strcmp(word, "extends") == 0 &&
+                bool prefix = !computed_key && !default_member && first_operand && ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
+                bool extends_operand = !computed_key && !default_member && ascii_word && strcmp(word, "extends") == 0 &&
                     (!complete_conditionals || (!first_operand && !operand_pending && !group->property));
                 if (complete_conditionals && !group->default_value) {
                     group->operand_required = prefix || extends_operand || mapped_operand ||
@@ -1694,7 +1719,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 operand_pending = prefix;
                 query_operand = prefix && strcmp(word, "typeof") == 0;
-                first_operand = (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
+                first_operand = default_assertion || (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
                 if (extends_operand || mapped_operand) {
                     parameter_position = false;
                     if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1].context &= ~TYPE_GROUP_PARAMETER;
@@ -1727,6 +1752,23 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
                 member_line_break = true;
+            }
+            if (complete_conditionals && group->default_value && !computed_expression &&
+                (c == end || c == ',' || c == ';') &&
+                (group->question_pending || group->conditional_depth || (group->conditional_branch && first_operand))) break;
+            if (complete_conditionals && group->default_value && !is_whitespace(c)) {
+                if (c == ':' && parameter_position && end == ')' && !group->conditional_depth) group->default_type = true;
+                if (c == ':' && group->conditional_depth) {
+                    if (first_operand) break;
+                    group->conditional_depth--;
+                }
+                if (c == ',' || c == ';') group->conditional_branch = false;
+                if (c == ',' && (frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)) group->default_type = false;
+                group->property = c == '.';
+                if (c == '{') {
+                    if (group->default_declaration_header || !first_operand) group->default_type = false;
+                    group->default_declaration_header = false;
+                }
             }
             bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
             bool pending_parameter = c == end && end == ')' && parameter_position &&
@@ -1767,6 +1809,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (c == ',' && group->default_parameter) {
                 group->default_value = false;
                 group->default_parameter = false;
+                group->default_declaration_header = false;
+                group->default_type = false;
             }
             bool consumed_operator = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && (!complete_conditionals || group->exact_object) && c == '|';
             if (consumed_operator) {
@@ -1810,7 +1854,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (check_type_operands && operand_pending && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || (c == '=' && !binding_frame && !parameter_default) || (c == '>' && !binding_frame) || c == '|' || c == '&')) break;
             if (check_type_operands && operand_pending && parameter_default && !binding_frame) stack[size - 1].context = FUNCTION_PARAMETER_GROUP_END;
-            if (check_type_operands && (context & TYPE_GROUP_PARAMETER) && c == ':' && frame == TYPE_OPERAND_GROUP_END) stack[size - 1].context = FUNCTION_PARAMETER_GROUP_END;
+            if (check_type_operands && (context & TYPE_GROUP_PARAMETER) && c == ':' && frame == TYPE_OPERAND_GROUP_END && (!group->default_value || !group->conditional_branch)) stack[size - 1].context = FUNCTION_PARAMETER_GROUP_END;
             bool expression_annotation = check_expression_operands && c == ':' &&
                 ((end == ')' && (first_operand || (context & TYPE_GROUP_PARAMETER))) || (context & TYPE_EXPRESSION_METHOD_BODY));
             if (expression_annotation) {
@@ -1822,6 +1866,24 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->operand_required = true;
             }
             if (!consumed_operator) advance(lexer);
+            if (complete_conditionals && group->default_value && c == '?' && !computed_expression &&
+                !(lexer->lookahead == ':' && parameter_position &&
+                  (binding_frame || (context & TYPE_GROUP_PARAMETER)))) {
+                if (lexer->lookahead == '?') advance(lexer);
+                else {
+                    bool optional_chain = lexer->lookahead == '.';
+                    if (optional_chain) {
+                        advance(lexer);
+                        optional_chain = !is_ascii_digit(lexer->lookahead);
+                        group->property = optional_chain;
+                    }
+                    if (!optional_chain) {
+                        group->question_pending = false;
+                        group->conditional_depth++;
+                        group->conditional_branch = true;
+                    }
+                }
+            }
             if (!group->default_value && lexer->lookahead != '>' &&
                 (parameter_default || (check_type_operands && c == '=' &&
                  (frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)))) {
@@ -1832,6 +1894,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->conditional_branch = false;
                 group->default_value = true;
                 group->default_parameter = true;
+                group->default_declaration_header = false;
+                group->default_type = false;
             }
             if (complete_conditionals && check_type_operands && !computed_expression && !group->default_value && c == '?' &&
                 !scan_type_question_tail(lexer, group->conditional_depth != 0)) break;
@@ -1903,6 +1967,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 first_operand = operand_pending;
                 query_operand = false;
                 if (arrow_header) parameter_position = false;
+                if (complete_conditionals && group->default_value && frame == METHOD_PARAMETER_GROUP_END && size > 1) {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    if (lexer->lookahead == ':') stack[size - 2].default_type = true;
+                }
                 if (--size == 0) {
                     if (pending_return) *pending_return = operand_pending;
                     result = true;
@@ -1989,7 +2057,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if ((push & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !(push & TYPE_EXPRESSION_GROUP)) push |= TYPE_GROUP_PARAMETER;
             bool default_value = stack[size - 1].default_value;
-            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object};
+            bool default_type = stack[size - 1].default_type || (default_value && c == '<');
+            bool default_declaration_header = default_value && c == '<' && stack[size - 1].default_declaration_header;
+            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header};
         }
     }
     ts_free(stack);
