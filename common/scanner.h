@@ -1400,6 +1400,8 @@ typedef struct {
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, bool *pending_return, bool complete_conditionals);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
 static bool scan_type_identifier_operand(TSLexer *lexer);
+static bool scan_type_question_tail(TSLexer *lexer, bool conditional);
+static bool scan_type_numeric_operand(TSLexer *lexer);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START];
@@ -1554,7 +1556,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     if (!stack) return false;
     stack[0] = (TypeGroupFrame){.context = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && close == ')' ? TYPE_OPERAND_GROUP_END | TYPE_GROUP_PARAMETER : close};
     bool result = false;
-    bool slot_named = true;
+    bool slot_named = true, slot_annotation = false;
     bool first_operand = close != UNTYPED_PARAMETER_GROUP_END, operand_pending = false, query_operand = false, parameter_position = close != TYPE_SUBSTITUTION_GROUP_END, member_line_break = false;
     if (type_operands && close == '}' && lexer->lookahead == '|') advance(lexer);
     while (!lexer->eof(lexer)) {
@@ -1571,6 +1573,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~TYPE_GROUP_PARAMETER;
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
+        if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && slot_named && !slot_annotation &&
+            (is_identifier_part(c) || c == '\\')) break;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
             if (c == ',') break;
             if (c != ')' && c != '/' && !is_whitespace(c)) {
@@ -1585,7 +1589,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     slot_named = true;
                     continue;
                 }
-                if ((is_identifier_part(c) && !is_ascii_digit(c)) || c == '[' || c == '{') slot_named = true;
+                if ((is_identifier_part(c) && !is_ascii_digit(c)) || c == '\\') {
+                    if (!scan_type_identifier_operand(lexer)) break;
+                    slot_named = true;
+                    continue;
+                }
+                if (c == '[' || c == '{') slot_named = true;
                 else break;
             }
         }
@@ -1770,6 +1779,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 stack[size - 1].context |= TYPE_EXPRESSION_TYPE;
             }
             if (!consumed_operator) advance(lexer);
+            if (complete_conditionals && check_type_operands && !computed_expression && c == '?' &&
+                !scan_type_question_tail(lexer, group->conditional_depth != 0)) break;
             if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && (c == '|' || c == '&' || c == '=' || c == '<' || (c == '[' && !first_operand))) stack[size - 1].context &= ~TYPE_GROUP_PARAMETER;
             if (check_type_operands && frame == TYPE_OPERAND_GROUP_END && parameter_position && first_operand && c == '.' && lexer->lookahead == '.') {
                 advance(lexer);
@@ -1899,7 +1910,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (!is_whitespace(c)) {
                 if (close == UNTYPED_PARAMETER_GROUP_END && size == 1) {
-                    if (c == ',') slot_named = false;
+                    if (c == ',') {
+                        slot_named = false;
+                        slot_annotation = false;
+                    } else if (c == ':' || c == '=') slot_annotation = true;
                 }
                 bool member_separator = c == ';' && frame == OBJECT_PROPERTY_GROUP_END;
                 first_operand = c == '(' || c == '[' || c == '{' || c == '<' || c == ',' || c == '|' || c == '&' || c == '?' || c == ':' || c == '=' || member_separator;
@@ -1934,7 +1948,10 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         if (is_identifier_part(c)) {
             char word[16] = {0};
-            bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+            bool ascii_word = false;
+            if (untyped_return && is_ascii_digit(c)) {
+                if (!scan_type_numeric_operand(lexer)) return false;
+            } else ascii_word = scan_identifier(lexer, word, sizeof(word), false);
             if (untyped_return && line_break && conditional_depth == 0 && !conditional_question_pending && !return_operand && !member_property &&
                 !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
                                   (abstract_constructor && strcmp(word, "new") == 0)))) return true;
@@ -2024,12 +2041,19 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         bool generic_parameters = !allow_expression && first && c == '<';
         bool pending_operand = return_operand || member_property;
         if (untyped_return && (c == ':' || (c == '?' && saw_extends)) && pending_operand) return false;
+        if (untyped_return && (c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || c == '*' || c == '+' || c == '-')) {
+            if (line_break && !pending_operand && !conditional_depth && !conditional_question_pending &&
+                (c == '+' || c == '-' || c == '!' || c == '~' || c == '#')) return true;
+            if ((c != '+' && c != '-') || !return_operand) return false;
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, false)) return false;
+            if (lexer->lookahead == '.') advance(lexer);
+            if (!is_ascii_digit(lexer->lookahead)) return false;
+            continue;
+        }
         advance(lexer);
         if (untyped_return && c == '?') {
-            if (lexer->lookahead == '.') {
-                advance(lexer);
-                if (!saw_extends || !is_ascii_digit(lexer->lookahead)) return false;
-            }
+            if (!scan_type_question_tail(lexer, saw_extends)) return false;
             if (!saw_extends) return !pending_operand;
         }
         if ((c == '<' || c == '-') && scan_type_html_comment_tail(lexer, c)) return false;
@@ -2087,6 +2111,36 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         }
     }
     return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
+}
+
+static bool scan_type_numeric_operand(TSLexer *lexer) {
+    int32_t first = lexer->lookahead;
+    advance(lexer);
+    if (first == '0' && (lexer->lookahead == 'x' || lexer->lookahead == 'X' ||
+                        lexer->lookahead == 'b' || lexer->lookahead == 'B' ||
+                        lexer->lookahead == 'o' || lexer->lookahead == 'O')) {
+        while (is_identifier_part(lexer->lookahead)) advance(lexer);
+        return true;
+    }
+    while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+    if (lexer->lookahead == '.') {
+        advance(lexer);
+        while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+    }
+    if (lexer->lookahead == 'e' || lexer->lookahead == 'E') {
+        advance(lexer);
+        if (lexer->lookahead == '+' || lexer->lookahead == '-') advance(lexer);
+        if (!is_ascii_digit(lexer->lookahead)) return false;
+        while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+    }
+    if (lexer->lookahead == 'n') advance(lexer);
+    return true;
+}
+
+static bool scan_type_question_tail(TSLexer *lexer, bool conditional) {
+    if (lexer->lookahead != '.') return true;
+    advance(lexer);
+    return conditional && is_ascii_digit(lexer->lookahead);
 }
 
 static bool scan_type_identifier_operand(TSLexer *lexer) {
