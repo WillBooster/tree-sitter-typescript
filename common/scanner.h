@@ -1771,10 +1771,17 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
             }
             bool binding_frame = parameter_position && (frame == OBJECT_PROPERTY_GROUP_END || frame == COMPUTED_PROPERTY_GROUP_END || frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
-            bool pending_parameter = c == end && end == ')' && parameter_position &&
-                (frame == TYPE_OPERAND_GROUP_END || frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END);
+            bool completed_name = parameter_position &&
+                ((frame == OBJECT_PROPERTY_GROUP_END && !group->binding_type && (c == end || c == ',' || c == ';')) ||
+                 (end == ')' && (c == end || c == ',' || c == '?') &&
+                  (frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END ||
+                   (frame == TYPE_OPERAND_GROUP_END && (context & TYPE_GROUP_PARAMETER)))));
             if (complete_conditionals && check_type_operands && !computed_expression && !group->default_value &&
-                (c == end || c == ',' || c == ';') && group->operand_required && !pending_parameter) break;
+                (c == end || c == ',' || c == ';') && group->operand_required && !completed_name) break;
+            if (complete_conditionals && completed_name) {
+                group->operand_required = false;
+                if (c == ',') operand_pending = false;
+            }
             if (complete_conditionals && check_type_operands && !group->default_value && !is_whitespace(c)) {
                 group->infer_name = false;
                 group->infer_constraint = false;
