@@ -78,7 +78,7 @@ fuzzed with. Use runtime 1.4.3 or later:
 ```toml
 [dependencies]
 tree-sitter = { package = "willbooster-tree-sitter", version = "1.4.3" }
-tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "6" }
+tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "7" }
 ```
 
 ```rust
