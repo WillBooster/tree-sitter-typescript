@@ -27,7 +27,7 @@ annotations.
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. Both compact ABI 16 parsers require runtime 1.3.0 or later.
+for `.tsx` files. Use runtime 1.4.3 or later to preserve constructor result types during error recovery.
 
 In Node.js and Bun:
 
@@ -73,12 +73,12 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. The compact ABI 16 parser requires runtime 1.3.0 or later:
+fuzzed with. Use runtime 1.4.3 or later:
 
 ```toml
 [dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "1.3.0" }
-tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "6" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "1.4.3" }
+tree-sitter-typescript = { package = "willbooster-tree-sitter-typescript", version = "7" }
 ```
 
 ```rust
