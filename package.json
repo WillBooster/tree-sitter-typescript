@@ -54,7 +54,7 @@
     "@vitest/browser-playwright": "5.0.3",
     "@willbooster/oxfmt-config": "1.2.2",
     "@willbooster/oxlint-config": "1.4.8",
-    "@willbooster/tree-sitter-javascript": "2.0.1",
+    "@willbooster/tree-sitter-javascript": "4.0.3",
     "@willbooster/wb": "22.23.1",
     "@willbooster/web-tree-sitter": "1.4.5",
     "conventional-changelog-conventionalcommits": "10.4.0",
