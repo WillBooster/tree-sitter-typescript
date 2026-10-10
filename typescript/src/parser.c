@@ -21228,12 +21228,12 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 172:
       ts_lex_state_172:
-      ACCEPT_TOKEN(sym_hash_bang_line);
       if (!eof &&
           lookahead != '\n' &&
           lookahead != '\r' &&
           lookahead != 0x2028 &&
           lookahead != 0x2029) TS_LEX_REPEAT(false, ts_lex_state_172);
+      ACCEPT_TOKEN(sym_hash_bang_line);
       END_STATE();
     case 173:
       ACCEPT_TOKEN(anon_sym_STAR);
@@ -21724,12 +21724,12 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 296:
       ts_lex_state_296:
-      ACCEPT_TOKEN(sym_unescaped_double_string_fragment);
       if (!eof &&
           lookahead != '\n' &&
           lookahead != '\r' &&
           lookahead != '"' &&
           lookahead != '\\') TS_LEX_REPEAT(false, ts_lex_state_296);
+      ACCEPT_TOKEN(sym_unescaped_double_string_fragment);
       END_STATE();
     case 297:
       ACCEPT_TOKEN(sym_unescaped_single_string_fragment);
@@ -21787,12 +21787,12 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 302:
       ts_lex_state_302:
-      ACCEPT_TOKEN(sym_unescaped_single_string_fragment);
       if (!eof &&
           lookahead != '\n' &&
           lookahead != '\r' &&
           lookahead != '\'' &&
           lookahead != '\\') TS_LEX_REPEAT(false, ts_lex_state_302);
+      ACCEPT_TOKEN(sym_unescaped_single_string_fragment);
       END_STATE();
     case 303:
       ACCEPT_TOKEN(sym_escape_sequence);
@@ -21819,12 +21819,12 @@ static bool ts_lex(TSLexer *lexer, TSStateId state) {
       END_STATE();
     case 309:
       ts_lex_state_309:
-      ACCEPT_TOKEN(sym_comment);
       if (!eof &&
           lookahead != '\n' &&
           lookahead != '\r' &&
           lookahead != 0x2028 &&
           lookahead != 0x2029) TS_LEX_REPEAT(false, ts_lex_state_309);
+      ACCEPT_TOKEN(sym_comment);
       END_STATE();
     case 310:
       ACCEPT_TOKEN(anon_sym_BQUOTE);
