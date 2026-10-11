@@ -14,8 +14,11 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/1.0.0/tree_sitter/struct.Parser.html
+//! The parsers load only with the [willbooster-tree-sitter] runtime, version 2.0.0 or later.
+//!
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/2/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
+//! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 
 use tree_sitter_language::LanguageFn;
 
