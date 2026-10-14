@@ -81,9 +81,16 @@ module.exports = function defineGrammar(dialect) {
       $._predefined_parameter_name,
       $._predefined_annotated_name,
       $._arrow_predefined_return_start,
+      $._conditional_predefined_parameter_name,
     ],
 
-    supertypes: ($, previous) => [...previous, $.type, $.primary_type],
+    supertypes: ($, previous) => [
+      ...previous,
+      $.type,
+      $.primary_type,
+      $._conditional_right_type,
+      $._conditional_parameter_pattern,
+    ],
 
     precedences: ($, previous) => [
       ...withTypeArgumentsTarget($, previous),
@@ -159,6 +166,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$.formal_parameters, $._conditional_function_parameters],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
       [$.infer_type],
@@ -1161,13 +1169,48 @@ module.exports = function defineGrammar(dialect) {
           seq(
             field('left', $.type),
             'extends',
-            field('right', $.type),
+            field('right', alias($._conditional_right_type, $.type)),
             '?',
             field('consequence', $.type),
             ':',
             field('alternative', $.type)
           )
         ),
+
+      _conditional_right_type: ($) => choice($.type, alias($._conditional_function_type, $.function_type)),
+
+      _conditional_function_type: ($) =>
+        prec.left(
+          seq(
+            field('type_parameters', optional($.type_parameters)),
+            field('parameters', alias($._conditional_function_parameters, $.formal_parameters)),
+            '=>',
+            field('return_type', choice($.type, $.asserts, $.type_predicate))
+          )
+        ),
+
+      _conditional_function_parameters: ($) =>
+        seq(
+          '(',
+          repeat(seq($._formal_parameter, ',')),
+          $._conditional_parameter,
+          repeat(seq(',', choice($._formal_parameter, $._conditional_parameter))),
+          optional(','),
+          ')'
+        ),
+
+      _conditional_parameter: ($) =>
+        choice(
+          alias($._conditional_untyped_parameter, $.required_parameter),
+          alias($._conditional_untyped_optional_parameter, $.optional_parameter)
+        ),
+
+      _conditional_untyped_optional_parameter: ($) =>
+        seq(field('pattern', alias($._conditional_parameter_pattern, $.pattern)), '?'),
+
+      _conditional_untyped_parameter: ($) => field('pattern', alias($._conditional_parameter_pattern, $.pattern)),
+
+      _conditional_parameter_pattern: ($) => alias($._conditional_predefined_parameter_name, $.identifier),
 
       generic_type: ($) => prec('call', seq($._generic_type_guarded_name, field('type_arguments', $.type_arguments))),
 

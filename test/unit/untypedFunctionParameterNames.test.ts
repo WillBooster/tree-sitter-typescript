@@ -25,6 +25,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             .join('\n')
         )
     );
+    queries.push(
+      new Query(language, '(type/function_type) @function (required_parameter pattern: (pattern/identifier) @binding)')
+    );
   }, 30_000);
   afterAll(() => {
     for (const query of queries) query.delete();
@@ -204,6 +207,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       const parser = new Parser().setLanguage(language);
       try {
         for (const source of [
+          `type F<T> = T extends (${name})=>number ?.5:false;`,
+          `type F<T> = T extends (${name}?)=>number ?.5:false;`,
+          `type F<T> = T extends (${name}?)=>number ? true:false;`,
+          `type F<T> = T extends <U>(${name})=>U ?.5:false;`,
+          `type F<T> = T extends (first: string, ${name}, last: number)=>number ?.5:false;`,
+          `type F<T> = T extends (${name})=>(U extends V ? string : number) ?.5:false;`,
           `type F<T> = T extends (${name})=>number ? true:false;`,
           `type F<T> = T extends (${name})=>infer R ? R:never;`,
           `type F=(${name})=>new()=>T;`,
@@ -234,6 +243,67 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           }
         }
       } finally {
+        parser.delete();
+      }
+    }
+  );
+
+  test.each(['unknown', 'never', 'unique'])(
+    'keeps conditional probes local during preceding repairs for %s',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
+      const prefix = 'type Earlier = T extends ';
+      try {
+        for (const [suffix, expectedNames] of [
+          [`type F<T> = T extends (${name})=>number ?.5:false;`, [name]],
+          [`type F = (${name})=>number ?.5:false;`, []],
+          [`type F<T> = T extends {p:(${name})=>number ?.5:false} ? true:false;`, []],
+        ] as const) {
+          let source = `${prefix}; ${suffix}`;
+          let tree: Tree | undefined = parser.parse(source)!;
+          let previousRepair = '';
+          try {
+            expect(bindings.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(expectedNames);
+            for (const repair of ['U ? 1 : 0', '', 'U ? 1 : 0']) {
+              const nextSource = `${prefix}${repair}; ${suffix}`;
+              const previousTree = tree!;
+              tree = undefined;
+              try {
+                tree = compareEditedTree(
+                  parser,
+                  previousTree,
+                  nextSource,
+                  new Edit({
+                    startIndex: prefix.length,
+                    oldEndIndex: prefix.length + previousRepair.length,
+                    newEndIndex: prefix.length + repair.length,
+                    startPosition: position(source, prefix.length),
+                    oldEndPosition: position(source, prefix.length + previousRepair.length),
+                    newEndPosition: position(nextSource, prefix.length + repair.length),
+                  }),
+                  (incremental, fresh) => {
+                    expect(bindings.captures(incremental.rootNode).map(({ node }) => node.text)).toEqual(expectedNames);
+                    for (const query of queries) {
+                      expect(
+                        query.captures(incremental.rootNode).map(({ name, node }) => [name, snapshot(node)])
+                      ).toEqual(query.captures(fresh.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+                    }
+                  },
+                  true
+                );
+              } finally {
+                previousTree.delete();
+              }
+              previousRepair = repair;
+              source = nextSource;
+            }
+          } finally {
+            tree?.delete();
+          }
+        }
+      } finally {
+        bindings.delete();
         parser.delete();
       }
     }
