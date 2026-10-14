@@ -109,7 +109,7 @@ runtime this package ships. The first run downloads that CLI from its GitHub Rel
 
 `bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
 `tsx/src/` and builds both Wasm files. It also refreshes `common/typeScriptKeywords.h` from the pinned
-`typescript-reference` API (TypeScript 5.9.3), which supplies the global-augmentation lookahead vocabulary.
+`typescript-reference` API (TypeScript 6 via `@typescript/typescript6`), which supplies the global-augmentation lookahead vocabulary.
 The native TypeScript package remains the type checker. Run `bun run generate-keywords` after changing the reference;
 verification checks the committed header with `bun run check-keywords`.
 
