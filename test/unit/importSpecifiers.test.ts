@@ -1,4 +1,4 @@
-import { Parser } from '@willbooster/web-tree-sitter';
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -52,6 +52,58 @@ test('matches TypeScript on named-export modifiers and identifier fields', async
     'export { type "remote" as local } from "m";'
   );
   await expectSpecifiers(sources, 'export');
+});
+
+test('queries distinguish binding imports from side-effect imports', async () => {
+  const source = `
+import value from "default";
+import * as namespace from "namespace";
+import { remote as local } from "named";
+import valueAndNames, { other } from "combined";
+import type { Type } from "types";
+import required = require("dependency");
+import "side-effect";
+`;
+  const reference = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.Latest, true);
+  const imports = reference.statements.filter(ts.isImportDeclaration);
+  const expectedBindings = imports.flatMap((statement) =>
+    statement.importClause ? [statement.importClause.getText(reference).replace(/^type /, '')] : []
+  );
+  const expectedRequireBindings = reference.statements
+    .filter(ts.isImportEqualsDeclaration)
+    .map((statement) => source.slice(statement.name.getStart(reference), statement.moduleReference.end));
+  const expectedSideEffects = imports
+    .filter((statement) => !statement.importClause)
+    .map((statement) => statement.getText(reference));
+  await Parser.init();
+  for (const dialect of ['typescript', 'tsx']) {
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(
+      language,
+      `
+      (import_statement import_clause: (import_clause) @bindings)
+      (import_statement import_clause: (import_require_clause) @requireBindings)
+      (import_statement !import_clause) @sideEffect
+    `
+    );
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(false);
+      const captures = query.captures(tree.rootNode);
+      expect(captures.filter(({ name }) => name === 'bindings').map(({ node }) => node.text)).toEqual(expectedBindings);
+      expect(captures.filter(({ name }) => name === 'requireBindings').map(({ node }) => node.text)).toEqual(
+        expectedRequireBindings
+      );
+      expect(captures.filter(({ name }) => name === 'sideEffect').map(({ node }) => node.text)).toEqual(
+        expectedSideEffects
+      );
+    } finally {
+      tree.delete();
+      query.delete();
+      parser.delete();
+    }
+  }
 });
 
 async function expectSpecifiers(sources: string[], kind: 'import' | 'export'): Promise<void> {

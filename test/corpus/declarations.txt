@@ -2107,14 +2107,14 @@ import { type "as" as type } from 'x';
 
 (program
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier))))
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier)
@@ -2122,7 +2122,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier))
@@ -2131,14 +2131,14 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier))))
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier)
@@ -2146,7 +2146,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier)
@@ -2154,7 +2154,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier)
@@ -2162,7 +2162,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (identifier)
@@ -2170,7 +2170,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (string
@@ -2179,7 +2179,7 @@ import { type "as" as type } from 'x';
     source: (string
       (string_fragment)))
   (import_statement
-    (import_clause
+    import_clause: (import_clause
       (named_imports
         (import_specifier
           name: (string

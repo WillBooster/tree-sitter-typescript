@@ -2941,6 +2941,20 @@
     "type": "import_statement",
     "named": true,
     "fields": {
+      "import_clause": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "import_clause",
+            "named": true
+          },
+          {
+            "type": "import_require_clause",
+            "named": true
+          }
+        ]
+      },
       "source": {
         "multiple": false,
         "required": false,
@@ -2953,19 +2967,11 @@
       }
     },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": false,
       "types": [
         {
           "type": "import_attribute",
-          "named": true
-        },
-        {
-          "type": "import_clause",
-          "named": true
-        },
-        {
-          "type": "import_require_clause",
           "named": true
         }
       ]
