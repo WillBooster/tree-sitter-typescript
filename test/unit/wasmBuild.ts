@@ -1,24 +1,27 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { generationInputMtime } from '../helpers/generationInputs.js';
+
 import { Language } from '@willbooster/web-tree-sitter';
 
 const Root = path.join(import.meta.dirname, '../..');
 
-// Loads the Wasm build that the package ships. Only `bun run build/ci` rebuilds it, so a test against a stale one would
-// pass after a source edit; this fails instead. Call `Parser.init()` first.
+// Call `Parser.init()` before loading the package’s Wasm build. Source freshness is checked because tests load the existing build.
 export async function loadCurrentWasmBuild(grammar: string): Promise<Language> {
   const wasmPath = path.join(Root, `tree-sitter-${grammar}.wasm`);
-  // src/parser.c is generated from the grammar, so an edit to the grammar alone also makes the Wasm build stale.
   const sources = [
     'common/defineGrammar.js',
     'common/scanner.h',
     `${grammar}/grammar.js`,
     `${grammar}/src/parser.c`,
     `${grammar}/src/scanner.c`,
+    `${grammar}/src/tree_sitter/parser.h`,
   ].map((name) => fs.statSync(path.join(Root, name)).mtimeMs);
-  if (Math.max(...sources) > fs.statSync(wasmPath).mtimeMs) {
-    throw new Error(`common/ or ${grammar}/ changed after the Wasm build was built; run \`bun run build/ci\``);
+  if (Math.max(generationInputMtime(Root), ...sources) > fs.statSync(wasmPath).mtimeMs) {
+    throw new Error(
+      `generation inputs or ${grammar}/src/ changed after the Wasm build was built; run \`bun run build/ci\``
+    );
   }
   return Language.load(wasmPath);
 }

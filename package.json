@@ -27,11 +27,12 @@
     "*.wasm"
   ],
   "scripts": {
-    "build-wasm": "script/tree-sitter build --wasm typescript && script/tree-sitter build --wasm tsx",
-    "build/ci": "bun run generate-keywords && script/tree-sitter generate typescript/grammar.js && script/tree-sitter generate tsx/grammar.js && bun run build-wasm",
+    "build-wasm": "script/generate --build-wasm",
+    "build/ci": "bun run build-wasm",
     "check-keywords": "bun scripts/generateGlobalKeywords.ts --check",
-    "cleanup": "bun run check-keywords && bun wb lint --fix --format",
+    "cleanup": "bun wb lint --fix --format",
     "format": "bun wb lint --format",
+    "generate": "script/generate",
     "generate-keywords": "bun scripts/generateGlobalKeywords.ts",
     "lint": "bun wb lint",
     "lint-fix": "bun wb lint --fix",
@@ -50,28 +51,28 @@
   "devDependencies": {
     "@tsconfig/bun": "1.0.11",
     "@types/bun": "1.4.2",
-    "@vitest/browser-playwright": "5.0.2",
+    "@vitest/browser-playwright": "5.0.3",
     "@willbooster/oxfmt-config": "1.2.2",
     "@willbooster/oxlint-config": "1.4.8",
     "@willbooster/tree-sitter-javascript": "2.0.1",
-    "@willbooster/wb": "22.18.0",
-    "@willbooster/web-tree-sitter": "1.1.6",
+    "@willbooster/wb": "22.24.0",
+    "@willbooster/web-tree-sitter": "2.0.1",
     "conventional-changelog-conventionalcommits": "10.4.0",
-    "lefthook": "2.1.14",
-    "oxfmt": "0.70.0",
-    "oxlint": "1.85.0",
+    "lefthook": "2.1.16",
+    "oxfmt": "0.71.0",
+    "oxlint": "1.86.0",
     "oxlint-tsgolint": "7.0.2003",
     "playwright": "1.63.0",
     "semantic-release": "25.0.9",
     "sort-package-json": "4.0.0",
     "typescript": "7.0.2",
-    "typescript-reference": "npm:typescript@5.9.3",
+    "typescript-reference": "npm:@typescript/typescript6@6.0.2",
     "vite": "8.3.1",
-    "vitest": "5.0.2",
-    "wrangler": "4.141.0"
+    "vitest": "5.0.3",
+    "wrangler": "4.147.0"
   },
   "peerDependencies": {
-    "@willbooster/web-tree-sitter": "^1.0.0"
+    "@willbooster/web-tree-sitter": "^2.0.0"
   },
   "peerDependenciesMeta": {
     "@willbooster/web-tree-sitter": {
