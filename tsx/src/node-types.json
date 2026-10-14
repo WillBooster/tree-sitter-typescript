@@ -2948,6 +2948,10 @@
           {
             "type": "import_clause",
             "named": true
+          },
+          {
+            "type": "import_require_clause",
+            "named": true
           }
         ]
       },
@@ -2963,15 +2967,11 @@
       }
     },
     "children": {
-      "multiple": true,
+      "multiple": false,
       "required": false,
       "types": [
         {
           "type": "import_attribute",
-          "named": true
-        },
-        {
-          "type": "import_require_clause",
           "named": true
         }
       ]

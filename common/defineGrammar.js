@@ -581,7 +581,7 @@ module.exports = function defineGrammar(dialect) {
           optional(choice('type', 'typeof')),
           choice(
             seq(field('import_clause', $.import_clause), $._from_clause),
-            $.import_require_clause,
+            field('import_clause', $.import_require_clause),
             field('source', $.string)
           ),
           optional(choice($.import_attribute, $._line_break_before_attributes)),

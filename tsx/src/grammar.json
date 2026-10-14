@@ -1160,8 +1160,12 @@
               ]
             },
             {
-              "type": "SYMBOL",
-              "name": "import_require_clause"
+              "type": "FIELD",
+              "name": "import_clause",
+              "content": {
+                "type": "SYMBOL",
+                "name": "import_require_clause"
+              }
             },
             {
               "type": "FIELD",

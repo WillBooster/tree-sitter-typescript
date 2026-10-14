@@ -61,6 +61,7 @@ import * as namespace from "namespace";
 import { remote as local } from "named";
 import valueAndNames, { other } from "combined";
 import type { Type } from "types";
+import required = require("dependency");
 import "side-effect";
 `;
   const reference = ts.createSourceFile('imports.ts', source, ts.ScriptTarget.Latest, true);
@@ -68,9 +69,12 @@ import "side-effect";
   const expectedBindings = imports.flatMap((statement) =>
     statement.importClause ? [statement.importClause.getText(reference).replace(/^type /, '')] : []
   );
+  const expectedRequireBindings = reference.statements
+    .filter(ts.isImportEqualsDeclaration)
+    .map((statement) => source.slice(statement.name.getStart(reference), statement.moduleReference.end));
   const expectedSideEffects = imports
     .filter((statement) => !statement.importClause)
-    .map((statement) => statement.moduleSpecifier.getText(reference));
+    .map((statement) => statement.getText(reference));
   await Parser.init();
   for (const dialect of ['typescript', 'tsx']) {
     const language = await loadCurrentWasmBuild(dialect);
@@ -79,7 +83,8 @@ import "side-effect";
       language,
       `
       (import_statement import_clause: (import_clause) @bindings)
-      (import_statement !import_clause source: (string) @sideEffect)
+      (import_statement import_clause: (import_require_clause) @requireBindings)
+      (import_statement !import_clause) @sideEffect
     `
     );
     const tree = parser.parse(source)!;
@@ -87,6 +92,9 @@ import "side-effect";
       expect(tree.rootNode.hasError).toBe(false);
       const captures = query.captures(tree.rootNode);
       expect(captures.filter(({ name }) => name === 'bindings').map(({ node }) => node.text)).toEqual(expectedBindings);
+      expect(captures.filter(({ name }) => name === 'requireBindings').map(({ node }) => node.text)).toEqual(
+        expectedRequireBindings
+      );
       expect(captures.filter(({ name }) => name === 'sideEffect').map(({ node }) => node.text)).toEqual(
         expectedSideEffects
       );
