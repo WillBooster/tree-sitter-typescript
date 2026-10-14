@@ -83,7 +83,7 @@ module.exports = function defineGrammar(dialect) {
       $._arrow_predefined_return_start,
     ],
 
-    supertypes: ($, previous) => [...previous, $.type, $.primary_type],
+    supertypes: ($, previous) => [...previous, $.type, $.primary_type, $._default_export_declaration],
 
     precedences: ($, previous) => [
       ...withTypeArgumentsTarget($, previous),
@@ -588,9 +588,34 @@ module.exports = function defineGrammar(dialect) {
           $._semicolon
         ),
 
-      export_statement: ($, previous) =>
+      export_statement: ($) =>
         choice(
-          previous,
+          seq(
+            'export',
+            choice(
+              seq(
+                choice('*', $.namespace_export, $.export_clause),
+                $._from_clause,
+                optional(choice($.import_attribute, $._line_break_before_attributes))
+              ),
+              alias($._local_export_clause, $.export_clause)
+            ),
+            $._semicolon
+          ),
+          seq(
+            repeat(field('decorator', $.decorator)),
+            'export',
+            choice(
+              field('declaration', $.declaration),
+              seq(
+                alias($._export_default, 'default'),
+                choice(
+                  field('declaration', alias($._default_export_declaration, $.declaration)),
+                  seq(field('value', $.expression), $._semicolon)
+                )
+              )
+            )
+          ),
           seq('export', field('declaration', alias($.global_declaration, $.internal_module))),
           seq(
             'export',
@@ -603,6 +628,16 @@ module.exports = function defineGrammar(dialect) {
           seq('export', 'type', alias($._local_export_clause, $.export_clause), $._semicolon),
           seq('export', '=', $.expression, $._semicolon),
           seq('export', 'as', 'namespace', $.identifier, $._semicolon)
+        ),
+
+      _default_export_declaration: ($) =>
+        choice(
+          $.function_declaration,
+          $.generator_function_declaration,
+          $.function_signature,
+          $.class_declaration,
+          $.abstract_class_declaration,
+          $.interface_declaration
         ),
 
       _using_declarator: ($) =>

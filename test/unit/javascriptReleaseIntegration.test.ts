@@ -1,10 +1,55 @@
 import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
+import ts from 'typescript-reference';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 await Parser.init();
 for (const dialect of ['typescript', 'tsx']) {
   const language = await loadCurrentWasmBuild(dialect);
+  test(`${dialect} rejects default variable and resource declarations`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const declaration of [
+        'let value = 42;',
+        'const value = 42;',
+        'var value = 42;',
+        'using value = create();',
+        'await using value = create();',
+        'type Value = string;',
+        'enum Value { One }',
+      ]) {
+        for (const separator of [' ', '/* comment */', '\n']) {
+          const source = `export default${separator}${declaration}`;
+          const reference = ts.transpileModule(source, { reportDiagnostics: true });
+          expect(reference.diagnostics?.length, source).toBeGreaterThan(0);
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(true);
+          } finally {
+            tree.delete();
+          }
+        }
+        const named = parser.parse(`export ${declaration}`)!;
+        try {
+          expect(named.rootNode.hasError, declaration).toBe(false);
+        } finally {
+          named.delete();
+        }
+      }
+      for (const value of ['let', 'using', 'abstract', 'async', 'value', '(value = 42)']) {
+        const tree = parser.parse(`export default ${value};`)!;
+        try {
+          expect(tree.rootNode.hasError, value).toBe(false);
+          expect(tree.rootNode.firstNamedChild?.childForFieldName('value')?.text).toBe(value);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} preserves typed resource bindings and regex statement boundaries`, () => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -111,6 +156,8 @@ for (const dialect of ['typescript', 'tsx']) {
     const query = new Query(language, '(export_statement declaration: (declaration) @declaration)');
     try {
       for (const declaration of [
+        'interface Shape<T> { value: T }',
+        'function signature<T>(x: T): T;',
         'function<T>(x: T): T { return x; }',
         'async function<T>(x: T) { return x; }',
         'function*<T>(x: T) { yield x; }',
@@ -145,6 +192,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const prefix = 'export default ';
     try {
       for (const declaration of [
+        'interface Named<T> { value: T }',
         'class Named<T> extends Base<T> {}',
         'class<T> extends Base<T> {}',
         'function<T>(x: T): T { return x; }',
