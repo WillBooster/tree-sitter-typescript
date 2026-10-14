@@ -1,4 +1,4 @@
-// Generated from TypeScript 5.9.3 by scripts/generateGlobalKeywords.ts.
+// Generated from TypeScript 6.0.3 by scripts/generateGlobalKeywords.ts.
 #pragma once
 
 #define TS_GLOBAL_KEYWORD_MAX_LENGTH 11
