@@ -26,7 +26,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         )
     );
     queries.push(
-      new Query(language, '(type/function_type) @function (required_parameter pattern: (pattern/identifier) @binding)')
+      new Query(
+        language,
+        `(type/function_type) @function
+      (required_parameter pattern: (pattern/identifier) @binding)
+      (optional_parameter pattern: (pattern/identifier) @binding)`
+      )
     );
   }, 30_000);
   afterAll(() => {
