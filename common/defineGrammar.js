@@ -1204,7 +1204,7 @@ module.exports = function defineGrammar(dialect) {
           seq(
             field('left', $.type),
             'extends',
-            field('right', alias($._conditional_right_type, $.type)),
+            field('right', choice($.type, alias($._conditional_right_type, $.type))),
             '?',
             field('consequence', $.type),
             ':',
@@ -1212,7 +1212,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _conditional_right_type: ($) => choice($.type, alias($._conditional_function_type, $.function_type)),
+      _conditional_right_type: ($) => alias($._conditional_function_type, $.function_type),
 
       _conditional_function_type: ($) =>
         prec.left(

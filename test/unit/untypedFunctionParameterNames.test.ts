@@ -269,6 +269,59 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
   );
 
   test.each([
+    ['function f<X>(x: X extends infer U extends U ?.5): void {}\ntype B = 2;', 'function_declaration'],
+    ['const a = { m(x: X extends infer U extends U ?.5) {} };\ntype B = 2;', 'lexical_declaration'],
+  ])('preserves declarations while repairing incomplete nested conditions: %s', (initial, declarationType) => {
+    const parser = new Parser().setLanguage(language);
+    const start = initial.indexOf('?.5') + '?.5'.length;
+    const check = (parsed: Tree): void => {
+      expect(parsed.rootNode.namedChildren.map((node) => node.type)).toEqual([
+        declarationType,
+        'type_alias_declaration',
+      ]);
+      expect(parsed.rootNode.lastNamedChild?.text).toBe('type B = 2;');
+    };
+    let source = initial;
+    let previousRepair = '';
+    let tree: Tree | undefined = parser.parse(source)!;
+    try {
+      check(tree);
+      for (const repair of [':false', '']) {
+        const nextSource = initial.slice(0, start) + repair + initial.slice(start);
+        const previousTree = tree!;
+        tree = undefined;
+        try {
+          tree = compareEditedTree(
+            parser,
+            previousTree,
+            nextSource,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + previousRepair.length,
+              newEndIndex: start + repair.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + previousRepair.length),
+              newEndPosition: position(nextSource, start + repair.length),
+            }),
+            (incremental) => {
+              check(incremental);
+              expect(incremental.rootNode.hasError).toBe(repair === '');
+            },
+            true
+          );
+        } finally {
+          previousTree.delete();
+        }
+        source = nextSource;
+        previousRepair = repair;
+      }
+    } finally {
+      tree?.delete();
+      parser.delete();
+    }
+  });
+
+  test.each([
     'type F<T> = T extends (unknown)=>unique ? .5:false;',
     'type F<T> = T extends (unknown)=>keyof ? .5:false;',
     'type F<T> = T extends (unknown)=>typeof ? true:false;',
