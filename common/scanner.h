@@ -1417,6 +1417,7 @@ typedef enum {
     TYPE_PARAMETER_PATTERN_MASK = 7,
     TYPE_PARAMETER_PATTERN_INVALID_SLOT = 1 << 3,
     TYPE_PARAMETER_PATTERN_REST_SLOT = 1 << 4,
+    TYPE_PARAMETER_PATTERN_OPTIONAL_SLOT = 1 << 5,
 } TypeParameterPattern;
 typedef struct {
     int32_t context;
@@ -1636,6 +1637,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
         bool exact_object = false, optional_chain_dot = false;
         unsigned previous_parameter_pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
+        bool completed_rest_default = group->default_parameter && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) && previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NAME && !group->conditional_depth;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && slot_named && !slot_annotation &&
             (is_identifier_part(c) || c == '\\')) break;
         if (close == UNTYPED_PARAMETER_GROUP_END && size == 1 && !slot_named) {
@@ -1673,6 +1675,15 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             !is_query_argument_expression(stack, size) && unsafe_conditional &&
             ((query_operand && !is_whitespace(c) && c != '/' && (!is_identifier_part(c) || is_ascii_digit(c))) ||
              (group->infer_name && starts_non_identifier_type_operand(c)))) *unsafe_conditional = true;
+        if (complete_conditionals && check_type_operands && !group->default_value && !computed_expression &&
+            (group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && !is_whitespace(c) && c != '/' && !is_identifier_part(c) && c != '\\' &&
+            (frame == TYPE_OPERAND_GROUP_END || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type) ||
+             ((frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END) && !parameter_position)) &&
+            !(parameter_position && end == ')' && (c == ')' || c == ',' || c == ':' || c == '?' || c == '=')) &&
+            !is_query_argument_expression(stack, size)) {
+            if (frame == TYPE_OPERAND_GROUP_END && parameter_position && (context & TYPE_GROUP_PARAMETER)) { group->expression_only = true; group->parameter_header = true; }
+            else if (unsafe_conditional) *unsafe_conditional = true;
+        }
         if (complete_conditionals && check_type_operands && (group->prefix & TYPE_GROUP_IMPORT_QUERY_PREFIX) &&
             !(group->prefix & TYPE_GROUP_MEMBER_QUERY_PREFIX) && !is_whitespace(c) && c != '/') {
             if (c != '(') {
@@ -1685,7 +1696,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 ((group->prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c != '='))) *unsafe_conditional = true;
             if (unsafe_conditional && (c == '|' || c == '&') &&
                 (group->prefix & (TYPE_GROUP_IMPORT_QUERY_PREFIX | TYPE_GROUP_MEMBER_QUERY_PREFIX)) == (TYPE_GROUP_IMPORT_QUERY_PREFIX | TYPE_GROUP_MEMBER_QUERY_PREFIX) &&
-                (frame == TYPE_OPERAND_GROUP_END || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type)) &&
+                ((frame == TYPE_OPERAND_GROUP_END && (context & TYPE_GROUP_PARAMETER)) || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type)) &&
                 !is_query_argument_expression(stack, size)) *unsafe_conditional = true;
             bool query_call = group->prefix & TYPE_GROUP_MEMBER_QUERY_PREFIX;
             if ((group->prefix & TYPE_GROUP_IMPORT_QUERY_PREFIX) && (c == '.' || c == '[') && frame != OBJECT_PROPERTY_GROUP_END && unsafe_conditional) *unsafe_conditional = true;
@@ -1817,7 +1828,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!query_operand && frame == TYPE_OPERAND_GROUP_END && ascii_word && strcmp(word, "import") == 0 && unsafe_conditional) *unsafe_conditional = true;
                     group->query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
                 }
-                group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand && !object_member_name && !assertion_subject &&
+                group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand && !object_member_name && !assertion_subject && !(frame == ']' && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) &&
                     (is_ascii_digit(c) || (!group->property && (group->infer_name || (ascii_word && is_nonreference_type_word(word)))));
                 if ((parenthesized_query || (complete_conditionals && query_operand && frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !parameter_position && !group->default_value && !is_query_argument_expression(stack, size))) && ascii_word && strcmp(word, "import") == 0) group->prefix = TYPE_GROUP_IMPORT_QUERY_PREFIX;
                 if (complete_conditionals && query_operand && !group->default_value && !computed_expression && !object_member_name && ascii_word && strcmp(word, "this") == 0) {
@@ -1831,6 +1842,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (complete_conditionals && group->default_value && !group->default_type && (group->prefix & TYPE_GROUP_DEFAULT_IDENTIFIER) &&
                     !default_operator && unsafe_conditional) *unsafe_conditional = true;
                 if (group->default_value) group->prefix = default_identifier ? TYPE_GROUP_DEFAULT_IDENTIFIER : TYPE_GROUP_NO_PREFIX;
+                if (group->default_parameter && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) {
+                    bool pending = default_operator || (first_operand && ascii_word && (type_operator || is_type_probe_word(word, TS_EXPRESSION_PREFIX_KEYWORDS, sizeof(TS_EXPRESSION_PREFIX_KEYWORDS) / sizeof(TS_EXPRESSION_PREFIX_KEYWORDS[0]))));
+                    group->parameter_pattern = (group->parameter_pattern & ~TYPE_PARAMETER_PATTERN_MASK) | (pending ? TYPE_PARAMETER_PATTERN_NONE : TYPE_PARAMETER_PATTERN_NAME);
+                }
                 bool default_member = complete_conditionals && group->default_value && group->property;
                 bool default_assertion = complete_conditionals && group->default_value && !group->property &&
                     !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&
@@ -1946,14 +1961,16 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 (group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && (end == ')' || frame == ']') && !group->default_value) {
                 unsigned pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
-                if ((c == '.' || (c == '[' && !first_operand)) && (pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN)) group->parameter_pattern = (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_NAME;
+                if ((c == '.' || (c == '[' && !first_operand)) && (pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN)) group->parameter_pattern = (group->parameter_pattern & ~TYPE_PARAMETER_PATTERN_MASK) | TYPE_PARAMETER_PATTERN_NAME;
                 if (c == ',' || c == ':' || c == '=') {
-                    if (c == '=' && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
+                    if (c == '=' && ((group->parameter_pattern & TYPE_PARAMETER_PATTERN_OPTIONAL_SLOT) || (frame == ']' && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)))) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
                     if (c == '=' && first_operand && parameter_position && pattern == TYPE_PARAMETER_PATTERN_NONE) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
                     if (pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_INVALID) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
-                    group->parameter_pattern &= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
+                    group->parameter_pattern &= TYPE_PARAMETER_PATTERN_INVALID_SLOT | (c == '=' ? TYPE_PARAMETER_PATTERN_REST_SLOT | TYPE_PARAMETER_PATTERN_OPTIONAL_SLOT : 0);
                 }
             }
+            if (complete_conditionals && check_type_operands && frame == ']' && (context & TYPE_GROUP_PARAMETER) &&
+                parameter_position && !first_operand && c == '?' && !group->default_value && !group->question_pending && !group->conditional_depth) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
             if (complete_conditionals && check_type_operands && frame == ']' && (context & TYPE_GROUP_PARAMETER) &&
                 parameter_position && !first_operand && c == '?' && !group->default_value &&
                 (group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK) != TYPE_PARAMETER_PATTERN_TYPE_ONLY &&
@@ -1977,6 +1994,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 (frame == TYPE_OPERAND_GROUP_END || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type) ||
                  ((frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END) && !parameter_position)) &&
                 !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
+            if (complete_conditionals && completed_name && c == '?') group->parameter_pattern |= TYPE_PARAMETER_PATTERN_OPTIONAL_SLOT;
             if (complete_conditionals && completed_name) {
                 group->operand_required = false;
                 if (c == ',') operand_pending = false;
@@ -2013,6 +2031,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 else if (c == ',' || c == ';') group->binding_type = false;
             }
             if (c == ',' && group->default_parameter) {
+                group->parameter_pattern &= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
                 group->default_value = false;
                 group->default_parameter = false;
                 group->default_declaration_header = false;
@@ -2072,9 +2091,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->operand_required = true;
             }
             if (!consumed_operator) advance(lexer);
+            if (complete_conditionals && completed_rest_default && c == '=' && lexer->lookahead != '=' && lexer->lookahead != '>') group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
+            if (complete_conditionals && group->default_parameter && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) && !is_whitespace(c) &&
+                c != '.' && c != '[' && !(c == '!' && lexer->lookahead != '=')) group->parameter_pattern &= ~TYPE_PARAMETER_PATTERN_MASK;
             if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
                 (c == '&' || c == '|' || c == '?') && lexer->lookahead == c &&
                 !computed_expression && !group->default_value && !is_query_argument_expression(stack, size)) group->expression_only = true;
+            if (parameter_pattern_position && end == ')' && (c == '|' || c == '&') && !group->binding_type && !is_query_argument_expression(stack, size)) group->parameter_pattern = TYPE_PARAMETER_PATTERN_INVALID_SLOT | TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN;
             if (complete_conditionals && check_type_operands && frame == ']' && (context & TYPE_GROUP_PARAMETER) && (c == '|' || c == '&') &&
                 !group->default_value && !is_query_argument_expression(stack, size)) group->parameter_pattern = (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN;
             if (complete_conditionals && check_type_operands && frame == ']' && c == '=' && lexer->lookahead != '>' &&
@@ -2127,7 +2150,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 advance(lexer);
                 if (lexer->lookahead != '.') break;
                 advance(lexer);
-                if (complete_conditionals && !group->default_value) { group->expression_only = true; group->parameter_header = true; }
+                if (complete_conditionals && !group->default_value) { group->expression_only = true; group->parameter_header = true; group->parameter_pattern |= TYPE_PARAMETER_PATTERN_REST_SLOT; group->property = false; }
                 continue;
             }
             if (complete_conditionals && check_type_operands && frame == ']' && parameter_position && first_operand && c == '.' && lexer->lookahead == '.') {
@@ -2227,10 +2250,19 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     break;
                 }
                 if (complete_conditionals && check_type_operands) {
+                    if (arrow_header && !stack[size - 1].default_value && (stack[size - 1].context & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !is_query_argument_expression(stack, size)) stack[size - 1].context &= ~TYPE_GROUP_PARAMETER;
+                    if (stack[size - 1].default_parameter && (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) {
+                        if (arrow_header && !stack[size - 1].default_type) stack[size - 1].parameter_pattern &= ~TYPE_PARAMETER_PATTERN_REST_SLOT;
+                        else if (frame == TYPE_OPERAND_GROUP_END && !arrow_header) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & ~TYPE_PARAMETER_PATTERN_MASK) | TYPE_PARAMETER_PATTERN_NAME;
+                    }
                     if (arrow_header && !stack[size - 1].default_value && (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_MASK) == TYPE_PARAMETER_PATTERN_NAME) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_NON_PATTERN;
                     if (frame == ']' && (context & TYPE_GROUP_PARAMETER) && invalid_parameter && (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_MASK) == TYPE_PARAMETER_PATTERN_NAME) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_NON_PATTERN;
                     if ((stack[size - 1].context & TYPE_GROUP_ROLE_MASK) == ']' && (stack[size - 1].context & TYPE_GROUP_PARAMETER) &&
                         (frame == '>' || (frame == ']' && !(context & TYPE_GROUP_PARAMETER) && pattern == TYPE_PARAMETER_PATTERN_NONE))) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN;
+                    if ((stack[size - 1].context & TYPE_GROUP_ROLE_MASK) == ']' && (stack[size - 1].context & TYPE_GROUP_PARAMETER) &&
+                        ((frame == ']' && (context & TYPE_GROUP_PARAMETER)) || frame == OBJECT_PROPERTY_GROUP_END)) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & ~TYPE_PARAMETER_PATTERN_MASK) | (invalid_parameter ? TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN : TYPE_PARAMETER_PATTERN_TYPE_ONLY);
+                    if (frame == '>' && (stack[size - 1].context & TYPE_GROUP_END_MASK) == ')' && !stack[size - 1].default_value &&
+                        (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_MASK) == TYPE_PARAMETER_PATTERN_NAME && !is_query_argument_expression(stack, size)) stack[size - 1].parameter_pattern = (stack[size - 1].parameter_pattern & ~TYPE_PARAMETER_PATTERN_MASK) | TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN;
                     TypeGroupPrefix prefix = stack[size - 1].prefix;
                     bool parenthesized_operand = frame == TYPE_OPERAND_GROUP_END && !arrow_header && !(context & TYPE_QUERY_ARGUMENT_GROUP);
                     if (unsafe_conditional && (((prefix & TYPE_GROUP_PRIMARY_PREFIX) && arrow_header) ||
