@@ -1686,12 +1686,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     }
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
                 }
-                if (complete_conditionals && first_operand && !group->property && !group->default_value && !computed_expression &&
-                    !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position)) {
+                bool object_member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
+                if (complete_conditionals && first_operand && !group->property && !group->default_value && !computed_expression && !object_member_name) {
                     group->query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
                 }
                 group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand &&
-                    !group->property && ascii_word && is_predefined_type_word(word);
+                    !group->property && !object_member_name && ascii_word && is_predefined_type_word(word);
                 bool default_member = complete_conditionals && group->default_value && group->property;
                 bool default_assertion = complete_conditionals && group->default_value && !group->property &&
                     !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&

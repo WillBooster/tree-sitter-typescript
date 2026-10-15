@@ -221,6 +221,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>import("x").T ?.5:false;`,
           `type F<T> = T extends (${name})=>import("x").T<Y> ?.5:false;`,
           `type F<T> = T extends (${name})=>Array<import("x").T> ?.5:false;`,
+          `type F<T> = T extends (${name})=>{number<X>(): X} ?.5:false;`,
           `type F<T> = T extends (${name})=>Array<typeof x().y> ?.5:false;`,
           `type F<T> = T extends (${name})=>(typeof x())[] ?.5:false;`,
 
