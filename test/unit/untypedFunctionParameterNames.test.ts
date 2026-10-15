@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { cpuUsage } from 'node:process';
+import { threadCpuUsage } from 'node:process';
 
 import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -57,9 +57,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const parser = new Parser().setLanguage(language);
     let tree: Tree | undefined;
     try {
-      const start = cpuUsage();
+      const start = threadCpuUsage();
       tree = parser.parse(source) ?? undefined;
-      const elapsed = cpuUsage(start);
+      const elapsed = threadCpuUsage(start);
       expect(tree).toBeDefined();
       expect(tree!.rootNode.hasError).toBe(false);
       expect(tree!.rootNode.namedChildren).toHaveLength(3);
