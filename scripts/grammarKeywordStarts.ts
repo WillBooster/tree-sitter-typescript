@@ -21,6 +21,10 @@ interface OperandKeywords {
   query: string[];
   expressionOnly: string[];
   assertion: string[];
+  assertionPredicate: string[];
+  parameterHeader: string[];
+  expressionPrefix: string[];
+  nonParameterPattern: string[];
 }
 
 export function grammarOperandKeywords(grammar: Grammar): OperandKeywords {
@@ -56,16 +60,53 @@ function classifyOperandKeywords(
   const expression = starts.get('expression')!.words;
   const expressionOperators = new Set(expression);
   collectWordTokens(rules.binary_expression!, expressionOperators);
-  const yieldWords = starts.get('yield_expression')!.words;
   const assertion = rules.asserts!;
   assert.equal(assertion.type, 'SEQ');
   assert.equal(assertion.members![0]!.value, 'asserts');
   const assertionNames = ruleStarts(assertion.members![1]!, starts, aliases).words;
+  assert.equal(assertion.members![1]!.type, 'CHOICE');
+  const standaloneAssertion = ruleStarts(
+    {
+      type: 'CHOICE',
+      members: assertion.members![1]!.members!.filter(
+        (rule) => rule.type !== 'SYMBOL' || rule.name !== 'type_predicate'
+      ),
+    },
+    starts,
+    aliases
+  ).words;
+  const contextualUnaryWords = new Set(
+    [...starts.get('await_expression')!.words].filter((word) => !reservedWords.has(word))
+  );
+  const expressionOnly = [...expressionOperators]
+    .filter((word) => !type.has(word) && !contextualUnaryWords.has(word))
+    .toSorted();
+  const parameterNames = starts.get('_reserved_identifier')!.words;
+  const parameterThis = starts.get('this')!.words;
+  const expressionPrefix = new Set(
+    [
+      'unary_expression',
+      'await_expression',
+      'yield_expression',
+      'new_expression',
+      'function_expression',
+      'generator_function',
+      'class',
+    ].flatMap((name) => [...starts.get(name)!.words])
+  );
   return {
-    query: [...expression].filter((word) => !allowedQuery.has(word)).toSorted(),
-    expressionOnly: [...expressionOperators]
-      .filter((word) => (reservedWords.has(word) || yieldWords.has(word)) && !type.has(word))
+    expressionPrefix: [...expressionPrefix].toSorted(),
+    nonParameterPattern: [...expression]
+      .filter(
+        (word) => !parameterNames.has(word) && !parameterThis.has(word) && !starts.get('_identifier')!.words.has(word)
+      )
       .toSorted(),
+    parameterHeader: [...starts.get('_reserved_identifier')!.words]
+      .filter((word) => expressionOnly.includes(word))
+      .toSorted(),
+    assertionPredicate: [...assertionNames].filter((word) => !standaloneAssertion.has(word)).toSorted(),
+    query: [...expression].filter((word) => !allowedQuery.has(word)).toSorted(),
+    expressionOnly,
     assertion: [...reservedWords].filter((word) => !assertionNames.has(word)).toSorted(),
   };
 }

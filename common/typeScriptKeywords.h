@@ -132,12 +132,77 @@ static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
 };
 
 static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
+    "accessor",
+    "async",
+    "class",
+    "declare",
+    "delete",
+    "function",
+    "get",
+    "global",
+    "instanceof",
+    "let",
+    "module",
+    "namespace",
+    "override",
+    "private",
+    "protected",
+    "public",
+    "set",
+    "static",
+    "super",
+    "type",
+    "using",
+    "yield",
+};
+
+static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
+    "async",
+    "await",
     "class",
     "delete",
     "function",
-    "instanceof",
-    "super",
+    "new",
+    "typeof",
+    "void",
     "yield",
+};
+
+static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
+    "class",
+    "delete",
+    "false",
+    "function",
+    "import",
+    "null",
+    "super",
+    "true",
+    "typeof",
+    "void",
+    "yield",
+};
+
+static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
+    "accessor",
+    "async",
+    "declare",
+    "get",
+    "global",
+    "let",
+    "module",
+    "namespace",
+    "override",
+    "private",
+    "protected",
+    "public",
+    "set",
+    "static",
+    "type",
+    "using",
+};
+
+static const char *const TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
+    "void",
 };
 
 static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {

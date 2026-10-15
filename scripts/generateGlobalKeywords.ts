@@ -38,6 +38,22 @@ static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
 ${operandKeywords.expressionOnly.map((word) => `    "${word}",`).join('\n')}
 };
 
+static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
+${operandKeywords.expressionPrefix.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
+${operandKeywords.nonParameterPattern.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
+${operandKeywords.parameterHeader.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
+${operandKeywords.assertionPredicate.map((word) => `    "${word}",`).join('\n')}
+};
+
 static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
 ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
