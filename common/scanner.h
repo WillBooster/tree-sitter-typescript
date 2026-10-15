@@ -1406,6 +1406,7 @@ typedef enum {
     TYPE_GROUP_ASSERTION_PREDICATE = 1 << 12,
     TYPE_GROUP_DEFAULT_IDENTIFIER = 1 << 11,
     TYPE_GROUP_ASSERTION_SUBJECT = 1 << 13,
+    TYPE_GROUP_REFERENCE_LINE_BREAK = 1 << 14,
 } TypeGroupPrefix;
 typedef enum {
     TYPE_PARAMETER_PATTERN_NONE,
@@ -1440,6 +1441,10 @@ typedef enum {
     TYPE_RETURN_FUNCTION,
     TYPE_RETURN_CONSTRUCTOR,
 } TypeReturnOwner;
+enum TypeObjectQueryOwner {
+    TYPE_OBJECT_QUERY_PARENTHESIZED = 1,
+    TYPE_OBJECT_QUERY_RETURN = 2,
+};
 typedef struct {
     int32_t context;
     TypeGroupPrefix prefix;
@@ -1463,6 +1468,7 @@ typedef struct {
     bool query_call_operand;
     bool query_argument_ancestor;
     TypeReturnOwner return_owner;
+    unsigned object_query_owner;
     bool expression_only;
     bool parameter_header;
 } TypeGroupFrame;
@@ -1650,6 +1656,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     while (!lexer->eof(lexer)) {
         TypeGroupFrame *group = &stack[size - 1];
         int32_t c = lexer->lookahead, context = group->context;
+        bool reference_line_break = group->prefix & TYPE_GROUP_REFERENCE_LINE_BREAK;
+        if (!is_whitespace(c) && c != '/') group->prefix &= ~TYPE_GROUP_REFERENCE_LINE_BREAK;
         if (context & TYPE_EXPRESSION_TYPE) {
             if ((context & TYPE_EXPRESSION_METHOD_BODY) && !first_operand && c == '{') {
                 stack[size - 1].context &= ~(TYPE_EXPRESSION_TYPE | TYPE_EXPRESSION_METHOD_BODY);
@@ -1845,7 +1853,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool type_operator = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
                 bool parenthesized_query = complete_conditionals && query_operand && frame == TYPE_OPERAND_GROUP_END && parameter_position &&
                     !(group->prefix & TYPE_GROUP_TYPE_PREFIX) && !group->default_value && !computed_expression && !object_member_name;
-                if (parenthesized_query && ascii_word && unsafe_conditional && is_type_probe_word(word, TS_NON_IDENTIFIER_QUERY_KEYWORDS, sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS) / sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS[0]))) *unsafe_conditional = true;
+                bool object_query = complete_conditionals && query_operand && frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !parameter_position && !group->default_value && !is_query_argument_expression(stack, size);
+                bool ambiguous_object_query = object_query && group->object_query_owner == TYPE_OBJECT_QUERY_PARENTHESIZED;
+                if ((parenthesized_query || ambiguous_object_query) && ascii_word && unsafe_conditional && is_type_probe_word(word, TS_NON_IDENTIFIER_QUERY_KEYWORDS, sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS) / sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS[0]))) *unsafe_conditional = true;
                 if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && !group->default_value && !computed_expression &&
                     !group->property && !query_operand && ascii_word) {
                     bool ambiguous_start = first_operand && parameter_position && !(group->prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_TYPE_PREFIX | TYPE_GROUP_PREDICATE_PREFIX | TYPE_GROUP_CONSTRUCTOR_PREFIX | TYPE_GROUP_ABSTRACT_PREFIX));
@@ -1985,11 +1995,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool comment = false;
                 CommentResult comment_result = skip_comment(lexer, &comment, false);
                 if (comment_result == NO_COMMENT) break;
+                if (comment_result == COMMENT_WITH_LINE_TERMINATOR) group->prefix |= TYPE_GROUP_REFERENCE_LINE_BREAK;
                 if (comment_result == COMMENT_WITH_LINE_TERMINATOR && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
                     member_line_break = true;
                 }
                 continue;
             }
+            if (is_line_terminator(c)) group->prefix |= TYPE_GROUP_REFERENCE_LINE_BREAK;
             if (is_line_terminator(c) && frame == OBJECT_PROPERTY_GROUP_END && !first_operand && !operand_pending) {
                 member_line_break = true;
             }
@@ -2021,6 +2033,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) || c == '.' || (group->return_owner == TYPE_RETURN_FUNCTION && (c == end || c == ',' || c == ';'))) && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && check_type_operands && !group->default_value && !is_query_argument_expression(stack, size) &&
                 (group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
+            if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && reference_line_break && c == '<' &&
+                !first_operand && !operand_pending && !group->default_value && !group->query_call_operand && !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && group->return_owner == TYPE_RETURN_FUNCTION &&
                 !group->default_value && !is_query_argument_expression(stack, size) && (group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && group->predicate_subject == TYPE_PREDICATE_SUBJECT_NAME &&
                 (c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
@@ -2345,6 +2359,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     break;
                 }
                 if (closing_line_break && (stack[size - 1].context & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END) member_line_break = true;
+                if ((arrow_header || frame == METHOD_PARAMETER_GROUP_END) && (stack[size - 1].object_query_owner & TYPE_OBJECT_QUERY_PARENTHESIZED)) stack[size - 1].object_query_owner |= TYPE_OBJECT_QUERY_RETURN;
                 if (complete_conditionals && check_type_operands) {
                     if (arrow_header) {
                         stack[size - 1].predicate_subject = return_identifier ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_NONE;
@@ -2405,6 +2420,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             else if (c == '=') {
                 if (lexer->lookahead == '>') {
                     group->return_owner = constructor_header ? TYPE_RETURN_CONSTRUCTOR : TYPE_RETURN_FUNCTION;
+                    if (group->object_query_owner & TYPE_OBJECT_QUERY_PARENTHESIZED) group->object_query_owner |= TYPE_OBJECT_QUERY_RETURN;
                     group->predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
                     if (complete_conditionals && check_type_operands && completed_parenthesized_operand && !group->default_value && previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NAME) group->parameter_pattern = (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_NON_PATTERN;
                     if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
@@ -2504,7 +2520,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             bool default_type = stack[size - 1].default_type || (default_value && c == '<');
             bool default_declaration_header = default_value && c == '<' && stack[size - 1].default_declaration_header;
             bool query_argument_ancestor = is_query_argument_expression(stack, size);
-            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header, .query_argument_ancestor = query_argument_ancestor};
+            unsigned object_query_owner = ((push & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END || ((push & TYPE_GROUP_ROLE_MASK) == ']' && (push & TYPE_GROUP_PARAMETER))) &&
+                !(push & (TYPE_GROUP_FORMAL_BINDING | TYPE_EXPRESSION_GROUP)) && !default_value && !query_argument_ancestor &&
+                ((frame == TYPE_OPERAND_GROUP_END && (stack[size - 1].context & TYPE_GROUP_PARAMETER) && stack[size - 1].return_owner == TYPE_RETURN_NONE) ||
+                 ((frame == ']' || (frame == OBJECT_PROPERTY_GROUP_END && stack[size - 1].binding_type)) && stack[size - 1].object_query_owner == TYPE_OBJECT_QUERY_PARENTHESIZED)) ? TYPE_OBJECT_QUERY_PARENTHESIZED : 0;
+            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header, .query_argument_ancestor = query_argument_ancestor, .object_query_owner = object_query_owner};
         }
     }
     ts_free(stack);

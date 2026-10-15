@@ -308,6 +308,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           '(abstract -1 is T)',
           '(unique is keyof)',
           '(()=>unique is new)',
+          '(()=>asserts\n<T>)',
+          '(()=>asserts/*\n*/<T>)',
+          '(Foo\n<T>)',
+          '(()=>Foo.Bar/*\n*/<T>)',
+          '({x:typeof is})',
+          '([{x:typeof is}])',
           ...(dialect === 'typescript' ? ['(infer is x<T>)[]'] : []),
           'Array<unique asserts>',
           '{x:infer T[] is T}',
@@ -336,7 +342,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         ]) {
           const prefix = `type F<T>=T extends (${name}${optional})=>${operand} ?.5:false;\n`;
           const actual = parser.parse(prefix + tail)!;
-          const reference = parser.parse(' '.repeat(prefix.length - 1) + '\n' + tail)!;
+          const reference = parser.parse(prefix.replaceAll(/[^\r\n\u2028\u2029]/g, ' ') + tail)!;
           try {
             expect(actual.rootNode.hasError, operand).toBe(true);
             const following = actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length);
@@ -487,9 +493,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>(new()=>()=>x is T) ?.5:false;`,
           `type F<T> = T extends (${name})=>(new()=>infer is) ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>asserts<T>) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(()=>asserts/* gap */<T>) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(()=>typeof foo\n<T>) ?.5:false;`,
           `type F<T> = T extends (${name})=>((x:T)=>asserts<T>[]) ?.5:false;`,
           `type F<T> = T extends (${name})=>(new)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>{x:typeof is} ?.5:false;`,
+          `type F<T> = T extends (${name})=>({p:()=>T,q:{x:typeof is}}) ?.5:false;`,
+          `type F<T> = T extends (${name})=>([()=>T,{x:typeof is}]) ?.5:false;`,
           `type F<T> = T extends (${name})=>(asserts[unique symbol]) ?.5:false;`,
           `type F<T> = T extends (${name})=>(x[0]?)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>infer is extends T ? X : Y) ?.5:false;`,
