@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { cpuUsage } from 'node:process';
 
 import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -38,16 +39,28 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     for (const query of queries) query.delete();
   });
 
-  test('retains deeply parenthesized returns within an interactive parse budget', () => {
-    const depth = 32_000;
+  test('retains deeply parenthesized returns with bounded CPU growth', () => {
+    parseCpuTime(32_000);
+    const smaller: number[] = [];
+    const larger: number[] = [];
+    for (let sample = 0; sample < 3; sample++) {
+      smaller.push(parseCpuTime(16_000));
+      larger.push(parseCpuTime(32_000));
+    }
+    const smallerMedian = smaller.toSorted((a, b) => a - b)[1]!;
+    const largerMedian = larger.toSorted((a, b) => a - b)[1]!;
+    expect(largerMedian).toBeLessThan(3 * smallerMedian);
+  }, 30_000);
+
+  function parseCpuTime(depth: number): number {
     const source = `type F=(unknown)=>${'('.repeat(depth)}T${')'.repeat(depth)};\nexport function f(){}\ntype B=2;`;
     const parser = new Parser().setLanguage(language);
-    const start = performance.now();
-    const tree = parser.parse(source, undefined, {
-      progressCallback: () => performance.now() - start > 2000,
-    });
+    let tree: Tree | undefined;
     try {
-      expect(tree).not.toBeNull();
+      const start = cpuUsage();
+      tree = parser.parse(source) ?? undefined;
+      const elapsed = cpuUsage(start);
+      expect(tree).toBeDefined();
       expect(tree!.rootNode.hasError).toBe(false);
       expect(tree!.rootNode.namedChildren).toHaveLength(3);
       expect(
@@ -57,11 +70,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           .filter((capture) => capture.name === 'binding')
           .map((capture) => capture.node.text)
       ).toEqual(['unknown']);
+      return elapsed.user + elapsed.system;
     } finally {
       tree?.delete();
       parser.delete();
     }
-  });
+  }
 
   test.each(['unknown', 'never', 'unique'])('does not claim incomplete untyped headers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
