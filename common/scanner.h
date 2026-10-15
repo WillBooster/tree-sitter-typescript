@@ -1433,6 +1433,7 @@ static bool scan_type_numeric_operand(TSLexer *lexer);
 static bool is_type_probe_punctuation(int32_t c);
 static bool is_nonreference_type_word(const char *word);
 static bool is_type_probe_word(const char *word, const char *const *words, unsigned count);
+static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size);
 static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const char *word, bool first, bool *unsafe_conditional);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
@@ -2043,11 +2044,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!scan_default_trivia(lexer, true, false)) break;
                     if (lexer->lookahead == ':') expression_arrow = false;
                 }
-                bool modifier_header = false;
-                if (group->modifier_parameter && end == ')') {
-                    if (!scan_default_trivia(lexer, true, false)) break;
-                    modifier_header = lexer->lookahead == '=';
-                }
+                bool modifier_header = group->modifier_parameter && end == ')' &&
+                    scan_default_trivia(lexer, true, false) && lexer->lookahead == '=';
                 bool return_identifier = false;
                 bool arrow_header = modifier_header || expression_arrow || frame == FUNCTION_PARAMETER_GROUP_END || (check_type_operands && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)));
                 if (arrow_header) {
@@ -2086,7 +2084,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (lexer->lookahead == ':') stack[size - 2].default_type = true;
                 }
                 if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
-                    !(context & TYPE_QUERY_ARGUMENT_GROUP) && !arrow_header && group->expression_only && unsafe_conditional) *unsafe_conditional = true;
+                    !is_query_argument_expression(stack, size) && !arrow_header && group->expression_only && unsafe_conditional) *unsafe_conditional = true;
                 if (--size == 0) {
                     if (pending_return) *pending_return = operand_pending;
                     result = true;
@@ -2102,7 +2100,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!parenthesized_operand) stack[size - 1].prefix &= TYPE_GROUP_IMPORT_QUERY_PREFIX;
                     else stack[size - 1].prefix |= TYPE_GROUP_PARENTHESIZED_HEADER;
                 }
-                if (complete_conditionals && check_type_operands && frame == ')' && !(context & TYPE_QUERY_ARGUMENT_GROUP) && !arrow_header && unsafe_conditional) *unsafe_conditional = true;
+                if (complete_conditionals && check_type_operands && frame == ')' && !(context & TYPE_QUERY_ARGUMENT_GROUP) && !is_query_argument_expression(stack, size) && !arrow_header && unsafe_conditional) *unsafe_conditional = true;
                 if (complete_conditionals && check_type_operands && !group->default_value && !arrow_header && !(context & TYPE_QUERY_ARGUMENT_GROUP) &&
                     (frame == TYPE_OPERAND_GROUP_END || frame == OBJECT_PROPERTY_GROUP_END || frame == '>' || frame == ']')) {
                     stack[size - 1].nonreference_type = true;
@@ -2455,6 +2453,18 @@ static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const ch
     if (strcmp(word, "typeof") == 0 && type_only) return TYPE_GROUP_TYPE_PREFIX;
     if (strcmp(word, "abstract") == 0) return TYPE_GROUP_ABSTRACT_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
     return TYPE_GROUP_NO_PREFIX;
+}
+
+static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size) {
+    while (size) {
+        const TypeGroupFrame *group = &stack[--size];
+        int32_t context = group->context;
+        if (context & TYPE_QUERY_ARGUMENT_GROUP) return true;
+        int32_t role = context & TYPE_GROUP_ROLE_MASK;
+        if ((context & TYPE_EXPRESSION_TYPE) || role == '>' || role == TYPE_PARAMETER_GROUP_END || role == METHOD_TYPE_PARAMETER_GROUP_END ||
+            ((role == FUNCTION_PARAMETER_GROUP_END || role == METHOD_PARAMETER_GROUP_END) && !group->default_value)) return false;
+    }
+    return false;
 }
 
 static bool is_type_probe_word(const char *word, const char *const *words, unsigned count) {

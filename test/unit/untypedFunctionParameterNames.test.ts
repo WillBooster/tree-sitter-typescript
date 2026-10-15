@@ -206,6 +206,33 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
+  test.each(['unknown', 'never', 'unique'])('retains bindings before a trailing unfinished comment for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const operand of ['typeof x(public)', 'x(public)']) {
+        for (const tail of ['/*', '/*x', '/*x\ntype B=2;', '/**/']) {
+          const source = `type F=(${name})=>${operand}${tail}`;
+          const actual = parser.parse(source)!;
+          const reference = parser.parse(source.replace(name, 'x'.repeat(name.length)))!;
+          try {
+            expect(actual.rootNode.descendantsOfType('function_type')).toHaveLength(1);
+            expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
+            for (const query of queries) {
+              expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
+                query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
+              );
+            }
+          } finally {
+            actual.delete();
+            reference.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test.each(['unknown', 'never', 'unique'])(
     'retains bindings in conditional types and return statement boundaries for %s',
     (name) => {
@@ -231,6 +258,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>typeof x(public as T)[] ?.5:false;`,
           `type F<T> = T extends (${name})=>typeof x(public[0])[] ?.5:false;`,
           `type F<T> = T extends (${name})=>typeof x((public readonly x=0)=>T)[] ?.5:false;`,
+          `type F<T> = T extends (${name})=>typeof x(y(x))[] ?.5:false;`,
+          `type F<T> = T extends (${name})=>typeof x((x as T))[] ?.5:false;`,
+          `type F<T> = T extends (${name})=>typeof x((x: typeof fn(y(x))[])=>x)[] ?.5:false;`,
           `type F<T> = T extends (${name})=>(public x)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(public readonly x=0)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>((x:T)=>x is abstract) ?.5:false;`,
