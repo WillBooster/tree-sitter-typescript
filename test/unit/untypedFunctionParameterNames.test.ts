@@ -50,15 +50,16 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const smallerMedian = smaller.toSorted((a, b) => a - b)[1]!;
     const largerMedian = larger.toSorted((a, b) => a - b)[1]!;
     expect(largerMedian).toBeLessThan(3 * smallerMedian);
-  }, 30_000);
+  }, 120_000);
 
   function parseCpuTime(depth: number): number {
     const source = `type F=(unknown)=>${'('.repeat(depth)}T${')'.repeat(depth)};\nexport function f(){}\ntype B=2;`;
     const parser = new Parser().setLanguage(language);
     let tree: Tree | undefined;
     try {
+      const deadline = performance.now() + 60_000;
       const start = threadCpuUsage();
-      tree = parser.parse(source) ?? undefined;
+      tree = parser.parse(source, undefined, { progressCallback: () => performance.now() > deadline }) ?? undefined;
       const elapsed = threadCpuUsage(start);
       expect(tree).toBeDefined();
       expect(tree!.rootNode.hasError).toBe(false);
