@@ -167,7 +167,6 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
-      [$.formal_parameters, $._conditional_function_parameters],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
       [$.infer_type],
