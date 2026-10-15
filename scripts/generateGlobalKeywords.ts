@@ -46,6 +46,10 @@ static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
 ${operandKeywords.nonParameterPattern.map((word) => `    "${word}",`).join('\n')}
 };
 
+static const char *const TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
+${operandKeywords.typeOnlyAtom.map((word) => `    "${word}",`).join('\n')}
+};
+
 static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
 ${operandKeywords.parameterHeader.map((word) => `    "${word}",`).join('\n')}
 };

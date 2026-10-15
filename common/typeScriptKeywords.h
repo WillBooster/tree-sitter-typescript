@@ -182,6 +182,12 @@ static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
     "yield",
 };
 
+static const char *const TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
+    "never",
+    "unknown",
+    "void",
+};
+
 static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
     "accessor",
     "async",

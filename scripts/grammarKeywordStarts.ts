@@ -25,6 +25,7 @@ interface OperandKeywords {
   parameterHeader: string[];
   expressionPrefix: string[];
   nonParameterPattern: string[];
+  typeOnlyAtom: string[];
 }
 
 export function grammarOperandKeywords(grammar: Grammar): OperandKeywords {
@@ -95,6 +96,7 @@ function classifyOperandKeywords(
     ].flatMap((name) => [...starts.get(name)!.words])
   );
   return {
+    typeOnlyAtom: [...starts.get('predefined_type')!.words].filter((word) => !parameterNames.has(word)).toSorted(),
     expressionPrefix: [...expressionPrefix].toSorted(),
     nonParameterPattern: [...expression]
       .filter(
