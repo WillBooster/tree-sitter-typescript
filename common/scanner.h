@@ -1428,6 +1428,7 @@ typedef struct {
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, bool *pending_return, bool complete_conditionals, bool *unsafe_conditional);
 static bool scan_type_html_comment_tail(TSLexer *lexer, int32_t opening);
 static bool scan_type_identifier_operand(TSLexer *lexer);
+static bool starts_non_identifier_type_operand(int32_t c);
 static bool scan_type_question_tail(TSLexer *lexer, bool conditional);
 static bool scan_type_numeric_operand(TSLexer *lexer);
 static bool is_type_probe_punctuation(int32_t c);
@@ -1648,6 +1649,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         bool check_type_operands = type_operands && !(frame & TYPE_EXPRESSION_GROUP);
         bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
         bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
+        if (complete_conditionals && check_type_operands && !group->default_value &&
+            !computed_expression && (frame != OBJECT_PROPERTY_GROUP_END || group->binding_type) &&
+            !is_query_argument_expression(stack, size) && unsafe_conditional &&
+            ((query_operand && !is_whitespace(c) && c != '/' && (!is_identifier_part(c) || is_ascii_digit(c))) ||
+             (group->infer_name && starts_non_identifier_type_operand(c)))) *unsafe_conditional = true;
         if (complete_conditionals && check_type_operands && (group->prefix & TYPE_GROUP_IMPORT_QUERY_PREFIX) &&
             !(group->prefix & TYPE_GROUP_MEMBER_QUERY_PREFIX) && !is_whitespace(c) && c != '/') {
             if (c != '(') {
@@ -1778,6 +1784,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&
                     (strcmp(word, "as") == 0 || strcmp(word, "satisfies") == 0);
                 if (complete_conditionals && group->default_value) {
+                    group->operand_required = false;
                     bool member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
                     if (!group->property && !member_name && ascii_word && strcmp(word, "extends") == 0 &&
                         !group->default_declaration_header && !group->default_type && end != '>') break;
@@ -1805,6 +1812,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
                      (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
                 bool prefix = !computed_key && !default_member && first_operand && type_operator;
+                if (complete_conditionals && group->default_value && group->default_type) {
+                    group->operand_required = prefix || (!default_member && first_operand && ascii_word &&
+                        (strcmp(word, "new") == 0 || strcmp(word, "import") == 0 || strcmp(word, "unique") == 0));
+                }
                 bool extends_operand = !computed_key && !default_member && ascii_word && strcmp(word, "extends") == 0 &&
                     (!complete_conditionals || (!first_operand && !operand_pending && !group->property));
                 if (complete_conditionals && !group->default_value) {
@@ -1856,7 +1867,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (complete_conditionals && group->default_value && !computed_expression &&
                 (c == end || c == ',' || c == ';') &&
                 (group->question_pending || group->conditional_depth ||
-                 ((group->conditional_branch || group->default_parameter) && first_operand))) break;
+                 (group->conditional_branch && first_operand) ||
+                 (group->default_parameter && group->operand_required))) break;
             if (complete_conditionals && group->default_value && !is_whitespace(c)) {
                 if (c == ':' && parameter_position && end == ')' && !group->conditional_depth) group->default_type = true;
                 if (c == ':' && group->conditional_depth) {
@@ -1974,8 +1986,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->operand_required = true;
             }
             if (!consumed_operator) advance(lexer);
-            if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && c == '=' &&
-                lexer->lookahead != '>' && !computed_expression && !group->default_value &&
+            if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
+                (c == '&' || c == '|' || c == '?') && lexer->lookahead == c &&
+                !computed_expression && !group->default_value && !is_query_argument_expression(stack, size)) group->expression_only = true;
+            if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
+                ((c == '=' && lexer->lookahead != '>') || c == ',') && !computed_expression && !group->default_value &&
                 !is_query_argument_expression(stack, size)) {
                 group->expression_only = true;
                 group->parameter_header = true;
@@ -2005,7 +2020,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (complete_conditionals && ((group->operand_required && !parameter_default) ||
                     group->question_pending || group->conditional_depth ||
                     (group->conditional_branch && (first_operand || group->property)))) break;
-                group->operand_required = false;
+                group->operand_required = complete_conditionals;
                 group->conditional_branch = false;
                 group->default_value = true;
                 group->default_parameter = true;
@@ -2229,6 +2244,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         bool line_break = false;
         if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         int32_t c = lexer->lookahead;
+        if (untyped_return && ((query_operand && (!is_identifier_part(c) || is_ascii_digit(c))) ||
+            (infer_name && starts_non_identifier_type_operand(c)))) unsafe_conditional = true;
         if (nonreference_type) {
             if (untyped_return && (((group_prefix & TYPE_GROUP_PRIMARY_PREFIX) && c == '=') ||
                 ((group_prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c != '='))) unsafe_conditional = true;
@@ -2525,6 +2542,11 @@ static bool scan_type_question_tail(TSLexer *lexer, bool conditional) {
     if (lexer->lookahead != '.') return true;
     advance(lexer);
     return conditional && is_ascii_digit(lexer->lookahead);
+}
+
+static bool starts_non_identifier_type_operand(int32_t c) {
+    return c == '(' || c == '[' || c == '{' || c == '<' || c == '\'' || c == '"' || c == '`' ||
+           c == '+' || c == '-' || is_ascii_digit(c);
 }
 
 static bool scan_type_identifier_operand(TSLexer *lexer) {

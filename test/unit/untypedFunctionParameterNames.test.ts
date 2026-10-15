@@ -235,6 +235,42 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   );
 
+  test.each(['unknown', 'never'])(
+    'preserves declarations after malformed query, infer, list and logical returns for %s',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const tail = 'export function f(){}\ntype B=2;';
+      try {
+        for (const optional of ['', '?']) {
+          for (const operand of ['(typeof 1)', 'infer<1>', 'infer[T]', '(void,1)', '(x&&y)', '(x||y)', '(x??y)']) {
+            const prefix = `type F<T>=T extends (${name}${optional})=>${operand} ?.5:false;\n`;
+            const actual = parser.parse(prefix + tail)!;
+            const reference = parser.parse(' '.repeat(prefix.length - 1) + '\n' + tail)!;
+            try {
+              expect(actual.rootNode.hasError, operand).toBe(true);
+              const following = actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length);
+              expect(following.map(snapshot), operand).toEqual(reference.rootNode.namedChildren.map(snapshot));
+              for (const query of queries) {
+                expect(
+                  query
+                    .captures(actual.rootNode)
+                    .filter(({ node }) => node.startIndex >= prefix.length)
+                    .map(({ name, node }) => [name, snapshot(node)]),
+                  operand
+                ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+              }
+            } finally {
+              actual.delete();
+              reference.delete();
+            }
+          }
+        }
+      } finally {
+        parser.delete();
+      }
+    }
+  );
+
   test.each(['unknown', 'never', 'unique'])('retains bindings before a trailing unfinished comment for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -294,6 +330,14 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>(public readonly x=0)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(x=0,y)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(x=0,)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>new(x=abstract)=>(1n) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x=abstract,y)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x=0 as abstract)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x=new)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x=as)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x=satisfies,)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(infer:T)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>typeof x((x&&y))[] ?.5:false;`,
           `type F<T> = T extends (${name})=>((y)=x,z)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>((x:T)=>x is abstract) ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>asserts is) ?.5:false;`,
@@ -443,7 +487,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       )
     )
   )(
-    'preserves declarations after malformed composite returns for $name$optional / $operand',
+    'preserves declarations after malformed composite returns for $name ($optional) / $operand',
     ({ name, optional, operand }) => {
       const parser = new Parser().setLanguage(language);
       const source = `type F<T> = T extends (${name}${optional})=>${operand} ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
