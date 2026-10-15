@@ -1,4 +1,4 @@
-// Generated from TypeScript 6.0.3 by scripts/generateGlobalKeywords.ts.
+// Generated from TypeScript 6.0.3 and grammar token starts by scripts/generateGlobalKeywords.ts.
 #pragma once
 
 #define TS_GLOBAL_KEYWORD_MAX_LENGTH 11
@@ -87,4 +87,46 @@ static const char *const TS_GLOBAL_KEYWORDS[] = {
     "override",
     "of",
     "defer",
+};
+
+static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
+    "abstract",
+    "accessor",
+    "any",
+    "async",
+    "await",
+    "boolean",
+    "class",
+    "declare",
+    "delete",
+    "false",
+    "function",
+    "get",
+    "global",
+    "is",
+    "let",
+    "module",
+    "namespace",
+    "new",
+    "null",
+    "number",
+    "object",
+    "out",
+    "override",
+    "private",
+    "protected",
+    "public",
+    "readonly",
+    "set",
+    "static",
+    "string",
+    "super",
+    "symbol",
+    "true",
+    "type",
+    "typeof",
+    "undefined",
+    "using",
+    "void",
+    "yield",
 };
