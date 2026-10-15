@@ -10,13 +10,21 @@ interface Rule {
 }
 interface Grammar {
   rules: Record<string, Rule>;
+  reserved: Record<string, Rule[]>;
 }
 interface Starts {
   words: Set<string>;
   nullable: boolean;
 }
 
-export function queryOperandKeywords({ rules }: Grammar): string[] {
+interface OperandKeywords {
+  query: string[];
+  expressionOnly: string[];
+  assertion: string[];
+}
+
+export function grammarOperandKeywords(grammar: Grammar): OperandKeywords {
+  const { rules } = grammar;
   const aliases = new Map<string, string>();
   for (const rule of Object.values(rules)) collectExternalAliases(rule, aliases);
   const starts = new Map(Object.keys(rules).map((name) => [name, { words: new Set<string>(), nullable: false }]));
@@ -30,12 +38,42 @@ export function queryOperandKeywords({ rules }: Grammar): string[] {
       starts.set(name, next);
     }
   } while (changed);
-  const allowed = new Set([
+  return classifyOperandKeywords(grammar, starts, aliases);
+}
+
+function classifyOperandKeywords(
+  { rules, reserved }: Grammar,
+  starts: Map<string, Starts>,
+  aliases: Map<string, string>
+): OperandKeywords {
+  const allowedQuery = new Set([
     ...starts.get('_type_query_identifier')!.words,
     ...starts.get('this')!.words,
     ...starts.get('import')!.words,
   ]);
-  return [...starts.get('expression')!.words].filter((word) => !allowed.has(word)).toSorted();
+  const reservedWords = new Set(reserved.global!.flatMap((rule) => [...ruleStarts(rule, starts, aliases).words]));
+  const type = starts.get('type')!.words;
+  const expression = starts.get('expression')!.words;
+  const expressionOperators = new Set(expression);
+  collectWordTokens(rules.binary_expression!, expressionOperators);
+  const yieldWords = starts.get('yield_expression')!.words;
+  const assertion = rules.asserts!;
+  assert.equal(assertion.type, 'SEQ');
+  assert.equal(assertion.members![0]!.value, 'asserts');
+  const assertionNames = ruleStarts(assertion.members![1]!, starts, aliases).words;
+  return {
+    query: [...expression].filter((word) => !allowedQuery.has(word)).toSorted(),
+    expressionOnly: [...expressionOperators]
+      .filter((word) => (reservedWords.has(word) || yieldWords.has(word)) && !type.has(word))
+      .toSorted(),
+    assertion: [...reservedWords].filter((word) => !assertionNames.has(word)).toSorted(),
+  };
+}
+
+function collectWordTokens(rule: Rule, words: Set<string>): void {
+  if ((rule.type === 'STRING' || (rule.type === 'ALIAS' && !rule.named)) && isWord(rule.value)) words.add(rule.value);
+  if (rule.content) collectWordTokens(rule.content, words);
+  for (const member of rule.members ?? []) collectWordTokens(member, words);
 }
 
 function collectExternalAliases(rule: Rule, aliases: Map<string, string>): void {

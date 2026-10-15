@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import ts from 'typescript-reference';
-import typescriptGrammar from '../typescript/src/grammar.json';
-import tsxGrammar from '../tsx/src/grammar.json';
-import { queryOperandKeywords } from './grammarKeywordStarts';
+import { grammarOperandKeywords } from './grammarKeywordStarts';
 
 const keywords: string[] = [];
 for (let kind = ts.SyntaxKind.FirstKeyword; kind <= ts.SyntaxKind.LastKeyword; kind++) {
@@ -12,11 +10,17 @@ for (let kind = ts.SyntaxKind.FirstKeyword; kind <= ts.SyntaxKind.LastKeyword; k
 }
 assert.ok(keywords.length > 0);
 const grammarArgument = process.argv.indexOf('--grammar');
-const queryKeywords =
+const operandKeywords =
   grammarArgument === -1
-    ? queryOperandKeywords(typescriptGrammar)
-    : queryOperandKeywords(JSON.parse(readFileSync(process.argv[grammarArgument + 1]!, 'utf8')));
-if (grammarArgument === -1) assert.deepEqual(queryKeywords, queryOperandKeywords(tsxGrammar));
+    ? grammarOperandKeywords(
+        JSON.parse(readFileSync(new URL('../typescript/src/grammar.json', import.meta.url), 'utf8'))
+      )
+    : grammarOperandKeywords(JSON.parse(readFileSync(process.argv[grammarArgument + 1]!, 'utf8')));
+if (grammarArgument === -1)
+  assert.deepEqual(
+    operandKeywords,
+    grammarOperandKeywords(JSON.parse(readFileSync(new URL('../tsx/src/grammar.json', import.meta.url), 'utf8')))
+  );
 const header = `// Generated from TypeScript ${ts.version} and grammar token starts by scripts/generateGlobalKeywords.ts.
 #pragma once
 
@@ -27,7 +31,15 @@ ${keywords.map((word) => `    "${word}",`).join('\n')}
 };
 
 static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
-${queryKeywords.map((word) => `    "${word}",`).join('\n')}
+${operandKeywords.query.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
+${operandKeywords.expressionOnly.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
+${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
 `;
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);

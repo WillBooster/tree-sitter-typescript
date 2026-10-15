@@ -224,6 +224,11 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>{number<X>(): X} ?.5:false;`,
           `type F<T> = T extends (${name})=>Array<typeof x().y> ?.5:false;`,
           `type F<T> = T extends (${name})=>(typeof x())[] ?.5:false;`,
+          `type F<T> = T extends (${name})=>(await) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(public x)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(public readonly x=0)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>((x:T)=>x is abstract) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(()=>asserts is) ?.5:false;`,
 
           `type F<T> = T extends (${name})=>new()=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>new(x)=>T ?.5:false;`,
@@ -387,6 +392,11 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
   );
 
   test.each([
+    '(x as const)',
+    '(x satisfies X)',
+    '(delete)',
+    '(x => y)',
+    '(()=>asserts in)',
     '(null<T>)',
     '(0<T>)',
     '("x"<T>)',
