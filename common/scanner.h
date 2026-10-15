@@ -1878,7 +1878,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                         ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && !(ascii_word && strcmp(word, "extends") == 0))) &&
                         !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
                     bool predicate_operator = (group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && (type_operator || (ascii_word && strcmp(word, "unique") == 0));
-                    group->prefix = (predicate || predicate_operator) ? TYPE_GROUP_PREDICATE_PREFIX : update_type_group_prefix(group->prefix, ascii_word ? word : "", first_operand && !group->property && !query_operand, unsafe_conditional);
+                    group->prefix = (predicate || predicate_operator) ? TYPE_GROUP_PREDICATE_PREFIX : update_type_group_prefix(group->prefix, ascii_word ? word : "", (first_operand || ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && ascii_word && strcmp(word, "new") == 0)) && !group->property && !query_operand, unsafe_conditional);
                 }
                 if (assertion_subject && !assertion_is) group->prefix = TYPE_GROUP_ASSERTION_SUBJECT | (assertion_predicate ? TYPE_GROUP_ASSERTION_PREDICATE : 0) | (ascii_word && strcmp(word, "unique") == 0 ? TYPE_GROUP_UNIQUE_PREFIX : 0);
                 if (assertion_unique_completion) group->prefix = TYPE_GROUP_ASSERTION_SUBJECT | TYPE_GROUP_ASSERTION_PREDICATE;
@@ -2018,12 +2018,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             }
             if (complete_conditionals && check_type_operands && !group->default_value && !is_whitespace(c) &&
                 (group->prefix & (TYPE_GROUP_ASSERTION_PREDICATE | TYPE_GROUP_CONSTRUCTOR_PREFIX)) &&
-                ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) || c == '.') && unsafe_conditional) *unsafe_conditional = true;
+                ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) || c == '.' || (group->return_owner == TYPE_RETURN_FUNCTION && (c == end || c == ',' || c == ';'))) && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && check_type_operands && !group->default_value && !is_query_argument_expression(stack, size) &&
                 (group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && group->return_owner == TYPE_RETURN_FUNCTION &&
                 !group->default_value && !is_query_argument_expression(stack, size) && (group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && group->predicate_subject == TYPE_PREDICATE_SUBJECT_NAME &&
-                (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
+                (c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && (end == ')' || frame == ']' || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !is_query_argument_expression(stack, size))) && !group->default_value) {
                 unsigned pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
                 if ((group->parameter_pattern & TYPE_PARAMETER_PATTERN_ANNOTATABLE_OBJECT) && !(group->parameter_pattern & TYPE_PARAMETER_PATTERN_OPTIONAL_SLOT) && end == ')' && c == ':') group->parameter_pattern &= ~(TYPE_PARAMETER_PATTERN_OBJECT_CANDIDATE | TYPE_PARAMETER_PATTERN_ANNOTATABLE_OBJECT);
