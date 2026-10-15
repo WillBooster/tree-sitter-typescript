@@ -321,6 +321,37 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
+  test.each(
+    ['unknown', 'never'].flatMap((name) =>
+      ['', '?'].flatMap((optional) =>
+        ['((typeof x)<T>).y', '((typeof x)<T>)', '(void.y.z)["k"]'].map((operand) => ({
+          name,
+          optional,
+          operand,
+        }))
+      )
+    )
+  )(
+    'preserves declarations after malformed composite returns for $name$optional / $operand',
+    ({ name, optional, operand }) => {
+      const parser = new Parser().setLanguage(language);
+      const source = `type F<T> = T extends (${name}${optional})=>${operand} ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
+      const tree = parser.parse(source)!;
+      try {
+        expect(tree.rootNode.hasError).toBe(true);
+        expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
+          'type_alias_declaration',
+          'export_statement',
+          'type_alias_declaration',
+        ]);
+        expect(tree.rootNode.lastNamedChild?.text).toBe('type B = 2;');
+      } finally {
+        tree.delete();
+        parser.delete();
+      }
+    }
+  );
+
   test.each([
     'type F<T> = T extends (unknown)=>unique ? .5:false;',
     'type F<T> = T extends (unknown)=>keyof ? .5:false;',
