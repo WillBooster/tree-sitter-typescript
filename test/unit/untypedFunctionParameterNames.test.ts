@@ -218,6 +218,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>typeof x | number ?.5:false;`,
           `type F<T> = T extends (${name})=>typeof x & number ?.5:false;`,
           `type F<T> = T extends (${name})=>asserts x is typeof y | number ?.5:false;`,
+          `type F<T> = T extends (${name})=>import("x").T ?.5:false;`,
+          `type F<T> = T extends (${name})=>import("x").T<Y> ?.5:false;`,
+          `type F<T> = T extends (${name})=>new()=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>abstract new()=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>(x: T)=>U ?.5:false;`,
+          `type F<T> = T extends (${name})=>(number) ?.5:false;`,
           `type F<T> = T extends (${name})=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ? true:false;`,
@@ -324,7 +330,15 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
   test.each(
     ['unknown', 'never'].flatMap((name) =>
       ['', '?'].flatMap((optional) =>
-        ['((typeof x)<T>).y', '((typeof x)<T>)', '(void.y.z)["k"]'].map((operand) => ({
+        [
+          '((typeof x)<T>).y',
+          '((typeof x)<T>)',
+          '(void.y.z)["k"]',
+          'Foo(T>U)',
+          'Foo(T>U).y',
+          'Foo(T=>U)',
+          'Foo(bar>U)',
+        ].map((operand) => ({
           name,
           optional,
           operand,

@@ -2135,7 +2135,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             return_operand = !member_property && ascii_word &&
                 (asserts_prefix || predicate_operator || extends_operand || (type_prefix && (strcmp(word, "infer") == 0 ||
                  strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 ||
-                 strcmp(word, "new") == 0)));
+                 strcmp(word, "new") == 0 || strcmp(word, "import") == 0)));
             predicate_name = untyped_return && asserts_prefix;
             predicate_start = false;
             member_property = false;
@@ -2262,6 +2262,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             bool pending_return = false;
             if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true, &pending_return, untyped_return, &unsafe_conditional)) return allow_expression;
             if (parenthesized_type && !pending_return) nonreference_type = true;
+            if (c == '(' && !parenthesized_type && !pending_return && !pending_operand && !type_query_return) unsafe_conditional = true;
             if (c == '<' || c == '[') type_query_return = false;
             first = generic_parameters || (!allow_expression && c == '(');
             return_operand = generic_parameters || pending_return;
