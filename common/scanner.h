@@ -1397,6 +1397,7 @@ typedef enum {
     TYPE_GROUP_MEMBER_QUERY_PREFIX = 1 << 3,
     TYPE_GROUP_IMPORT_QUERY_PREFIX = 1 << 4,
     TYPE_GROUP_TYPE_PREFIX = 1 << 5,
+    TYPE_GROUP_READONLY_PREFIX = 1 << 6,
 } TypeGroupPrefix;
 typedef struct {
     int32_t context;
@@ -1729,7 +1730,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
                 }
                 if (complete_conditionals && !group->default_value && !computed_expression && !object_member_name) {
-                    group->prefix = update_type_group_prefix(group->prefix, word, first_operand && !group->property && !query_operand, unsafe_conditional);
+                    group->prefix = update_type_group_prefix(group->prefix, ascii_word ? word : "", first_operand && !group->property && !query_operand, unsafe_conditional);
                 }
                 if (complete_conditionals && first_operand && !group->property && !group->default_value && !computed_expression && !object_member_name) {
                     if (!query_operand && frame == TYPE_OPERAND_GROUP_END && ascii_word && strcmp(word, "import") == 0 && unsafe_conditional) *unsafe_conditional = true;
@@ -2203,7 +2204,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 if (predicate_name || !scan_default_trivia(lexer, true, false)) return false;
                 if (lexer->lookahead != '(' && !(strcmp(word, "new") == 0 && lexer->lookahead == '<')) return false;
             }
-            if (untyped_return) group_prefix = update_type_group_prefix(group_prefix, word, first && !query_operand && !member_property && !predicate_name, &unsafe_conditional);
+            if (untyped_return) group_prefix = update_type_group_prefix(group_prefix, ascii_word ? word : "", first && !query_operand && !member_property && !predicate_name, &unsafe_conditional);
             if (untyped_return && first && !query_operand && !member_property) {
                 query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
             }
@@ -2398,7 +2399,9 @@ static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const ch
     if (unsafe_conditional && ((prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) || ((prefix & TYPE_GROUP_PRIMARY_PREFIX) && constructor))) *unsafe_conditional = true;
     if (constructor) return TYPE_GROUP_CONSTRUCTOR_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
     if (strcmp(word, "keyof") == 0) return TYPE_GROUP_PRIMARY_PREFIX;
-    if (strcmp(word, "readonly") == 0 || (strcmp(word, "typeof") == 0 && (prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_TYPE_PREFIX)))) return TYPE_GROUP_TYPE_PREFIX;
+    bool type_only = prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_TYPE_PREFIX);
+    if (strcmp(word, "readonly") == 0) return (type_only || (prefix & TYPE_GROUP_READONLY_PREFIX)) ? TYPE_GROUP_TYPE_PREFIX : TYPE_GROUP_READONLY_PREFIX;
+    if (strcmp(word, "typeof") == 0 && type_only) return TYPE_GROUP_TYPE_PREFIX;
     if (strcmp(word, "abstract") == 0) return TYPE_GROUP_ABSTRACT_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
     return TYPE_GROUP_NO_PREFIX;
 }
