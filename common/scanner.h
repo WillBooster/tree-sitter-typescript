@@ -1394,6 +1394,7 @@ typedef enum {
     TYPE_GROUP_PRIMARY_PREFIX = 1 << 0,
     TYPE_GROUP_CONSTRUCTOR_PREFIX = 1 << 1,
     TYPE_GROUP_ABSTRACT_PREFIX = 1 << 2,
+    TYPE_GROUP_QUERY_CALL_PREFIX = 1 << 3,
 } TypeGroupPrefix;
 typedef struct {
     int32_t context;
@@ -1637,8 +1638,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         if (complete_conditionals && check_type_operands && group->nonreference_type && !is_whitespace(c) && c != '/') {
             if (unsafe_conditional && (((group->prefix & TYPE_GROUP_PRIMARY_PREFIX) && c == '=') ||
                 ((group->prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c != '='))) *unsafe_conditional = true;
+            bool query_call = group->prefix & TYPE_GROUP_QUERY_CALL_PREFIX;
             group->prefix = TYPE_GROUP_NO_PREFIX;
-            if ((c == '.' || c == '<' || c == '(') && unsafe_conditional) *unsafe_conditional = true;
+            if ((c == '<' || c == '(' || (c == '.' && !query_call)) && unsafe_conditional) *unsafe_conditional = true;
             if (c != '[') group->nonreference_type = false;
         }
         if (end == '\'' || end == '"' || end == '`') {
@@ -2048,6 +2050,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     (frame == TYPE_OPERAND_GROUP_END || frame == OBJECT_PROPERTY_GROUP_END || frame == '>' || frame == ']')) {
                     stack[size - 1].nonreference_type = true;
                 }
+                if (complete_conditionals && check_type_operands && !group->default_value && (context & TYPE_QUERY_ARGUMENT_GROUP)) {
+                    stack[size - 1].prefix = TYPE_GROUP_QUERY_CALL_PREFIX;
+                    stack[size - 1].nonreference_type = true;
+                }
                 if (expression_arrow) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_BODY;
                 if ((context & TYPE_EXPRESSION_GROUP) && (frame & TYPE_GROUP_ROLE_MASK) == METHOD_PARAMETER_GROUP_END) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_METHOD_BODY;
                 continue;
@@ -2158,8 +2164,9 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (nonreference_type) {
             if (untyped_return && (((group_prefix & TYPE_GROUP_PRIMARY_PREFIX) && c == '=') ||
                 ((group_prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c != '='))) unsafe_conditional = true;
+            bool query_call = group_prefix & TYPE_GROUP_QUERY_CALL_PREFIX;
             group_prefix = TYPE_GROUP_NO_PREFIX;
-            if (c == '.' || c == '<' || c == '(') unsafe_conditional = true;
+            if (c == '<' || c == '(' || (c == '.' && !query_call)) unsafe_conditional = true;
             if (c != '[') nonreference_type = false;
         }
         if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
@@ -2332,6 +2339,10 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             if (!parenthesized_type || pending_return) group_prefix = TYPE_GROUP_NO_PREFIX;
             if (!pending_return && !generic_parameters && !(close & TYPE_QUERY_ARGUMENT_GROUP) &&
                 (parenthesized_type || c == '{' || c == '<' || c == '[')) nonreference_type = true;
+            if (untyped_return && (close & TYPE_QUERY_ARGUMENT_GROUP)) {
+                group_prefix = TYPE_GROUP_QUERY_CALL_PREFIX;
+                nonreference_type = true;
+            }
             if (c == '(' && !parenthesized_type && !pending_return && !pending_operand && !type_query_return) unsafe_conditional = true;
             if (c == '<' || c == '[') type_query_return = false;
             first = generic_parameters || (!allow_expression && c == '(');
