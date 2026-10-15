@@ -1206,7 +1206,7 @@ module.exports = function defineGrammar(dialect) {
             field('left', $.type),
             'extends',
             field('right', alias($._conditional_right_type, $.type)),
-            '?',
+            alias($._ternary_qmark, '?'),
             field('consequence', $.type),
             ':',
             field('alternative', $.type)
