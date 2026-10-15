@@ -30,9 +30,11 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test/ci-setup
       - run: bun run build/ci
-      # Release builds regenerate src/ from all script/generate inputs. Detect committed output drift here,
+      # Release builds regenerate parser sources and keyword tables. Detect committed output drift here,
       # including new untracked generated files, which git diff would otherwise miss.
-      - run: git add --intent-to-add -- typescript/src/ tsx/src/ && git diff --exit-code -- typescript/src/ tsx/src/
+      - run: >-
+          git add --intent-to-add -- typescript/src/ tsx/src/ common/typeScriptKeywords.h
+          && git diff --exit-code -- typescript/src/ tsx/src/ common/typeScriptKeywords.h
       - run: bun run test/ci
   # Runs the parser under libFuzzer with AddressSanitizer and UndefinedBehaviorSanitizer, seeded with the
   # input of each corpus case. A grammar change alters which tokens the scanner is asked for, so it runs

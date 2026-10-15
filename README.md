@@ -107,16 +107,15 @@ version locked in `Cargo.lock`, so the parsers are generated, built, tested, and
 runtime this package ships. The first run downloads that CLI from its GitHub Release into `.tmp/`, or builds it with
 `cargo` (with the `cmake` that `mise.toml` pins) when the download fails or the release has no binary that runs here.
 
-`bun run test/ci-setup` installs Chromium for the browser tests. `bun run build/ci` regenerates `typescript/src/` and
-`tsx/src/` and builds both Wasm files. It also refreshes `common/typeScriptKeywords.h` from the pinned
-`typescript-reference` API (TypeScript 6 via `@typescript/typescript6`), which supplies the global-augmentation lookahead vocabulary.
-The native TypeScript package remains the type checker. Run `bun run generate-keywords` after changing the reference;
-verification checks the committed header with `bun run check-keywords`.
+`bun run test/ci-setup` installs Chromium for the browser tests. `common/typeScriptKeywords.h` depends on the
+pinned `typescript-reference` API and the generated TypeScript and TSX grammars. `bun run generate-keywords` requires
+both generated grammars to be current and their token-start tables to match. `bun run check-keywords` verifies the
+committed header. The native TypeScript package remains the type checker.
 
 `bun run generate` records a fresh generation profile from the applicable `test/corpus` cases and Git-tracked
 files in `examples/`, then generates compact parser tables. The parser also embeds metadata from `tree-sitter.json`. After changing a grammar,
-`tree-sitter.json`, a corpus case, or a tracked example,
-regenerate and commit `typescript/src/` and `tsx/src/`. Stage added or removed examples with `git add -A examples` before generation so the profile uses the intended file list.
+`tree-sitter.json`, a corpus case, a tracked example, or the TypeScript reference,
+run `bun run generate` and commit `typescript/src/`, `tsx/src/`, and `common/typeScriptKeywords.h`. Stage added or removed examples with `git add -A examples` before generation so the profile uses the intended file list.
 Profiles in `.tmp/generation-profiles/` are temporary and must not be committed. `bun run build-wasm`, `bun run build/ci`,
 and the release build regenerate the parsers before compiling them.
 
