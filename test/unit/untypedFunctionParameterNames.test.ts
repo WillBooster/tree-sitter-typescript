@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { threadCpuUsage } from 'node:process';
 
 import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
@@ -6,6 +7,10 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import configuration from '../../tree-sitter.json';
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
+
+// Vitest cannot interrupt a synchronous parse. Share one cooperative emergency deadline across the
+// sampled parses; the CPU ratio checks growth without using wall time as the performance target.
+const parseHangCeilingMs = 60_000;
 
 describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
@@ -38,16 +43,33 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     for (const query of queries) query.delete();
   });
 
-  test('retains deeply parenthesized returns within an interactive parse budget', () => {
-    const depth = 32_000;
+  test(
+    'retains deeply parenthesized returns with bounded CPU growth',
+    () => {
+      const deadline = performance.now() + parseHangCeilingMs;
+      parseCpuTime(32_000, deadline);
+      const smaller: number[] = [];
+      const larger: number[] = [];
+      for (let sample = 0; sample < 3; sample++) {
+        smaller.push(parseCpuTime(16_000, deadline));
+        larger.push(parseCpuTime(32_000, deadline));
+      }
+      const smallerMedian = smaller.toSorted((a, b) => a - b)[1]!;
+      const largerMedian = larger.toSorted((a, b) => a - b)[1]!;
+      expect(largerMedian).toBeLessThan(3 * smallerMedian);
+    },
+    2 * parseHangCeilingMs
+  );
+
+  function parseCpuTime(depth: number, deadline: number): number {
     const source = `type F=(unknown)=>${'('.repeat(depth)}T${')'.repeat(depth)};\nexport function f(){}\ntype B=2;`;
     const parser = new Parser().setLanguage(language);
-    const start = performance.now();
-    const tree = parser.parse(source, undefined, {
-      progressCallback: () => performance.now() - start > 2000,
-    });
+    let tree: Tree | undefined;
     try {
-      expect(tree).not.toBeNull();
+      const start = threadCpuUsage();
+      tree = parser.parse(source, undefined, { progressCallback: () => performance.now() > deadline }) ?? undefined;
+      const elapsed = threadCpuUsage(start);
+      expect(tree, 'deep-return parse must complete before the emergency deadline').toBeDefined();
       expect(tree!.rootNode.hasError).toBe(false);
       expect(tree!.rootNode.namedChildren).toHaveLength(3);
       expect(
@@ -57,11 +79,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           .filter((capture) => capture.name === 'binding')
           .map((capture) => capture.node.text)
       ).toEqual(['unknown']);
+      return elapsed.user + elapsed.system;
     } finally {
       tree?.delete();
       parser.delete();
     }
-  });
+  }
 
   test.each(['unknown', 'never', 'unique'])('does not claim incomplete untyped headers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
