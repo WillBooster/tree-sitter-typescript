@@ -1422,6 +1422,7 @@ typedef struct {
     bool nonreference_type;
     bool query_call_operand;
     bool expression_only;
+    bool modifier_parameter;
 } TypeGroupFrame;
 
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, bool *pending_return, bool complete_conditionals, bool *unsafe_conditional);
@@ -1723,8 +1724,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && parameter_position && first_operand && group->prefix == TYPE_GROUP_NO_PREFIX &&
                     !group->property && !query_operand && !group->default_value && ascii_word &&
                     (strcmp(word, "public") == 0 || strcmp(word, "private") == 0 || strcmp(word, "protected") == 0 || strcmp(word, "override") == 0)) {
-                    stack[size - 1].context = FUNCTION_PARAMETER_GROUP_END;
-                    frame = FUNCTION_PARAMETER_GROUP_END;
+                    group->modifier_parameter = true;
                 }
                 bool type_operator = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
                 bool parenthesized_query = complete_conditionals && query_operand && frame == TYPE_OPERAND_GROUP_END && parameter_position &&
@@ -2043,8 +2043,13 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!scan_default_trivia(lexer, true, false)) break;
                     if (lexer->lookahead == ':') expression_arrow = false;
                 }
+                bool modifier_header = false;
+                if (group->modifier_parameter && end == ')') {
+                    if (!scan_default_trivia(lexer, true, false)) break;
+                    modifier_header = lexer->lookahead == '=';
+                }
                 bool return_identifier = false;
-                bool arrow_header = expression_arrow || frame == FUNCTION_PARAMETER_GROUP_END || (check_type_operands && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)));
+                bool arrow_header = modifier_header || expression_arrow || frame == FUNCTION_PARAMETER_GROUP_END || (check_type_operands && (operand_pending || (frame == TYPE_OPERAND_GROUP_END && first_operand)));
                 if (arrow_header) {
                     if (end != ')' || (operand_pending && !parameter_position)) break;
                     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') break;
