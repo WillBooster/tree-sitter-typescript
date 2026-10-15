@@ -1413,7 +1413,7 @@ static bool scan_type_identifier_operand(TSLexer *lexer);
 static bool scan_type_question_tail(TSLexer *lexer, bool conditional);
 static bool scan_type_numeric_operand(TSLexer *lexer);
 static bool is_type_probe_punctuation(int32_t c);
-static bool is_predefined_type_word(const char *word);
+static bool is_nonreference_type_word(const char *word);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool conditional_parameter = valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME];
@@ -1623,7 +1623,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         bool check_expression_operands = type_operands && (frame & TYPE_EXPRESSION_GROUP);
         bool computed_expression = check_type_operands && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
         if (complete_conditionals && check_type_operands && group->nonreference_type && !is_whitespace(c) && c != '/') {
-            if ((c == '.' || c == '<') && unsafe_conditional) *unsafe_conditional = true;
+            if ((c == '.' || c == '<' || c == '(') && unsafe_conditional) *unsafe_conditional = true;
             if (c != '[') group->nonreference_type = false;
         }
         if (end == '\'' || end == '"' || end == '`') {
@@ -1631,6 +1631,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (c == end) {
                 size--;
                 if ((frame & ~TYPE_GROUP_END_MASK) == PROPERTY_NAME_GROUP) parameter_position = true;
+                else if (complete_conditionals && check_type_operands && !group->default_value && size > 0 &&
+                         (stack[size - 1].context & TYPE_GROUP_ROLE_MASK) != COMPUTED_PROPERTY_GROUP_END) {
+                    stack[size - 1].nonreference_type = true;
+                }
                 continue;
             }
             if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
@@ -1661,6 +1665,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 query_operand = false;
                 if (complete_conditionals && check_type_operands && !group->default_value) {
                     group->operand_required = false;
+                    group->nonreference_type = group->infer_name;
                     group->infer_constraint = group->infer_name;
                     group->infer_name = false;
                     group->property = false;
@@ -1670,8 +1675,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             if (check_type_operands && is_identifier_part(c)) {
                 char word[16] = {0};
                 bool ascii_word = false;
+                bool object_member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
                 if (complete_conditionals && !group->default_value && !computed_expression && is_ascii_digit(c)) {
                     if (!scan_type_numeric_operand(lexer)) break;
+                    if (!object_member_name && !query_operand && is_identifier_part(lexer->lookahead) && unsafe_conditional) *unsafe_conditional = true;
                 } else ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
                 if (frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && operand_pending && ascii_word && strcmp(word, "as") == 0) {
@@ -1686,12 +1693,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     }
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
                 }
-                bool object_member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
                 if (complete_conditionals && first_operand && !group->property && !group->default_value && !computed_expression && !object_member_name) {
+                    if (!query_operand && frame == TYPE_OPERAND_GROUP_END && ascii_word && strcmp(word, "import") == 0 && unsafe_conditional) *unsafe_conditional = true;
                     group->query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
                 }
-                group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand &&
-                    !group->property && !object_member_name && ascii_word && is_predefined_type_word(word);
+                group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand && !object_member_name &&
+                    (is_ascii_digit(c) || (!group->property && (group->infer_name || (ascii_word && is_nonreference_type_word(word)))));
                 bool default_member = complete_conditionals && group->default_value && group->property;
                 bool default_assertion = complete_conditionals && group->default_value && !group->property &&
                     !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&
@@ -2004,7 +2011,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     break;
                 }
                 if (complete_conditionals && check_type_operands && frame == ')' && !arrow_header && unsafe_conditional) *unsafe_conditional = true;
-                if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && !arrow_header) {
+                if (complete_conditionals && check_type_operands && !group->default_value && !arrow_header &&
+                    (frame == TYPE_OPERAND_GROUP_END || frame == OBJECT_PROPERTY_GROUP_END ||
+                     (frame == '>' || (frame == ']' && !stack[size - 1].query_call_operand)))) {
                     stack[size - 1].nonreference_type = true;
                 }
                 if (expression_arrow) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_BODY;
@@ -2114,7 +2123,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         int32_t c = lexer->lookahead;
         if (nonreference_type) {
-            if (c == '.' || c == '<') unsafe_conditional = true;
+            if (c == '.' || c == '<' || c == '(') unsafe_conditional = true;
             if (c != '[') nonreference_type = false;
         }
         if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
@@ -2123,6 +2132,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             bool ascii_word = false;
             if (untyped_return && is_ascii_digit(c)) {
                 if (!scan_type_numeric_operand(lexer)) return false;
+                if (!query_operand && is_identifier_part(lexer->lookahead)) unsafe_conditional = true;
             } else ascii_word = scan_identifier(lexer, word, sizeof(word), false);
             if (untyped_return && line_break && conditional_depth == 0 && !conditional_question_pending && !return_operand && !member_property &&
                 !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
@@ -2134,7 +2144,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             if (untyped_return && first && !query_operand && !member_property) {
                 query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
             }
-            nonreference_type = untyped_return && !query_operand && !member_property && ascii_word && is_predefined_type_word(word);
+            nonreference_type = untyped_return && !query_operand &&
+                (is_ascii_digit(c) || (!member_property && (infer_name || (ascii_word && is_nonreference_type_word(word)))));
             abstract_constructor = return_operand && !member_property && ascii_word && strcmp(word, "abstract") == 0;
             bool predicate_operator = !return_operand && !member_property && ascii_word && strcmp(word, "is") == 0;
             bool extends_operand = ascii_word && strcmp(word, "extends") == 0 &&
@@ -2157,6 +2168,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             } else if (!allow_expression && first && ascii_word) {
                 if (strcmp(word, "unique") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+                    nonreference_type = untyped_return;
                 } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
                     type_query_return |= strcmp(word, "typeof") == 0;
                     if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
@@ -2166,6 +2178,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                             query_operand = false;
                             first = false;
                             return_operand = false;
+                            nonreference_type = infer_name;
                             infer_constraint = infer_name;
                             infer_name = false;
                             continue;
@@ -2274,7 +2287,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             if (untyped_return && c == '(' && !parenthesized_type && query_call_operand) close |= TYPE_EXPRESSION_GROUP;
             bool pending_return = false;
             if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true, &pending_return, untyped_return, &unsafe_conditional)) return allow_expression;
-            if (parenthesized_type && !pending_return) nonreference_type = true;
+            if (!pending_return && !generic_parameters && !(close & TYPE_EXPRESSION_GROUP) &&
+                (parenthesized_type || c == '{' || (c == '<' || (c == '[' && !query_call_operand)))) nonreference_type = true;
             if (c == '(' && !parenthesized_type && !pending_return && !pending_operand && !type_query_return) unsafe_conditional = true;
             if (c == '<' || c == '[') type_query_return = false;
             first = generic_parameters || (!allow_expression && c == '(');
@@ -2293,15 +2307,18 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             if (lexer->eof(lexer)) {
                 if (untyped_return) return false;
             } else advance(lexer);
+            nonreference_type = untyped_return;
         }
     }
     return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
 }
 
-static bool is_predefined_type_word(const char *word) {
+static bool is_nonreference_type_word(const char *word) {
     return strcmp(word, "any") == 0 || strcmp(word, "number") == 0 || strcmp(word, "boolean") == 0 ||
         strcmp(word, "string") == 0 || strcmp(word, "symbol") == 0 || strcmp(word, "void") == 0 ||
-        strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "object") == 0;
+        strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "object") == 0 ||
+        strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 ||
+        strcmp(word, "undefined") == 0 || strcmp(word, "this") == 0;
 }
 
 static bool is_type_probe_punctuation(int32_t c) {

@@ -380,6 +380,34 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
   );
 
   test.each([
+    '(null<T>)',
+    '(0<T>)',
+    '("x"<T>)',
+    '(`x${T}`<U>)',
+    '([T]<U>)',
+    '({}<U>)',
+    '(this<U>)',
+    '(import("x").T<T>)',
+    '(typeof foo.number<X>())',
+  ])('preserves declarations after unsupported composite type operands: %s', (operand) => {
+    const parser = new Parser().setLanguage(language);
+    const source = `type F<T> = T extends (unknown)=>${operand} ?.5:false;\nexport function f(){}\ntype B=2;`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
+        'type_alias_declaration',
+        'export_statement',
+        'type_alias_declaration',
+      ]);
+      expect(tree.rootNode.lastNamedChild?.text).toBe('type B=2;');
+    } finally {
+      tree.delete();
+      parser.delete();
+    }
+  });
+
+  test.each([
     'type F<T> = T extends (unknown)=>unique ? .5:false;',
     'type F<T> = T extends (unknown)=>keyof ? .5:false;',
     'type F<T> = T extends (unknown)=>typeof ? true:false;',
