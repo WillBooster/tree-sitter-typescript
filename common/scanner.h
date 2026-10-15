@@ -2243,6 +2243,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             int32_t close = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
             bool pending_return = false;
             if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true, &pending_return, untyped_return)) return allow_expression;
+            if (c == '<' || c == '[') type_query_return = false;
             first = generic_parameters || (!allow_expression && c == '(');
             return_operand = generic_parameters || pending_return;
             predicate_start = pending_return;
