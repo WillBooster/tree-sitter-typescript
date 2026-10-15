@@ -1218,7 +1218,6 @@ module.exports = function defineGrammar(dialect) {
       _conditional_function_type: ($) =>
         prec.left(
           seq(
-            field('type_parameters', optional($.type_parameters)),
             field('parameters', alias($._conditional_function_parameters, $.formal_parameters)),
             '=>',
             field('return_type', choice($.type, $.asserts, $.type_predicate))
