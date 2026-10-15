@@ -306,6 +306,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           'new({p:this})=>T',
           'new({p:()=>T}?=1)=>void',
           '(abstract -1 is T)',
+          '(unique is keyof)',
+          ...(dialect === 'typescript' ? ['(infer is x<T>)[]'] : []),
+          'Array<unique asserts>',
+          '{x:infer T[] is T}',
+          '(()=>(({unknown})=>T))',
+          '({p:(number)})=>T',
+          '({p:[number,...x]})=>T',
           '(new () => void is T)',
           '(new (x) => void is T)',
           '(()=>asserts[T])',
@@ -340,6 +347,39 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                   .filter(({ node }) => node.startIndex >= prefix.length)
                   .map(({ name, node }) => [name, snapshot(node)]),
                 operand
+              ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+            }
+          } finally {
+            actual.delete();
+            reference.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test.each(['unknown', 'never'])('preserves incomplete constructor import return boundaries for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const tail = 'export function f(){}\ntype B=2;';
+    try {
+      for (const operand of ['(new(x)=>readonly import)', '(new(x)=>keyof import)', '(new(x)=>import)']) {
+        for (const ending of ['? .5 : false;', '? true:false;', '? T : false;']) {
+          const prefix = `type F<T> = T extends (${name})=>${operand} ${ending}\n`;
+          const actual = parser.parse(prefix + tail)!;
+          const reference = parser.parse(' '.repeat(prefix.length - 1) + '\n' + tail)!;
+          try {
+            expect(actual.rootNode.hasError).toBe(true);
+            expect(
+              actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length).map(snapshot)
+            ).toEqual(reference.rootNode.namedChildren.map(snapshot));
+            for (const query of queries) {
+              expect(
+                query
+                  .captures(actual.rootNode)
+                  .filter(({ node }) => node.startIndex >= prefix.length)
+                  .map(({ name, node }) => [name, snapshot(node)])
               ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
             }
           } finally {
@@ -410,6 +450,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>new({p:x,q}?=1)=>void ?.5:false;`,
           `type F<T> = T extends (${name})=>new({p:[unknown]}?=1)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>new({p:x=0}?=1)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>new({p:[x]})=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>infer is "x") ?.5:false;`,
           `type F<T> = T extends (${name})=>()=>asserts is is is ?.5:false;`,
           String.raw`type F<T> = T extends (${name})=>()=>\u0078 is T ?.5:false;`,
