@@ -1450,6 +1450,7 @@ typedef struct {
     bool default_type;
     bool nonreference_type;
     bool query_call_operand;
+    bool query_argument_ancestor;
     bool expression_only;
     bool parameter_header;
 } TypeGroupFrame;
@@ -2434,7 +2435,8 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             bool default_value = stack[size - 1].default_value;
             bool default_type = stack[size - 1].default_type || (default_value && c == '<');
             bool default_declaration_header = default_value && c == '<' && stack[size - 1].default_declaration_header;
-            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header};
+            bool query_argument_ancestor = is_query_argument_expression(stack, size);
+            stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header, .query_argument_ancestor = query_argument_ancestor};
         }
     }
     ts_free(stack);
@@ -2732,15 +2734,14 @@ static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const ch
 }
 
 static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size) {
-    while (size) {
-        const TypeGroupFrame *group = &stack[--size];
-        int32_t context = group->context;
-        if (context & TYPE_QUERY_ARGUMENT_GROUP) return true;
-        int32_t role = context & TYPE_GROUP_ROLE_MASK;
-        if ((context & TYPE_EXPRESSION_TYPE) || role == '>' || role == TYPE_PARAMETER_GROUP_END || role == METHOD_TYPE_PARAMETER_GROUP_END ||
-            ((role == FUNCTION_PARAMETER_GROUP_END || role == METHOD_PARAMETER_GROUP_END) && !group->default_value)) return false;
-    }
-    return false;
+    if (!size) return false;
+    const TypeGroupFrame *group = &stack[size - 1];
+    int32_t context = group->context;
+    if (context & TYPE_QUERY_ARGUMENT_GROUP) return true;
+    int32_t role = context & TYPE_GROUP_ROLE_MASK;
+    if ((context & TYPE_EXPRESSION_TYPE) || role == '>' || role == TYPE_PARAMETER_GROUP_END || role == METHOD_TYPE_PARAMETER_GROUP_END ||
+        ((role == FUNCTION_PARAMETER_GROUP_END || role == METHOD_PARAMETER_GROUP_END) && !group->default_value)) return false;
+    return group->query_argument_ancestor;
 }
 
 static bool is_type_predicate_name_word(int32_t first, const char *word, bool ascii_word) {

@@ -38,6 +38,31 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     for (const query of queries) query.delete();
   });
 
+  test('retains deeply parenthesized returns within an interactive parse budget', () => {
+    const depth = 32_000;
+    const source = `type F=(unknown)=>${'('.repeat(depth)}T${')'.repeat(depth)};\nexport function f(){}\ntype B=2;`;
+    const parser = new Parser().setLanguage(language);
+    const start = performance.now();
+    const tree = parser.parse(source, undefined, {
+      progressCallback: () => performance.now() - start > 2000,
+    });
+    try {
+      expect(tree).not.toBeNull();
+      expect(tree!.rootNode.hasError).toBe(false);
+      expect(tree!.rootNode.namedChildren).toHaveLength(3);
+      expect(
+        queries
+          .at(-1)!
+          .captures(tree!.rootNode)
+          .filter((capture) => capture.name === 'binding')
+          .map((capture) => capture.node.text)
+      ).toEqual(['unknown']);
+    } finally {
+      tree?.delete();
+      parser.delete();
+    }
+  });
+
   test.each(['unknown', 'never', 'unique'])('does not claim incomplete untyped headers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
