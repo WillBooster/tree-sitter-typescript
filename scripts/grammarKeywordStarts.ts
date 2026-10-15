@@ -76,6 +76,11 @@ function classifyOperandKeywords(
     starts,
     aliases
   ).words;
+  assert.deepEqual(
+    [...assertionNames].toSorted(),
+    [...starts.get('type_predicate')!.words].toSorted(),
+    'The shared assertion/predicate name classifier requires equal canonical FIRST sets.'
+  );
   const contextualUnaryWords = new Set(
     [...starts.get('await_expression')!.words].filter((word) => !reservedWords.has(word))
   );
