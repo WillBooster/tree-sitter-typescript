@@ -360,6 +360,32 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
+  test.each(['unknown', 'never'])('preserves ordinary predicate recovery boundaries for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const prefix = `type F=(${name})=>(T is readonly);\n`;
+    const tail = 'export function g(){}\ntype B=2;';
+    const actual = parser.parse(prefix + tail)!;
+    const reference = parser.parse(' '.repeat(prefix.length - 1) + '\n' + tail)!;
+    try {
+      expect(actual.rootNode.hasError).toBe(true);
+      expect(actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length).map(snapshot)).toEqual(
+        reference.rootNode.namedChildren.map(snapshot)
+      );
+      for (const query of queries) {
+        expect(
+          query
+            .captures(actual.rootNode)
+            .filter(({ node }) => node.startIndex >= prefix.length)
+            .map(({ name, node }) => [name, snapshot(node)])
+        ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
+      }
+    } finally {
+      actual.delete();
+      reference.delete();
+      parser.delete();
+    }
+  });
+
   test.each(['unknown', 'never'])('preserves incomplete constructor import return boundaries for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     const tail = 'export function f(){}\ntype B=2;';
@@ -427,6 +453,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       try {
         for (const source of [
           `type F<T> = T extends (${name})=>typeof x[] ?.5:false;`,
+          `type F=(${name})=>((any))\nimport {x} from "x";`,
           `type F<T> = T extends (${name})=>typeof x["y"] ?.5:false;`,
           `type F<T> = T extends (${name})=>typeof x<1> ?.5:false;`,
           `type F<T> = T extends (${name})=>typeof x | number ?.5:false;`,
