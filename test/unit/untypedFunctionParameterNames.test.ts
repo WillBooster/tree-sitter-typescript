@@ -226,6 +226,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           `type F<T> = T extends (${name})=>(typeof x())[] ?.5:false;`,
 
           `type F<T> = T extends (${name})=>new()=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>new(x)=>T ?.5:false;`,
+          `type F<T> = T extends (${name})=>Array<new(x=1)=>T> ?.5:false;`,
+          `type F<T> = T extends (${name})=>keyof (()=>number) ?.5:false;`,
           `type F<T> = T extends (${name})=>abstract new()=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(x: T)=>U ?.5:false;`,
           `type F<T> = T extends (${name})=>(number) ?.5:false;`,
@@ -390,6 +393,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     '(import("x").T<T>)',
     '(typeof foo.number<X>())',
     '(typeof x["x"]<T>)',
+    'keyof ()=>number',
+    'keyof new()=>T',
+    'new (number)',
   ])('preserves declarations after unsupported composite type operands: %s', (operand) => {
     const parser = new Parser().setLanguage(language);
     const source = `type F<T> = T extends (unknown)=>${operand} ?.5:false;\nexport function f(){}\ntype B=2;`;
