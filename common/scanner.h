@@ -2087,7 +2087,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter) {
     unsigned conditional_depth = 0;
     bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
-    bool query_operand = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false, predicate_start = first;
+    bool query_operand = false, type_query_return = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false, predicate_start = first;
     while (!lexer->eof(lexer)) {
         bool line_break = false;
         if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
@@ -2174,6 +2174,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                             break;
                     }
                     query_operand = strcmp(word, "typeof") == 0;
+                    type_query_return |= query_operand;
                     first = !query_operand && strcmp(word, "infer") != 0;
                     continue;
                 }
@@ -2200,6 +2201,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         }
         advance(lexer);
         if (untyped_return && c == '?') {
+            if (enclosing_conditional && !saw_extends && type_query_return && lexer->lookahead == '.') return false;
             if (enclosing_conditional && !saw_extends && lexer->lookahead == '.' && requires_conditional_parameter) *requires_conditional_parameter = true;
             if (!scan_type_question_tail(lexer, saw_extends || enclosing_conditional)) return false;
             if (!saw_extends) return !pending_operand;

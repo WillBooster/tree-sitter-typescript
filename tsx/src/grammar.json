@@ -13290,12 +13290,7 @@
             }
           },
           {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_ternary_qmark"
-            },
-            "named": false,
+            "type": "STRING",
             "value": "?"
           },
           {

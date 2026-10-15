@@ -212,8 +212,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       const parser = new Parser().setLanguage(language);
       try {
         for (const source of [
-          `type F<T> = T extends (${name})=>typeof V ?.5:false;`,
-          `type F<T> = T extends (${name})=>typeof V.x ?.5:false;`,
           `type F<T> = T extends (${name})=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ? true:false;`,
@@ -264,57 +262,76 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   );
 
-  test.each(['unknown', 'never', 'unique'])(
-    'preserves declarations after decimal type-query consequences for %s',
-    (name) => {
-      const parser = new Parser().setLanguage(language);
-      let source = `type A = 1;\ntype X = T extends (${name})=>typeof V ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
-      let tree: Tree | undefined = parser.parse(source)!;
-      try {
-        for (const spacing of [' ', '', ' ']) {
-          const start = source.indexOf('?') + 1;
-          const oldSpacing = source[start] === ' ' ? ' ' : '';
-          const nextSource = source.slice(0, start) + spacing + source.slice(start + oldSpacing.length);
-          const previousTree = tree!;
-          tree = undefined;
-          try {
-            tree = compareEditedTree(
-              parser,
-              previousTree,
-              nextSource,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: start + oldSpacing.length,
-                newEndIndex: start + spacing.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, start + oldSpacing.length),
-                newEndPosition: position(nextSource, start + spacing.length),
-              }),
-              (incremental) => {
-                expect(incremental.rootNode.hasError).toBe(false);
-                expect(incremental.rootNode.namedChildren.map((node) => node.type)).toEqual([
-                  'type_alias_declaration',
-                  'type_alias_declaration',
-                  'export_statement',
-                  'type_alias_declaration',
-                ]);
-                expect(incremental.rootNode.namedChildren.slice(2).map((node) => node.text)).toEqual([
-                  'export function f(x: number): number { return x; }',
-                  'type B = 2;',
-                ]);
-              }
-            );
-          } finally {
-            previousTree.delete();
-          }
-          source = nextSource;
-        }
-      } finally {
-        tree?.delete();
-        parser.delete();
-      }
+  test.each([
+    'type F<T> = T extends (unknown)=>unique ? .5:false;',
+    'type F<T> = T extends (unknown)=>keyof ? .5:false;',
+    'type F<T> = T extends (unknown)=>typeof ? true:false;',
+    'type F<T> = T extends (z: number, unknown)=>readonly ? .5:false;',
+    'type F<T> = T extends (((infer)=>unique)) ? .5 : false;',
+  ])('preserves the alias around an invalid conditional operand: %s', (source) => {
+    const parser = new Parser().setLanguage(language);
+    const aliases = new Query(language, '(type_alias_declaration name: (type_identifier) @name)');
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['type_alias_declaration']);
+      expect(aliases.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['F']);
+    } finally {
+      tree.delete();
+      aliases.delete();
+      parser.delete();
     }
-  );
+  });
+
+  test.each(['unknown', 'never'])('preserves declarations after decimal type-query consequences for %s', (name) => {
+    const parser = new Parser().setLanguage(language);
+    let source = `type A = 1;\ntype X = T extends (${name})=>typeof V ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
+    let tree: Tree | undefined = parser.parse(source)!;
+    try {
+      for (const spacing of [' ', '', ' ']) {
+        const start = source.indexOf('?') + 1;
+        const oldSpacing = source[start] === ' ' ? ' ' : '';
+        const nextSource = source.slice(0, start) + spacing + source.slice(start + oldSpacing.length);
+        const previousTree = tree!;
+        tree = undefined;
+        try {
+          tree = compareEditedTree(
+            parser,
+            previousTree,
+            nextSource,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + oldSpacing.length,
+              newEndIndex: start + spacing.length,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + oldSpacing.length),
+              newEndPosition: position(nextSource, start + spacing.length),
+            }),
+            (incremental) => {
+              expect(incremental.rootNode.hasError).toBe(spacing === '');
+              expect(incremental.rootNode.namedChildren.map((node) => node.type)).toEqual([
+                'type_alias_declaration',
+                'type_alias_declaration',
+                'export_statement',
+                'type_alias_declaration',
+              ]);
+              expect(incremental.rootNode.namedChildren.slice(2).map((node) => node.text)).toEqual([
+                'export function f(x: number): number { return x; }',
+                'type B = 2;',
+              ]);
+            },
+            true
+          );
+        } finally {
+          previousTree.delete();
+        }
+        source = nextSource;
+      }
+    } finally {
+      tree?.delete();
+      parser.delete();
+    }
+  });
 
   test.each(['unknown', 'never', 'unique'])(
     'keeps conditional probes local during preceding repairs for %s',
