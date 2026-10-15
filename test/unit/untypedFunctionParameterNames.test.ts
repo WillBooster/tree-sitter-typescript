@@ -212,6 +212,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       const parser = new Parser().setLanguage(language);
       try {
         for (const source of [
+          `type F<T> = T extends (${name})=>typeof x | number ?.5:false;`,
+          `type F<T> = T extends (${name})=>typeof x & number ?.5:false;`,
+          `type F<T> = T extends (${name})=>asserts x is typeof y | number ?.5:false;`,
           `type F<T> = T extends (${name})=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ?.5:false;`,
           `type F<T> = T extends (${name}?)=>number ? true:false;`,

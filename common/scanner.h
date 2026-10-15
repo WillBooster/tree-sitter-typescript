@@ -2230,6 +2230,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             first = !allow_expression;
             return_operand = first;
         } else if (!allow_expression && (c == '|' || c == '&')) {
+            type_query_return = false;
             first = true;
             return_operand = true;
         } else if (c == '=') {
