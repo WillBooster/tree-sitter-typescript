@@ -1227,7 +1227,6 @@ module.exports = function defineGrammar(dialect) {
       _conditional_function_parameters: ($) =>
         seq(
           '(',
-          repeat(seq($._formal_parameter, ',')),
           $._conditional_parameter,
           repeat(seq(',', choice($._formal_parameter, $._conditional_parameter))),
           optional(','),
