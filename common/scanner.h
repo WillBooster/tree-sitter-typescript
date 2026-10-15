@@ -2129,6 +2129,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 if (strcmp(word, "unique") == 0) {
                     if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
                 } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
+                    type_query_return |= strcmp(word, "typeof") == 0;
                     if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
                     switch (lexer->lookahead) {
                         case '\\':
@@ -2174,7 +2175,6 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                             break;
                     }
                     query_operand = strcmp(word, "typeof") == 0;
-                    type_query_return |= query_operand;
                     first = !query_operand && strcmp(word, "infer") != 0;
                     continue;
                 }

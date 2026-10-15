@@ -342,9 +342,16 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
-  test.each(['unknown', 'never'])('preserves declarations after decimal type-query consequences for %s', (name) => {
+  test.each(
+    ['unknown', 'never'].flatMap((name) =>
+      ['V', String.raw`\u0078`, String.raw`\u{78}`, String.raw`x\u{200C}`, 'π', 'x\u200D'].map((operand) => ({
+        name,
+        operand,
+      }))
+    )
+  )('preserves declarations after decimal type-query consequences for $name / $operand', ({ name, operand }) => {
     const parser = new Parser().setLanguage(language);
-    let source = `type A = 1;\ntype X = T extends (${name})=>typeof V ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
+    let source = `type A = 1;\ntype X = T extends (${name})=>typeof ${operand} ?.5:false;\nexport function f(x: number): number { return x; }\ntype B = 2;`;
     let tree: Tree | undefined = parser.parse(source)!;
     try {
       for (const spacing of [' ', '', ' ']) {
@@ -366,7 +373,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
               oldEndPosition: position(source, start + oldSpacing.length),
               newEndPosition: position(nextSource, start + spacing.length),
             }),
-            (incremental) => {
+            (incremental, fresh) => {
               expect(incremental.rootNode.hasError).toBe(spacing === '');
               expect(incremental.rootNode.namedChildren.map((node) => node.type)).toEqual([
                 'type_alias_declaration',
@@ -378,6 +385,11 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                 'export function f(x: number): number { return x; }',
                 'type B = 2;',
               ]);
+              for (const query of queries) {
+                expect(query.captures(incremental.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
+                  query.captures(fresh.rootNode).map(({ name, node }) => [name, snapshot(node)])
+                );
+              }
             },
             true
           );
