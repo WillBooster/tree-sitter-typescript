@@ -1364,7 +1364,7 @@ static bool scan_await_keyword(TSLexer *lexer) {
 }
 
 static bool scan_generic_function_type(TSLexer *lexer);
-static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional);
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter);
 enum TypeGroupEnd {
     TYPE_GROUP_END_MASK = 0xff,
     TYPE_PARAMETER_GROUP_END = '>' | (1 << 8),
@@ -1458,7 +1458,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                 default:
                     break;
             }
-            if (!scan_annotated_type_colons(lexer, false, true, false, false)) return false;
+            if (!scan_annotated_type_colons(lexer, false, true, false, false, NULL)) return false;
         }
         if (untyped_parameter) {
             if (!valid_symbols[PREDEFINED_PARAMETER_NAME] && !conditional_parameter) return false;
@@ -1512,7 +1512,9 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                 if (!is_ascii_digit(lexer->lookahead)) return false;
             }
         }
-        if (!scan_annotated_type_colons(lexer, !untyped_parameter, !return_identifier, untyped_parameter, conditional_parameter)) return false;
+        bool requires_conditional_parameter = false;
+        if (!scan_annotated_type_colons(lexer, !untyped_parameter, !return_identifier, untyped_parameter, conditional_parameter, &requires_conditional_parameter)) return false;
+        if (untyped_parameter && valid_symbols[PREDEFINED_PARAMETER_NAME] && !requires_conditional_parameter) lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
@@ -2082,7 +2084,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
     return result;
 }
 
-static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional) {
+static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter) {
     unsigned conditional_depth = 0;
     bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
     bool query_operand = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false, predicate_start = first;
@@ -2198,6 +2200,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         }
         advance(lexer);
         if (untyped_return && c == '?') {
+            if (enclosing_conditional && !saw_extends && lexer->lookahead == '.' && requires_conditional_parameter) *requires_conditional_parameter = true;
             if (!scan_type_question_tail(lexer, saw_extends || enclosing_conditional)) return false;
             if (!saw_extends) return !pending_operand;
         }
