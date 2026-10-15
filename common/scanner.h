@@ -1404,6 +1404,7 @@ typedef struct {
     bool default_declaration_header;
     bool default_type;
     bool nonreference_type;
+    bool query_type;
 } TypeGroupFrame;
 
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, bool *pending_return, bool complete_conditionals, bool *unsafe_conditional);
@@ -1684,6 +1685,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                         continue;
                     }
                     if (lexer->lookahead != ']' && lexer->lookahead != '[' && lexer->lookahead != '<' && lexer->lookahead != '.' && lexer->lookahead != '|' && lexer->lookahead != '&' && lexer->lookahead != '?') break;
+                }
+                if (first_operand && !group->property && !group->default_value && !computed_expression &&
+                    !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position)) {
+                    group->query_type = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
                 }
                 group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand &&
                     !group->property && ascii_word && is_predefined_type_word(word);
@@ -1998,6 +2003,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     result = true;
                     break;
                 }
+                if (complete_conditionals && check_type_operands && frame == ')' && !arrow_header && unsafe_conditional) *unsafe_conditional = true;
                 if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && !arrow_header) {
                     stack[size - 1].nonreference_type = true;
                 }
@@ -2020,7 +2026,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
             }
             else if (c == '<') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_TYPE_PARAMETER_GROUP_END : check_type_operands && first_operand ? TYPE_PARAMETER_GROUP_END : '>';
-            else if (c == '(') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || first_operand) ? TYPE_OPERAND_GROUP_END : ')';
+            else if (c == '(') {
+                push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? METHOD_PARAMETER_GROUP_END : check_type_operands && !binding_frame && (operand_pending || first_operand) ? TYPE_OPERAND_GROUP_END : ')';
+                if (check_type_operands && group->query_type && !group->default_value && push == ')') push |= TYPE_EXPRESSION_GROUP;
+            }
             else if (c == '[') push = check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? COMPUTED_PROPERTY_GROUP_END : ']';
             else if (c == '{') {
                 push = check_type_operands ? OBJECT_PROPERTY_GROUP_END : '}';
@@ -2259,6 +2268,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             predicate_start = first;
         } else if (c == '<' || c == '(' || c == '[' || c == '{') {
             int32_t close = c == '<' ? '>' : c == '(' ? ')' : c == '[' ? ']' : '}';
+            if (c == '(' && !parenthesized_type && (pending_operand || type_query_return)) close |= TYPE_EXPRESSION_GROUP;
             bool pending_return = false;
             if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true, &pending_return, untyped_return, &unsafe_conditional)) return allow_expression;
             if (parenthesized_type && !pending_return) nonreference_type = true;
