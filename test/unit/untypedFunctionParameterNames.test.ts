@@ -306,6 +306,10 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           'new({p:this})=>T',
           'new({p:()=>T}?=1)=>void',
           '(abstract -1 is T)',
+          '(new () => void is T)',
+          '(new (x) => void is T)',
+          '(()=>asserts[T])',
+          '((x:T)=>asserts.x)',
           '(void "x")',
           '(typeof x is typeof y)',
           '(typeof x<T> is T)',
@@ -411,6 +415,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           String.raw`type F<T> = T extends (${name})=>()=>\u0078 is T ?.5:false;`,
           `type F<T> = T extends (${name})=>asserts unique symbol is T ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>asserts unique symbol is T) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(new()=>()=>x is T) ?.5:false;`,
+          `type F<T> = T extends (${name})=>(new()=>infer is) ?.5:false;`,
+          `type F<T> = T extends (${name})=>{x:typeof is} ?.5:false;`,
           `type F<T> = T extends (${name})=>(asserts[unique symbol]) ?.5:false;`,
           `type F<T> = T extends (${name})=>(x[0]?)=>T ?.5:false;`,
           `type F<T> = T extends (${name})=>(()=>infer is extends T ? X : Y) ?.5:false;`,
@@ -501,7 +508,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           const actual = parser.parse(source)!;
           const reference = parser.parse(ordinary)!;
           try {
-            expect(actual.rootNode.hasError).toBe(false);
+            expect(actual.rootNode.hasError, source).toBe(false);
             expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
             for (const query of queries) {
               expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(

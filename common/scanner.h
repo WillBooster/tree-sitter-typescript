@@ -1451,6 +1451,7 @@ typedef struct {
     bool nonreference_type;
     bool query_call_operand;
     bool query_argument_ancestor;
+    bool constructor_return;
     bool expression_only;
     bool parameter_header;
 } TypeGroupFrame;
@@ -1650,6 +1651,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~(TYPE_GROUP_PARAMETER | TYPE_QUERY_ARGUMENT_GROUP);
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
         bool exact_object = false, optional_chain_dot = false;
+        bool constructor_header = group->nonreference_type && (group->prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c == '=';
         TypePredicateSubject previous_predicate_subject = group->predicate_subject;
         unsigned previous_parameter_pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
         bool completed_rest_default = group->default_parameter && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) && previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NAME && !group->conditional_depth;
@@ -1848,6 +1850,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 if (complete_conditionals && !group->default_value && !computed_expression && !object_member_name) {
                     bool predicate = ascii_word && strcmp(word, "is") == 0 && !group->property && !query_operand && !first_operand && (!(group->prefix & TYPE_GROUP_ASSERTS_PREFIX) || assertion_is);
+                    if (group->constructor_return && ((predicate && !operand_pending) || assertion_subject ||
+                        ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && !(ascii_word && strcmp(word, "extends") == 0))) &&
+                        !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
                     bool predicate_operator = (group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && (type_operator || (ascii_word && strcmp(word, "unique") == 0));
                     group->prefix = (predicate || predicate_operator) ? TYPE_GROUP_PREDICATE_PREFIX : update_type_group_prefix(group->prefix, ascii_word ? word : "", first_operand && !group->property && !query_operand, unsafe_conditional);
                 }
@@ -1992,6 +1997,9 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) || c == '.') && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && check_type_operands && !group->default_value && !is_query_argument_expression(stack, size) &&
                 (group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
+            if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && !(context & TYPE_GROUP_PARAMETER) && !group->constructor_return &&
+                !group->default_value && !is_query_argument_expression(stack, size) && (group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && group->predicate_subject == TYPE_PREDICATE_SUBJECT_NAME &&
+                (c == '<' || c == '(' || c == '[' || c == '.' || c == '{') && unsafe_conditional) *unsafe_conditional = true;
             if (complete_conditionals && (end == ')' || frame == ']' || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !is_query_argument_expression(stack, size))) && !group->default_value) {
                 unsigned pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
                 if (frame != OBJECT_PROPERTY_GROUP_END && (c == '.' || c == '[' || c == '(')) group->parameter_pattern &= ~TYPE_PARAMETER_PATTERN_COMPLETED_BINDING;
@@ -2290,7 +2298,10 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     break;
                 }
                 if (complete_conditionals && check_type_operands) {
-                    if (arrow_header) stack[size - 1].predicate_subject = return_identifier ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_NONE;
+                    if (arrow_header) {
+                        stack[size - 1].predicate_subject = return_identifier ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_NONE;
+                        stack[size - 1].constructor_return = (stack[size - 1].prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) != 0;
+                    }
                     if (arrow_header && !stack[size - 1].default_value && (stack[size - 1].context & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !is_query_argument_expression(stack, size)) stack[size - 1].context &= ~TYPE_GROUP_PARAMETER;
                     if (stack[size - 1].default_parameter && (stack[size - 1].parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) {
                         if (arrow_header && !stack[size - 1].default_type) stack[size - 1].parameter_pattern &= ~TYPE_PARAMETER_PATTERN_REST_SLOT;
@@ -2334,12 +2345,14 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 continue;
             }
             if (c == '\'' || c == '"' || c == '`') {
+                if (group->constructor_return && (group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_predicate_subject == TYPE_PREDICATE_SUBJECT_NONE && unsafe_conditional) *unsafe_conditional = true;
                 if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END && !group->default_value && !computed_expression && !group->property && !query_operand && !first_operand && !operand_pending && previous_predicate_subject != TYPE_PREDICATE_SUBJECT_NONE && !(group->prefix & (TYPE_GROUP_ASSERTS_PREFIX | TYPE_GROUP_PREDICATE_PREFIX))) group->expression_only = true;
                 push = c | (check_type_operands && frame == OBJECT_PROPERTY_GROUP_END && parameter_position ? PROPERTY_NAME_GROUP : 0);
                 if (c == '`' && frame == COMPUTED_PROPERTY_GROUP_END && parameter_position) push |= TYPE_EXPRESSION_GROUP;
             }
             else if (c == '=') {
                 if (lexer->lookahead == '>') {
+                    group->constructor_return = constructor_header;
                     group->predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
                     if (complete_conditionals && check_type_operands && completed_parenthesized_operand && !group->default_value && previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NAME) group->parameter_pattern = (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT) | TYPE_PARAMETER_PATTERN_NON_PATTERN;
                     if (complete_conditionals && check_type_operands && frame == TYPE_OPERAND_GROUP_END &&
@@ -2447,7 +2460,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
     unsigned conditional_depth = 0;
     bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
     bool query_operand = false, type_query_return = false, member_property = false, predicate_name = false, return_operand = first, abstract_constructor = false, predicate_start = first;
-    bool nonreference_type = false, unsafe_conditional = false, query_call_operand = false, assertion_predicate = false;
+    bool nonreference_type = false, unsafe_conditional = false, query_call_operand = false, assertion_predicate = false, constructor_return = false;
     TypePredicateSubject predicate_subject = untyped_return && !first ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_NONE;
     TypeGroupPrefix group_prefix = TYPE_GROUP_NO_PREFIX;
     while (!lexer->eof(lexer)) {
@@ -2455,6 +2468,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         int32_t c = lexer->lookahead;
         bool pending_contextual_predicate = untyped_return && (group_prefix & TYPE_GROUP_PREDICATE_PREFIX);
+        bool constructor_header = nonreference_type && (group_prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c == '=';
         if (untyped_return && ((query_operand && (!is_identifier_part(c) || is_ascii_digit(c))) ||
             (infer_name && starts_non_identifier_type_operand(c)))) unsafe_conditional = true;
         if (untyped_return && assertion_predicate && !is_identifier_part(c)) unsafe_conditional = true;
@@ -2479,6 +2493,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
                                   (abstract_constructor && strcmp(word, "new") == 0)))) return true;
             if (pending_contextual_predicate && !(ascii_word && strcmp(word, "extends") == 0)) {
+                if (constructor_return) unsafe_conditional = true;
                 first = true;
                 return_operand = true;
                 predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
@@ -2517,6 +2532,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 (infer_name || (previous_prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_READONLY_PREFIX))) &&
                 !member_property && ascii_word && strcmp(word, "is") == 0;
             bool predicate_operator = (!return_operand || assertion_is) && !member_property && ascii_word && strcmp(word, "is") == 0;
+            if (untyped_return && constructor_return && (predicate_operator || assertion_subject)) unsafe_conditional = true;
             if (contextual_predicate) {
                 group_prefix = TYPE_GROUP_PREDICATE_PREFIX;
                 predicate_subject = TYPE_PREDICATE_SUBJECT_NAME;
@@ -2608,6 +2624,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             continue;
         }
         if (pending_contextual_predicate && (c == '\\' || c == '\'' || c == '"' || c == '`' || c == '+' || c == '-' || c == '{')) {
+            if (constructor_return) unsafe_conditional = true;
             first = true;
             return_operand = true;
             predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
@@ -2664,6 +2681,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
         } else if (c == '=') {
             if (lexer->lookahead != '>') return !untyped_return || (!pending_operand && conditional_depth == 0 && !conditional_question_pending);
             advance(lexer);
+            constructor_return = constructor_header;
             predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
             first = !allow_expression;
             return_operand = first;
@@ -2674,6 +2692,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             unsigned completion = 0;
             if (!scan_type_group(lexer, generic_parameters ? TYPE_PARAMETER_GROUP_END : close, !allow_expression, true, &completion, untyped_return, &unsafe_conditional)) return allow_expression;
             bool pending_return = completion & TYPE_GROUP_RETURN_OPERAND;
+            if (completion & (TYPE_GROUP_RETURN_OPERAND | TYPE_GROUP_RETURN_IDENTIFIER)) constructor_return = (group_prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) != 0;
             predicate_subject = completion & TYPE_GROUP_RETURN_IDENTIFIER ? TYPE_PREDICATE_SUBJECT_NAME : pending_return ? TYPE_PREDICATE_SUBJECT_NONE : TYPE_PREDICATE_SUBJECT_COMPOSED;
             if (untyped_return && query_operand) unsafe_conditional = true;
             if (untyped_return && (((group_prefix & TYPE_GROUP_PRIMARY_PREFIX) && pending_return) ||
