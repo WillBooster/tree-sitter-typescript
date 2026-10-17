@@ -61,7 +61,7 @@
     "lefthook": "2.1.17",
     "oxfmt": "0.72.0",
     "oxlint": "1.87.0",
-    "oxlint-tsgolint": "7.0.2003",
+    "oxlint-tsgolint": "7.0.2004",
     "playwright": "1.63.0",
     "semantic-release": "25.0.9",
     "sort-package-json": "4.0.0",
