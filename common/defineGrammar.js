@@ -62,7 +62,8 @@ module.exports = function defineGrammar(dialect) {
     name: dialect,
 
     externals: ($, previous) => [
-      // JavaScript reads these only in rules replaced below.
+      // JavaScript reads these only in `export_statement` and its constructor chain: the export and `new` rules below
+      // replace those readings, leaving the chain's rules inherited but unreachable.
       ...previous.filter(
         (rule) =>
           !['_export_default_declaration', '_argumentless_new_end', '_constructor_async_function_start'].includes(
@@ -91,6 +92,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     supertypes: ($, previous) => [
+      // JavaScript's constructor chain is unreachable here (see `new_expression`).
       ...previous.filter((rule) => !['_constructor', '_constructor_chain_base'].includes(rule.name)),
       $.type,
       $.primary_type,
