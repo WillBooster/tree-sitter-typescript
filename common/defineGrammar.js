@@ -777,7 +777,7 @@ module.exports = function defineGrammar(dialect) {
           '{',
           repeat(
             choice(
-              seq(repeat(field('decorator', $.decorator)), $.method_definition, optional($._semicolon)),
+              seq(alias($._class_method_definition, $.method_definition), optional($._semicolon)),
               // As it happens for functions, the semicolon insertion should not
               // happen if a block follows the closing paren, because then it's a
               // *definition*, not a declaration. Example:
@@ -798,21 +798,9 @@ module.exports = function defineGrammar(dialect) {
           '}'
         ),
 
-      method_definition: ($) =>
-        prec.left(
-          seq(
-            optional($.accessibility_modifier),
-            optional('static'),
-            optional($.override_modifier),
-            optional('readonly'),
-            optional('async'),
-            optional(choice('get', 'set', '*')),
-            field('name', $._property_name),
-            optional('?'),
-            $._call_signature,
-            field('body', alias($._class_member_body, $.statement_block))
-          )
-        ),
+      _class_method_definition: ($) => methodDefinition($, repeat(field('decorator', $.decorator))),
+
+      method_definition: ($) => methodDefinition($),
 
       statement: ($, previous) => choice(previous, alias($.global_declaration, $.internal_module)),
 
@@ -1663,4 +1651,22 @@ function replaceArrowCallSignature(rule, replacement) {
     ...(rule.members ? { members: rule.members.map((member) => replaceArrowCallSignature(member, replacement)) } : {}),
     ...(rule.content ? { content: replaceArrowCallSignature(rule.content, replacement) } : {}),
   };
+}
+
+function methodDefinition($, decorators) {
+  return prec.left(
+    seq(
+      ...(decorators ? [decorators] : []),
+      optional($.accessibility_modifier),
+      optional('static'),
+      optional($.override_modifier),
+      optional('readonly'),
+      optional('async'),
+      optional(choice('get', 'set', '*')),
+      field('name', $._property_name),
+      optional('?'),
+      $._call_signature,
+      field('body', alias($._class_member_body, $.statement_block))
+    )
+  );
 }
