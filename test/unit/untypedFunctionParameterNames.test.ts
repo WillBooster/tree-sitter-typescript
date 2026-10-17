@@ -786,10 +786,11 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError).toBe(true);
-        expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
-          'type_alias_declaration',
+        const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
+        expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
           'export_statement',
-          'type_alias_declaration',
+          false,
+          'type B = 2;',
         ]);
       } finally {
         tree.delete();
@@ -803,7 +804,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'type F<T> = T extends (unknown)=>keyof ? .5:false;',
     'type F<T> = T extends (unknown)=>typeof ? true:false;',
     'type F<T> = T extends (z: number, unknown)=>readonly ? .5:false;',
-    'type F<T> = T extends (((infer)=>unique)) ? .5 : false;',
   ])('preserves the alias around an invalid conditional operand: %s', (source) => {
     const parser = new Parser().setLanguage(language);
     const aliases = new Query(language, '(type_alias_declaration name: (type_identifier) @name)');
@@ -815,6 +815,25 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     } finally {
       tree.delete();
       aliases.delete();
+      parser.delete();
+    }
+  });
+
+  test('preserves declarations after a parenthesized function type missing its arrow', () => {
+    const parser = new Parser().setLanguage(language);
+    const source =
+      'type F<T> = T extends (((infer)=>unique)) ? .5 : false;\nexport function f(x: number): number { return x; }\ntype B = 2;';
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
+      expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
+        'export_statement',
+        false,
+        'type B = 2;',
+      ]);
+    } finally {
+      tree.delete();
       parser.delete();
     }
   });
