@@ -63,7 +63,8 @@ module.exports = function defineGrammar(dialect) {
 
     externals: ($, previous) => [
       // JavaScript reads these only in `export_statement` and its constructor chain: the export and `new` rules below
-      // replace those readings, leaving the chain's rules inherited but unreachable.
+      // replace those readings, leaving the chain's rules inherited but unreachable. Dropping them keeps the external
+      // token order that `enum TokenType` in scanner.h mirrors; keeping them requires declaring them there in order.
       ...previous.filter(
         (rule) =>
           !['_export_default_declaration', '_argumentless_new_end', '_constructor_async_function_start'].includes(
@@ -92,7 +93,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     supertypes: ($, previous) => [
-      // JavaScript's constructor chain is unreachable here (see `new_expression`).
+      // Keeps JavaScript's constructor chain, unreachable here (see `new_expression`), out of grammar.json.
       ...previous.filter((rule) => !['_constructor', '_constructor_chain_base'].includes(rule.name)),
       $.type,
       $.primary_type,
