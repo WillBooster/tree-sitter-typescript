@@ -62,7 +62,13 @@ module.exports = function defineGrammar(dialect) {
     name: dialect,
 
     externals: ($, previous) => [
-      ...previous,
+      // JavaScript reads these only in rules replaced below.
+      ...previous.filter(
+        (rule) =>
+          !['_export_default_declaration', '_argumentless_new_end', '_constructor_async_function_start'].includes(
+            rule.name
+          )
+      ),
       $._function_signature_automatic_semicolon,
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
@@ -85,7 +91,7 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     supertypes: ($, previous) => [
-      ...previous,
+      ...previous.filter((rule) => !['_constructor', '_constructor_chain_base'].includes(rule.name)),
       $.type,
       $.primary_type,
       $._default_export_declaration,
@@ -181,7 +187,7 @@ module.exports = function defineGrammar(dialect) {
       [$.export_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier],
       ...withTypeArgumentsTarget($, previous),
-      [$._for_header, $._binding_identifier],
+      [$._for_header, $._lexical_binding_identifier],
       [$._field_name, $._property_name],
       [$._property_name, $.public_field_definition],
 
@@ -388,9 +394,12 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      new_expression: ($, previous) =>
+      // JavaScript's constructor chain ends where its scanner emits `_argumentless_new_end`, before a `<` is read.
+      // TypeScript's constructor takes type arguments, `!`, and instantiation expressions, whose readings GLR keeps until
+      // the type-arguments-end tokens decide them, so it stays a primary expression.
+      new_expression: ($) =>
         choice(
-          previous,
+          prec('new', seq('new', field('constructor', $.primary_expression), field('arguments', $.arguments))),
           prec.dynamic(
             DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
             prec(
@@ -407,9 +416,9 @@ module.exports = function defineGrammar(dialect) {
 
       // TypeScript reads `new A<B>c` as comparisons, but `new A<B>` before a line break and `c` as a `new` with type
       // arguments, which also take precedence over an extends clause's (`class C extends new A<B>, D {}`).
-      _argumentless_new_expression: ($, previous) =>
+      _argumentless_new_expression: ($) =>
         choice(
-          previous,
+          prec.right('new', seq('new', field('constructor', $.primary_expression))),
           prec.dynamic(
             DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
             seq(
@@ -649,11 +658,18 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _using_declarator: ($) =>
-        seq(field('name', $._binding_identifier), field('type', optional($.type_annotation)), optional($._initializer)),
+        seq(
+          field('name', $._lexical_binding_identifier),
+          field('type', optional($.type_annotation)),
+          optional($._initializer)
+        ),
 
       // After a declaration keyword that may also be an identifier (`let`, `using`), the lexer reads `of`, `as`, and
       // `satisfies` as the keywords that could follow that identifier, and every declaration shares that lexer state.
       _binding_identifier: ($) => choice($.identifier, alias(choice('of', 'as', 'satisfies'), $.identifier)),
+
+      _lexical_binding_identifier: ($) =>
+        choice(reserved('lexical', $.identifier), alias(choice('of', 'as', 'satisfies'), $.identifier)),
 
       _for_header: ($) =>
         seq(
@@ -669,7 +685,7 @@ module.exports = function defineGrammar(dialect) {
                 ),
                 seq(
                   field('kind', choice('let', 'const')),
-                  field('left', choice($._binding_identifier, $._destructuring_pattern))
+                  field('left', choice($._lexical_binding_identifier, $._destructuring_pattern))
                 )
               ),
               field('operator', choice('in', 'of'))
@@ -679,7 +695,7 @@ module.exports = function defineGrammar(dialect) {
                 seq(field('kind', 'using'), choice($._resource_binding_start, $._plain_resource_for_of_context)),
                 seq(field('kind', seq(alias($._await_keyword, 'await'), 'using')), $._resource_binding_start)
               ),
-              field('left', $._binding_identifier),
+              field('left', $._lexical_binding_identifier),
               field('operator', 'of')
             )
           ),
@@ -690,18 +706,9 @@ module.exports = function defineGrammar(dialect) {
       // TypeScript parses a postfix `!` as part of a member access chain, so `new A!()` constructs `A!`.
       non_null_expression: ($) => prec('member', seq($.primary_expression, '!')),
 
-      variable_declarator: ($) =>
-        choice(
-          seq(
-            field('name', choice($._binding_identifier, $._destructuring_pattern)),
-            // The line-break sentinel applies only right after the name: a type may continue on the next line.
-            choice(
-              optional(choice($._initializer, $._line_break_after_binding)),
-              seq(field('type', $.type_annotation), optional($._initializer))
-            )
-          ),
-          prec('declaration', seq(field('name', $._binding_identifier), '!', field('type', $.type_annotation)))
-        ),
+      variable_declarator: ($) => variableDeclarator($, $._binding_identifier),
+
+      _lexical_variable_declarator: ($) => variableDeclarator($, $._lexical_binding_identifier),
 
       method_signature: ($) =>
         seq(
@@ -1549,6 +1556,20 @@ module.exports = function defineGrammar(dialect) {
     },
   });
 };
+
+function variableDeclarator($, name) {
+  return choice(
+    seq(
+      field('name', choice(name, $._destructuring_pattern)),
+      // The line-break sentinel applies only right after the name: a type may continue on the next line.
+      choice(
+        optional(choice($._initializer, $._line_break_after_binding)),
+        seq(field('type', $.type_annotation), optional($._initializer))
+      )
+    ),
+    prec('declaration', seq(field('name', name), '!', field('type', $.type_annotation)))
+  );
+}
 
 function nestedIdentifierTail($) {
   return [

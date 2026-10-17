@@ -50,6 +50,33 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} rejects let as a typed or untyped lexical binding`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const [source, valid] of [
+        ['let let = 1;', false],
+        ['const let: T = 1;', false],
+        [String.raw`let let!: T;`, false],
+        ['let value: T = 1, let = 2;', false],
+        ['for (const let of values) {}', false],
+        ['async function f() { await using let: T = create(); }', false],
+        ['var let: T = 1;', true],
+        ['let value: T = let, of: T = 1;', true],
+        ['for (const as: T = 1; ; ) {}', true],
+        ['using satisfies: T = create();', true],
+      ] as const) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(!valid);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} preserves typed resource bindings and regex statement boundaries`, () => {
     const parser = new Parser().setLanguage(language);
     try {
