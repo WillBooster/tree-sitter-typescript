@@ -427,10 +427,16 @@ describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dia
                 );
                 const assertion = functionType ? annotation : annotation.namedChildren[0]!;
                 expect(assertion.type).toBe('asserts');
-                const name = assertion.namedChildren.at(-1)!;
+                const last = assertion.namedChildren.at(-1)!;
+                // Recovery either keeps the asserted name and reads the tail as a predicate type after a
+                // missing `is`, or skips the original name and takes a name from the tail.
+                const predicate = after !== '' && last.type === 'type_predicate';
+                const name = predicate ? last.childForFieldName('name')! : last;
                 expect(name.type).toBe('identifier');
-                expect(name.text).toBe(after ? recoveredName : word);
-                expect(name.startIndex).toBe(after ? next.indexOf(recoveredName, start) : prefix.lastIndexOf(word));
+                expect(name.text).toBe(after && !predicate ? recoveredName : word);
+                expect(name.startIndex).toBe(
+                  after && !predicate ? next.indexOf(recoveredName, start) : prefix.lastIndexOf(word)
+                );
                 expect(name.endIndex).toBe(name.startIndex + name.text.length);
                 expect(
                   current.rootNode

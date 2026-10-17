@@ -778,32 +778,32 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
-  test.each(['type F<T> = T extends (unknown)=>(x: T)=>typeof x().y[]<U> ? .5:false;'])(
-    'preserves declarations after unsupported query continuations: %s',
-    (prefix) => {
-      const parser = new Parser().setLanguage(language);
-      const source = `${prefix}\n\nexport function f(x: number): number { return x; }\ntype B = 2;`;
-      const tree = parser.parse(source)!;
-      try {
-        expect(tree.rootNode.hasError).toBe(true);
-        expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
-          'type_alias_declaration',
-          'export_statement',
-          'type_alias_declaration',
-        ]);
-      } finally {
-        tree.delete();
-        parser.delete();
-      }
+  test.each([
+    'type F<T> = T extends (unknown)=>(x: T)=>typeof x().y[]<U> ? .5:false;',
+    'type F<T> = T extends (((infer)=>unique)) ? .5 : false;',
+  ])('preserves declarations after invalid conditional types: %s', (prefix) => {
+    const parser = new Parser().setLanguage(language);
+    const source = `${prefix}\n\nexport function f(x: number): number { return x; }\ntype B = 2;`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
+      expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
+        'export_statement',
+        false,
+        'type B = 2;',
+      ]);
+    } finally {
+      tree.delete();
+      parser.delete();
     }
-  );
+  });
 
   test.each([
     'type F<T> = T extends (unknown)=>unique ? .5:false;',
     'type F<T> = T extends (unknown)=>keyof ? .5:false;',
     'type F<T> = T extends (unknown)=>typeof ? true:false;',
     'type F<T> = T extends (z: number, unknown)=>readonly ? .5:false;',
-    'type F<T> = T extends (((infer)=>unique)) ? .5 : false;',
   ])('preserves the alias around an invalid conditional operand: %s', (source) => {
     const parser = new Parser().setLanguage(language);
     const aliases = new Query(language, '(type_alias_declaration name: (type_identifier) @name)');
