@@ -778,26 +778,26 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     }
   });
 
-  test.each(['type F<T> = T extends (unknown)=>(x: T)=>typeof x().y[]<U> ? .5:false;'])(
-    'preserves declarations after unsupported query continuations: %s',
-    (prefix) => {
-      const parser = new Parser().setLanguage(language);
-      const source = `${prefix}\n\nexport function f(x: number): number { return x; }\ntype B = 2;`;
-      const tree = parser.parse(source)!;
-      try {
-        expect(tree.rootNode.hasError).toBe(true);
-        const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
-        expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
-          'export_statement',
-          false,
-          'type B = 2;',
-        ]);
-      } finally {
-        tree.delete();
-        parser.delete();
-      }
+  test.each([
+    'type F<T> = T extends (unknown)=>(x: T)=>typeof x().y[]<U> ? .5:false;',
+    'type F<T> = T extends (((infer)=>unique)) ? .5 : false;',
+  ])('preserves declarations after invalid conditional types: %s', (prefix) => {
+    const parser = new Parser().setLanguage(language);
+    const source = `${prefix}\n\nexport function f(x: number): number { return x; }\ntype B = 2;`;
+    const tree = parser.parse(source)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+      const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
+      expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
+        'export_statement',
+        false,
+        'type B = 2;',
+      ]);
+    } finally {
+      tree.delete();
+      parser.delete();
     }
-  );
+  });
 
   test.each([
     'type F<T> = T extends (unknown)=>unique ? .5:false;',
@@ -815,25 +815,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     } finally {
       tree.delete();
       aliases.delete();
-      parser.delete();
-    }
-  });
-
-  test('preserves declarations after a parenthesized function type missing its arrow', () => {
-    const parser = new Parser().setLanguage(language);
-    const source =
-      'type F<T> = T extends (((infer)=>unique)) ? .5 : false;\nexport function f(x: number): number { return x; }\ntype B = 2;';
-    const tree = parser.parse(source)!;
-    try {
-      expect(tree.rootNode.hasError).toBe(true);
-      const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
-      expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
-        'export_statement',
-        false,
-        'type B = 2;',
-      ]);
-    } finally {
-      tree.delete();
       parser.delete();
     }
   });
