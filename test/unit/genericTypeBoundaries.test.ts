@@ -227,6 +227,11 @@ for (const dialect of ['typescript', 'tsx']) {
           `A | ${name}<B>`,
           `A[] | ${name}<B>`,
           `{p: (x:${name}<B>)=>X}`,
+          `${name}<Box\n<string>>`,
+          `${name}<ns.Box\n<string>>`,
+          `${name}<string, Box\n<string>>`,
+          `${name}<{ value: Box/*\n*/<string> }>`,
+          `${name}<(value: Box\n<string>) => Result>`,
           ...['[]', ' | A', ' & A', "['x']", ' extends A ? X : Y'].map((suffix) => `${name}<B>${suffix}`),
         ]) {
           const source = `class C implements ${type} {}`;
@@ -254,10 +259,32 @@ for (const dialect of ['typescript', 'tsx']) {
           tree.delete();
         }
       }
+      for (const source of [
+        'class C implements readonly<\nlet x = 1;\nconst sentinel = 1;',
+        'class C implements keyof<B>\nconst x: number<B> = 1;\nconst sentinel = 1;',
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+          expect(
+            tree.rootNode.descendantsOfType('lexical_declaration').some((node) => node.text === 'const sentinel = 1;'),
+            source
+          ).toBe(true);
+        } finally {
+          tree.delete();
+        }
+      }
       const direct = 'class C implements number<B> {}';
       const nameIndex = direct.indexOf('number');
       let incremental = parser.parse(direct)!;
-      for (const entry of ['A | number<B>', '{p: (x:number<B>)=>X}', 'number<B>[]', 'number<B> | A', 'number<B>']) {
+      for (const entry of [
+        'A | number<B>',
+        '{p: (x:number<B>)=>X}',
+        'number<B>[]',
+        'number<B> | A',
+        'number<Box\n<string>>',
+        'number<B>',
+      ]) {
         const nextSource = `${direct.slice(0, nameIndex)}${entry} {}`;
         const previousSource = incremental.rootNode.text;
         incremental.edit(
