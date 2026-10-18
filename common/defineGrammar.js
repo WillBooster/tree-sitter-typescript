@@ -921,7 +921,7 @@ module.exports = function defineGrammar(dialect) {
                   'never',
                   'object',
                   $.this,
-                  $.import,
+                  'import',
                   $.true,
                   $.false,
                   $.null,

@@ -142,6 +142,9 @@ for (const dialect of ['typescript', 'tsx']) {
               expect(
                 tree.rootNode.descendantsOfType('generic_type').map((node) => node.childForFieldName('name')?.text)
               ).toEqual([name, 'Box', 'Other']);
+              for (const generic of tree.rootNode.descendantsOfType('generic_type')) {
+                expect(generic.childForFieldName('name')?.childCount).toBe(0);
+              }
               expect(
                 tree.rootNode
                   .descendantsOfType('public_field_definition')

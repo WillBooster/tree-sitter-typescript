@@ -12729,8 +12729,8 @@
                     "name": "this"
                   },
                   {
-                    "type": "SYMBOL",
-                    "name": "import"
+                    "type": "STRING",
+                    "value": "import"
                   },
                   {
                     "type": "SYMBOL",
