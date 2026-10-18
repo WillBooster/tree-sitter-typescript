@@ -29,7 +29,7 @@ for (const dialect of ['typescript', 'tsx']) {
           `@one() export declare ${kind} Named<T extends Box<Box<string>>> extends Base<T> implements Shape<T>`,
           `@one() /* comment */ export declare ${kind} Named`,
         ]) {
-          const source = `${head} {}\n(next);`;
+          const source = `${head} { value: number; }\n(next);`;
           const tree = parser.parse(source)!;
           try {
             check(tree, source, query);
@@ -38,7 +38,7 @@ for (const dialect of ['typescript', 'tsx']) {
             tree.delete();
           }
         }
-        let source = `@one() ${kind} Named<T> {}`;
+        let source = `@one() ${kind} Named<T> { value: T; }`;
         let tree = parser.parse(source)!;
         const start = source.indexOf(kind);
         let previous = '';
@@ -105,8 +105,10 @@ function check(tree: Tree, source: string, query: Query): void {
   ).toEqual([]);
   const expected: unknown[] = [];
   const ambient: string[] = [];
+  const members: string[][] = [];
   for (const statement of reference.statements) {
     if (!ts.isClassDeclaration(statement)) continue;
+    members.push(statement.members.filter(ts.isPropertyDeclaration).map((member) => member.name.getText(reference)));
     if (statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword)) {
       ambient.push(statement.name!.text);
     }
@@ -114,6 +116,14 @@ function check(tree: Tree, source: string, query: Query): void {
       expected.push([statement.name?.text, decorator.getStart(reference), decorator.end]);
     }
   }
+  expect(
+    tree.rootNode.descendantsOfType(['class_declaration', 'abstract_class_declaration']).map((node) =>
+      node
+        .childForFieldName('body')!
+        .namedChildren.filter((member) => member.type === 'public_field_definition')
+        .map((member) => member.childForFieldName('name')!.text)
+    )
+  ).toEqual(members);
   expect(
     tree.rootNode
       .descendantsOfType('ambient_declaration')
