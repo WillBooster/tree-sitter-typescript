@@ -165,6 +165,73 @@ for (const dialect of ['typescript', 'tsx']) {
         edited.delete();
         fresh.delete();
       }
+      for (const name of ['new', 'typeof', 'void']) {
+        const source = `class C implements ${name}<B> {}`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const name of [
+        'any',
+        'number',
+        'boolean',
+        'string',
+        'symbol',
+        'unknown',
+        'never',
+        'object',
+        'this',
+        'import',
+        'true',
+        'false',
+        'null',
+        'undefined',
+        'keyof',
+        'readonly',
+        'unique',
+        'infer',
+      ]) {
+        for (const type of [`A | ${name}<B>`, `A[] | ${name}<B>`, `{p: (x:${name}<B>)=>X}`]) {
+          const source = `class C implements ${type} {}`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(true);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+      const direct = 'class C implements number<B> {}';
+      const nameIndex = direct.indexOf('number');
+      let incremental = parser.parse(direct)!;
+      for (const prefix of ['A | ', '{p: (x:', '']) {
+        const nextSource = `${direct.slice(0, nameIndex)}${prefix}number<B>${prefix === '{p: (x:' ? ')=>X}' : ''} {}`;
+        const previousSource = incremental.rootNode.text;
+        incremental.edit(
+          new Edit({
+            startIndex: nameIndex,
+            oldEndIndex: previousSource.length,
+            newEndIndex: nextSource.length,
+            startPosition: { row: 0, column: nameIndex },
+            oldEndPosition: { row: 0, column: previousSource.length },
+            newEndPosition: { row: 0, column: nextSource.length },
+          })
+        );
+        const next = parser.parse(nextSource, incremental)!;
+        const fresh = parser.parse(nextSource)!;
+        try {
+          expect(next.rootNode.hasError, nextSource).toBe(prefix !== '');
+          expect(next.rootNode.toString()).toBe(fresh.rootNode.toString());
+        } finally {
+          fresh.delete();
+          incremental.delete();
+        }
+        incremental = next;
+      }
+      incremental.delete();
       for (const source of [
         'type R = number<B>;',
         'class C implements Box<number<B>> {}',
