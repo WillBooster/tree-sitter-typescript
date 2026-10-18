@@ -1,7 +1,7 @@
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Node } from '@willbooster/web-tree-sitter';
 
 import { loadCurrentWasmBuild } from './wasmBuild';
 
@@ -310,8 +310,8 @@ for (const dialect of ['typescript', 'tsx']) {
             oldEndIndex: previousSource.length,
             newEndIndex: nextSource.length,
             startPosition: { row: 0, column: nameIndex },
-            oldEndPosition: { row: 0, column: previousSource.length },
-            newEndPosition: { row: 0, column: nextSource.length },
+            oldEndPosition: endPosition(previousSource),
+            newEndPosition: endPosition(nextSource),
           })
         );
         const next = parser.parse(nextSource, incremental)!;
@@ -319,6 +319,7 @@ for (const dialect of ['typescript', 'tsx']) {
         try {
           expect(next.rootNode.hasError, nextSource).toBe(entry !== 'number<B>');
           expect(next.rootNode.toString()).toBe(fresh.rootNode.toString());
+          expect(nodeRanges(next.rootNode)).toEqual(nodeRanges(fresh.rootNode));
         } finally {
           fresh.delete();
           incremental.delete();
@@ -483,4 +484,13 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
+}
+
+function endPosition(source: string): { row: number; column: number } {
+  const lines = source.split('\n');
+  return { row: lines.length - 1, column: lines.at(-1)!.length };
+}
+
+function nodeRanges(node: Node): unknown {
+  return [node.startIndex, node.endIndex, node.startPosition, node.endPosition, node.children.map(nodeRanges)];
 }
