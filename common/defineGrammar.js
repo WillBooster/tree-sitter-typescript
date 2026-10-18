@@ -80,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $._type_member_semicolon,
       $._heritage_type_start,
       $._heritage_type_end,
+      $._keyword_heritage_arguments_end,
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
@@ -896,7 +897,10 @@ module.exports = function defineGrammar(dialect) {
         seq(
           'implements',
           commaSep1(
-            seq($._heritage_type_start, choice($.type, alias($._implements_keyword_type, $.type)), $._heritage_type_end)
+            seq(
+              $._heritage_type_start,
+              choice(seq($.type, $._heritage_type_end), alias($._implements_keyword_type, $.type))
+            )
           )
         ),
 
@@ -934,9 +938,14 @@ module.exports = function defineGrammar(dialect) {
                 $.type_identifier
               )
             ),
-            field('type_arguments', $.type_arguments)
+            choice(
+              seq(field('type_arguments', $.type_arguments), $._heritage_type_end),
+              prec.dynamic(-1, field('type_arguments', alias($._implements_keyword_arguments, $.type_arguments)))
+            )
           )
         ),
+
+      _implements_keyword_arguments: ($) => seq('<', commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(

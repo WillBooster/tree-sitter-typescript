@@ -158,17 +158,22 @@ for (const dialect of ['typescript', 'tsx']) {
       }
       for (const name of ['number', 'readonly', 'keyof']) {
         for (const argument of ['(<T>() => T)', 'T extends U ? X : Y', '`x${string}`', '{ [K in keyof T]: T[K] }']) {
-          const source = `class C implements ${name}<${argument}> {}`;
-          const tree = parser.parse(source)!;
-          try {
-            expect(tree.rootNode.hasError, source).toBe(false);
-            const generic = tree.rootNode.descendantsOfType('generic_type')[0]!;
-            expect(generic.childForFieldName('name')?.text).toBe(name);
-            expect(generic.childForFieldName('type_arguments')?.namedChildren.map((node) => node.text)).toEqual([
-              argument,
-            ]);
-          } finally {
-            tree.delete();
+          for (const prefix of ['', 'string, ']) {
+            for (const trailing of ['', ',']) {
+              const source = `class C implements ${name}<${prefix}${argument}${trailing}> {}`;
+              const tree = parser.parse(source)!;
+              try {
+                expect(tree.rootNode.hasError, source).toBe(false);
+                const generic = tree.rootNode.descendantsOfType('generic_type')[0]!;
+                expect(generic.childForFieldName('name')?.text).toBe(name);
+                expect(generic.childForFieldName('type_arguments')?.namedChildren.map((node) => node.text)).toEqual([
+                  ...(prefix ? ['string'] : []),
+                  argument,
+                ]);
+              } finally {
+                tree.delete();
+              }
+            }
           }
         }
       }
@@ -276,6 +281,15 @@ for (const dialect of ['typescript', 'tsx']) {
         } finally {
           tree.delete();
         }
+      }
+      const manyArguments = `class C implements number<${Array.from({ length: 128 }, () => 'Box<string>').join(',')}> {}`;
+      const manyTree = parser.parse(manyArguments)!;
+      try {
+        expect(manyTree.rootNode.hasError).toBe(false);
+        const generic = manyTree.rootNode.descendantsOfType('generic_type')[0]!;
+        expect(generic.childForFieldName('type_arguments')?.namedChildCount).toBe(128);
+      } finally {
+        manyTree.delete();
       }
       const direct = 'class C implements number<B> {}';
       const nameIndex = direct.indexOf('number');
@@ -416,6 +430,55 @@ for (const dialect of ['typescript', 'tsx']) {
         oldLength = separator.length;
       }
       tree.delete();
+    } finally {
+      parser.delete();
+    }
+  });
+}
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves declarations while editing a keyword heritage closing angle in ${dialect}`, async () => {
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const name of ['number', 'import', 'readonly', 'keyof']) {
+        for (const prefix of ['', 'A, ']) {
+          for (const argument of ['B', 'Box<B>', '{ value: B }', '(value: B) => C']) {
+            const valid = `class C implements ${prefix}${name}<${argument}> {}\nconst sentinel = 1;\nfunction after() {}`;
+            const angle = valid.lastIndexOf('>');
+            let tree = parser.parse(valid)!;
+            for (const remove of [true, false]) {
+              const source = remove ? valid.slice(0, angle) + valid.slice(angle + 1) : valid;
+              const oldEnd = angle + (remove ? 1 : 0);
+              const newEnd = angle + (remove ? 0 : 1);
+              tree.edit(
+                new Edit({
+                  startIndex: angle,
+                  oldEndIndex: oldEnd,
+                  newEndIndex: newEnd,
+                  startPosition: { row: 0, column: angle },
+                  oldEndPosition: { row: 0, column: oldEnd },
+                  newEndPosition: { row: 0, column: newEnd },
+                })
+              );
+              const next = parser.parse(source, tree)!;
+              const fresh = parser.parse(source)!;
+              try {
+                expect(next.rootNode.hasError, source).toBe(remove);
+                expect(next.rootNode.toString(), source).toBe(fresh.rootNode.toString());
+                expect(
+                  next.rootNode.namedChildren.map((node) => node.type),
+                  source
+                ).toEqual(['class_declaration', 'lexical_declaration', 'function_declaration']);
+              } finally {
+                fresh.delete();
+                tree.delete();
+              }
+              tree = next;
+            }
+            tree.delete();
+          }
+        }
+      }
     } finally {
       parser.delete();
     }

@@ -47,6 +47,7 @@ enum TokenType {
     TYPE_MEMBER_SEMICOLON,
     HERITAGE_TYPE_START,
     HERITAGE_TYPE_END,
+    KEYWORD_HERITAGE_ARGUMENTS_END,
     GLOBAL_DECLARATION_START,
     GLOBAL_DECLARATION_END,
     ERROR_RECOVERY,
@@ -2969,6 +2970,20 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (lexer->lookahead < 'a' || lexer->lookahead > 'z') return false;
         lexer->result_symbol = REGEX_FLAGS_START;
         return true;
+    }
+
+    if (valid_symbols[KEYWORD_HERITAGE_ARGUMENTS_END] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == '>' || lexer->lookahead == '{') {
+            lexer->mark_end(lexer);
+            if (lexer->lookahead == '>') {
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) return false;
+                if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
+            }
+            lexer->result_symbol = KEYWORD_HERITAGE_ARGUMENTS_END;
+            return true;
+        }
     }
 
     if (!valid_symbols[ERROR_RECOVERY] && (valid_symbols[HERITAGE_TYPE_START] || valid_symbols[HERITAGE_TYPE_END])) {
