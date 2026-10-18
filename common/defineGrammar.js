@@ -99,6 +99,7 @@ module.exports = function defineGrammar(dialect) {
       $.primary_type,
       $._default_export_declaration,
       $._decorated_export_declaration,
+      $._decorated_export_ambient_class_declaration,
       $._conditional_right_type,
       $._conditional_parameter_pattern,
     ],
@@ -654,12 +655,25 @@ module.exports = function defineGrammar(dialect) {
       _decorated_export_declaration: ($) =>
         choice(
           alias($._decorated_export_class, $.class_declaration),
-          alias($._decorated_export_abstract_class, $.abstract_class_declaration)
+          alias($._decorated_export_abstract_class, $.abstract_class_declaration),
+          alias($._decorated_export_ambient, $.ambient_declaration)
         ),
 
       _decorated_export_class: ($) => decoratedExportClass($, false),
 
       _decorated_export_abstract_class: ($) => decoratedExportClass($, true),
+
+      _decorated_export_ambient: ($) => alias($._decorated_export_ambient_class_declaration, $.declaration),
+
+      _decorated_export_ambient_class_declaration: ($) =>
+        choice(
+          alias($._decorated_export_ambient_class, $.class_declaration),
+          alias($._decorated_export_ambient_abstract_class, $.abstract_class_declaration)
+        ),
+
+      _decorated_export_ambient_class: ($) => decoratedExportClass($, false, true),
+
+      _decorated_export_ambient_abstract_class: ($) => decoratedExportClass($, true, true),
 
       _default_export_declaration: ($) =>
         choice(
@@ -1706,17 +1720,19 @@ function methodDefinition($, decorators) {
   );
 }
 
-function decoratedExportClass($, abstract) {
+function decoratedExportClass($, abstract, ambient = false) {
   const keyword = abstract ? seq('abstract', 'class') : 'class';
   return prec.left(
     'declaration',
     seq(
       repeat1(field('decorator', $.decorator)),
       'export',
-      choice(
-        seq(keyword, field('name', $._type_identifier)),
-        seq('default', keyword, field('name', optional($._type_identifier)))
-      ),
+      ambient
+        ? seq('declare', keyword, field('name', $._type_identifier))
+        : choice(
+            seq(keyword, field('name', $._type_identifier)),
+            seq('default', keyword, field('name', optional($._type_identifier)))
+          ),
       field('type_parameters', optional($.type_parameters)),
       optional($.class_heritage),
       field('body', $.class_body),

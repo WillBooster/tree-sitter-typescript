@@ -26,6 +26,8 @@ for (const dialect of ['typescript', 'tsx']) {
           `@one() export default ${kind}`,
           `export @one() ${kind} Named`,
           `export default @one() ${kind}`,
+          `@one() export declare ${kind} Named<T extends Box<Box<string>>> extends Base<T> implements Shape<T>`,
+          `@one() /* comment */ export declare ${kind} Named`,
         ]) {
           const source = `${head} {}\n(next);`;
           const tree = parser.parse(source)!;
@@ -41,7 +43,7 @@ for (const dialect of ['typescript', 'tsx']) {
         const start = source.indexOf(kind);
         let previous = '';
         try {
-          for (const replacement of ['export ', 'export default ', '']) {
+          for (const replacement of ['export ', 'export declare ', 'export default ', '']) {
             const next = source.slice(0, start) + replacement + source.slice(start + previous.length);
             const oldTree = tree;
             tree = compareEditedTree(
@@ -77,6 +79,8 @@ for (const dialect of ['typescript', 'tsx']) {
         '@dec export default value;',
         '@dec export class {}',
         '@dec export abstract class {}',
+        '@dec export declare class {}',
+        '@dec export default declare class Named {}',
       ]) {
         const tree = parser.parse(source)!;
         try {
@@ -95,13 +99,29 @@ for (const dialect of ['typescript', 'tsx']) {
 function check(tree: Tree, source: string, query: Query): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile('classes.ts', source, ts.ScriptTarget.Latest, true);
+  expect(
+    ts.transpileModule(source, { reportDiagnostics: true, compilerOptions: { experimentalDecorators: true } })
+      .diagnostics
+  ).toEqual([]);
   const expected: unknown[] = [];
+  const ambient: string[] = [];
   for (const statement of reference.statements) {
     if (!ts.isClassDeclaration(statement)) continue;
+    if (statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword)) {
+      ambient.push(statement.name!.text);
+    }
     for (const decorator of ts.getDecorators(statement) ?? []) {
       expected.push([statement.name?.text, decorator.getStart(reference), decorator.end]);
     }
   }
+  expect(
+    tree.rootNode
+      .descendantsOfType('ambient_declaration')
+      .map(
+        (node) =>
+          node.namedChildren.find((child) => child.type.endsWith('class_declaration'))!.childForFieldName('name')!.text
+      )
+  ).toEqual(ambient);
   const captures = query.captures(tree.rootNode);
   expect(
     captures
@@ -119,7 +139,11 @@ function check(tree: Tree, source: string, query: Query): void {
   );
   for (const node of exported) {
     expect(node.childrenForFieldName('decorator')).toEqual([]);
-    const declaration = node.childForFieldName('declaration')!;
+    const exportedDeclaration = node.childForFieldName('declaration')!;
+    const declaration =
+      exportedDeclaration.type === 'ambient_declaration'
+        ? exportedDeclaration.namedChildren.find((child) => child.type.endsWith('class_declaration'))!
+        : exportedDeclaration;
     expect(declaration.startIndex).toBe(declaration.childrenForFieldName('decorator')[0]!.startIndex);
   }
 }
