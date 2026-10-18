@@ -102,6 +102,8 @@ module.exports = function defineGrammar(dialect) {
       $._decorated_export_ambient_class_declaration,
       $._conditional_right_type,
       $._conditional_parameter_pattern,
+      $._implements_keyword_type,
+      $._implements_keyword_primary_type,
     ],
 
     precedences: ($, previous) => [
@@ -180,6 +182,7 @@ module.exports = function defineGrammar(dialect) {
     conflicts: ($, previous) => [
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
+      [$.primary_type, $.type_parameter],
       [$.infer_type],
       [$.infer_type, $.type_predicate],
       [$.asserts, $.type_predicate],
@@ -889,7 +892,51 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      implements_clause: ($) => seq('implements', commaSep1(seq($._heritage_type_start, $.type, $._heritage_type_end))),
+      implements_clause: ($) =>
+        seq(
+          'implements',
+          commaSep1(
+            seq($._heritage_type_start, choice($.type, alias($._implements_keyword_type, $.type)), $._heritage_type_end)
+          )
+        ),
+
+      _implements_keyword_type: ($) => alias($._implements_keyword_primary_type, $.primary_type),
+
+      _implements_keyword_primary_type: ($) => alias($._implements_keyword_generic_type, $.generic_type),
+
+      _implements_keyword_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field(
+              'name',
+              alias(
+                choice(
+                  'any',
+                  'number',
+                  'boolean',
+                  'string',
+                  'symbol',
+                  'unknown',
+                  'never',
+                  'object',
+                  $.this,
+                  $.import,
+                  $.true,
+                  $.false,
+                  $.null,
+                  $.undefined,
+                  'keyof',
+                  'readonly',
+                  'unique',
+                  'infer'
+                ),
+                $.type_identifier
+              )
+            ),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
 
       ambient_declaration: ($) =>
         seq(

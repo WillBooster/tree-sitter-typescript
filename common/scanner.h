@@ -67,7 +67,6 @@ typedef struct {
     // Nested await end tokens must not clear it before the enclosing statement consumes it.
     bool automatic_semicolon_pending;
     bool heritage_type_pending;
-    bool heritage_generic_name_pending;
     bool default_declaration_pending;
 } Scanner;
 
@@ -85,8 +84,7 @@ static inline unsigned external_scanner_serialize(void *payload, char *buffer) {
     buffer[0] = (char)scanner->automatic_semicolon_pending;
     buffer[1] = (char)scanner->heritage_type_pending;
     buffer[2] = (char)scanner->default_declaration_pending;
-    buffer[3] = (char)scanner->heritage_generic_name_pending;
-    return 4;
+    return 3;
 }
 
 static inline void external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
@@ -94,7 +92,6 @@ static inline void external_scanner_deserialize(void *payload, const char *buffe
     scanner->automatic_semicolon_pending = length > 0 && buffer[0];
     scanner->heritage_type_pending = length > 1 && buffer[1];
     scanner->default_declaration_pending = length > 2 && buffer[2];
-    scanner->heritage_generic_name_pending = length > 3 && buffer[3];
 }
 
 static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
@@ -1489,7 +1486,7 @@ static bool is_type_probe_word(const char *word, const char *const *words, unsig
 static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size);
 static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const char *word, bool first, bool *unsafe_conditional);
 
-static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage, bool heritage_generic_name) {
+static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool conditional_parameter = valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME];
     bool unqualified = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || conditional_parameter;
     bool allow_type_arguments = valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START];
@@ -1598,7 +1595,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
-    if (unqualified && ascii_word && (!heritage_generic_name || strcmp(word, "new") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "void") == 0)) {
+    if (unqualified && ascii_word) {
         static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
             if (strcmp(word, keywords[i]) == 0) return false;
@@ -2946,14 +2943,6 @@ static bool scan_arrow_predefined_return_start(TSLexer *lexer) {
     return true;
 }
 
-static bool scan_heritage_generic_name_start(TSLexer *lexer) {
-    if (!scan_default_trivia(lexer, true, false)) return false;
-    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
-    char word[16] = {0};
-    if (!scan_identifier(lexer, word, sizeof(word), false)) return false;
-    return scan_default_trivia(lexer, true, false) && lexer->lookahead == '<';
-}
-
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
@@ -2979,7 +2968,6 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
         }
         scanner->heritage_type_pending = valid_symbols[HERITAGE_TYPE_START];
-        scanner->heritage_generic_name_pending = scanner->heritage_type_pending && scan_heritage_generic_name_start(lexer);
         lexer->result_symbol = scanner->heritage_type_pending ? HERITAGE_TYPE_START : HERITAGE_TYPE_END;
         return true;
     }
@@ -3133,14 +3121,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] || valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME] ||
          ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
-        bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending, scanner->heritage_generic_name_pending);
+        bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
         if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
             lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
             lexer->result_symbol != PREDEFINED_ANNOTATED_NAME &&
-            lexer->result_symbol != CONDITIONAL_PREDEFINED_PARAMETER_NAME) {
-            scanner->heritage_type_pending = false;
-            scanner->heritage_generic_name_pending = false;
-        }
+            lexer->result_symbol != CONDITIONAL_PREDEFINED_PARAMETER_NAME) scanner->heritage_type_pending = false;
         return result;
     }
 
@@ -3181,7 +3166,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
     if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
         (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
-        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending, scanner->heritage_generic_name_pending);
+        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
     return false;
 }

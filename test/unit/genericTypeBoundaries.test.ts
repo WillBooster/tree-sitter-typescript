@@ -96,8 +96,10 @@ for (const dialect of ['typescript', 'tsx']) {
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`keeps keyword-named heritage generics separate from ordinary types in ${dialect}`, async () => {
+    const language = await loadCurrentWasmBuild(dialect);
+    const query = new Query(language, '(implements_clause (type) @type) (implements_clause (primary_type) @primary)');
     const parser = new Parser();
-    parser.setLanguage(await loadCurrentWasmBuild(dialect));
+    parser.setLanguage(language);
     try {
       for (const name of [
         'any',
@@ -123,18 +125,44 @@ for (const dialect of ['typescript', 'tsx']) {
         'satisfies',
       ]) {
         for (const gap of ['', '\n', '/*\n*/']) {
-          const source = `class C implements ${name}${gap}<Box<string>>, Other<number> { value: number; }`;
+          for (const prefix of ['', 'A, ']) {
+            const source = `class C implements ${prefix}${name}${gap}<Box<string>>, Other<number> { value: number; }`;
+            const tree = parser.parse(source)!;
+            try {
+              expect(tree.rootNode.hasError, source).toBe(false);
+              for (const kind of ['type', 'primary']) {
+                expect(
+                  query
+                    .captures(tree.rootNode)
+                    .filter(({ name }) => name === kind)
+                    .map(({ node }) => node.text)
+                ).toEqual([...(prefix ? ['A'] : []), `${name}${gap}<Box<string>>`, 'Other<number>']);
+              }
+              expect(
+                tree.rootNode.descendantsOfType('generic_type').map((node) => node.childForFieldName('name')?.text)
+              ).toEqual([name, 'Box', 'Other']);
+              expect(
+                tree.rootNode
+                  .descendantsOfType('public_field_definition')
+                  .map((node) => node.childForFieldName('name')?.text)
+              ).toEqual(['value']);
+            } finally {
+              tree.delete();
+            }
+          }
+        }
+      }
+      for (const name of ['number', 'readonly', 'keyof']) {
+        for (const argument of ['<T>() => T', 'T extends U ? X : Y', '`x${string}`', '{ [K in keyof T]: T[K] }']) {
+          const source = `class C implements ${name}<${argument}> {}`;
           const tree = parser.parse(source)!;
           try {
             expect(tree.rootNode.hasError, source).toBe(false);
-            expect(
-              tree.rootNode.descendantsOfType('generic_type').map((node) => node.childForFieldName('name')?.text)
-            ).toEqual([name, 'Box', 'Other']);
-            expect(
-              tree.rootNode
-                .descendantsOfType('public_field_definition')
-                .map((node) => node.childForFieldName('name')?.text)
-            ).toEqual(['value']);
+            const generic = tree.rootNode.descendantsOfType('generic_type')[0]!;
+            expect(generic.childForFieldName('name')?.text).toBe(name);
+            expect(generic.childForFieldName('type_arguments')?.namedChildren.map((node) => node.text)).toEqual([
+              argument,
+            ]);
           } finally {
             tree.delete();
           }
@@ -194,7 +222,12 @@ for (const dialect of ['typescript', 'tsx']) {
         'unique',
         'infer',
       ]) {
-        for (const type of [`A | ${name}<B>`, `A[] | ${name}<B>`, `{p: (x:${name}<B>)=>X}`]) {
+        for (const type of [
+          `A | ${name}<B>`,
+          `A[] | ${name}<B>`,
+          `{p: (x:${name}<B>)=>X}`,
+          ...['[]', ' | A', ' & A', "['x']", ' extends A ? X : Y'].map((suffix) => `${name}<B>${suffix}`),
+        ]) {
           const source = `class C implements ${type} {}`;
           const tree = parser.parse(source)!;
           try {
@@ -212,7 +245,10 @@ for (const dialect of ['typescript', 'tsx']) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(true);
-          expect(tree.rootNode.descendantsOfType('generic_type'), source).toHaveLength(0);
+          expect(
+            tree.rootNode.descendantsOfType('generic_type').filter((node) => !node.hasError),
+            source
+          ).toHaveLength(0);
         } finally {
           tree.delete();
         }
@@ -220,8 +256,8 @@ for (const dialect of ['typescript', 'tsx']) {
       const direct = 'class C implements number<B> {}';
       const nameIndex = direct.indexOf('number');
       let incremental = parser.parse(direct)!;
-      for (const prefix of ['A | ', '{p: (x:', '']) {
-        const nextSource = `${direct.slice(0, nameIndex)}${prefix}number<B>${prefix === '{p: (x:' ? ')=>X}' : ''} {}`;
+      for (const entry of ['A | number<B>', '{p: (x:number<B>)=>X}', 'number<B>[]', 'number<B> | A', 'number<B>']) {
+        const nextSource = `${direct.slice(0, nameIndex)}${entry} {}`;
         const previousSource = incremental.rootNode.text;
         incremental.edit(
           new Edit({
@@ -236,7 +272,7 @@ for (const dialect of ['typescript', 'tsx']) {
         const next = parser.parse(nextSource, incremental)!;
         const fresh = parser.parse(nextSource)!;
         try {
-          expect(next.rootNode.hasError, nextSource).toBe(prefix !== '');
+          expect(next.rootNode.hasError, nextSource).toBe(entry !== 'number<B>');
           expect(next.rootNode.toString()).toBe(fresh.rootNode.toString());
         } finally {
           fresh.delete();
@@ -258,6 +294,7 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
+      query.delete();
       parser.delete();
     }
   });
