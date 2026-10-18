@@ -1595,7 +1595,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         return true;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
-    if (unqualified && ascii_word) {
+    if (unqualified && ascii_word && !heritage) {
         static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
             if (strcmp(word, keywords[i]) == 0) return false;

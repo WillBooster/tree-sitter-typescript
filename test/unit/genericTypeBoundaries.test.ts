@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { Parser, Query } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
 
 import { loadCurrentWasmBuild } from './wasmBuild';
 
@@ -89,6 +89,95 @@ for (const dialect of ['typescript', 'tsx']) {
       }
     } finally {
       query.delete();
+      parser.delete();
+    }
+  });
+}
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`keeps keyword-named heritage generics separate from ordinary types in ${dialect}`, async () => {
+    const parser = new Parser();
+    parser.setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const name of [
+        'any',
+        'number',
+        'boolean',
+        'string',
+        'symbol',
+        'unknown',
+        'never',
+        'object',
+        'this',
+        'import',
+        'true',
+        'false',
+        'null',
+        'undefined',
+        'keyof',
+        'readonly',
+        'unique',
+        'infer',
+        'abstract',
+        'as',
+        'satisfies',
+      ]) {
+        for (const gap of ['', '\n', '/*\n*/']) {
+          const source = `class C implements ${name}${gap}<Box<string>>, Other<number> { value: number; }`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(
+              tree.rootNode.descendantsOfType('generic_type').map((node) => node.childForFieldName('name')?.text)
+            ).toEqual([name, 'Box', 'Other']);
+            expect(
+              tree.rootNode
+                .descendantsOfType('public_field_definition')
+                .map((node) => node.childForFieldName('name')?.text)
+            ).toEqual(['value']);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+      const original = 'class C implements number<Box<string>> {}';
+      const tree = parser.parse(original)!;
+      const index = original.indexOf('<');
+      tree.edit(
+        new Edit({
+          startIndex: index,
+          oldEndIndex: index,
+          newEndIndex: index + 7,
+          startPosition: { row: 0, column: index },
+          oldEndPosition: { row: 0, column: index },
+          newEndPosition: { row: 0, column: index + 7 },
+        })
+      );
+      const editedSource = `${original.slice(0, index)}/* c */${original.slice(index)}`;
+      const edited = parser.parse(editedSource, tree)!;
+      const fresh = parser.parse(editedSource)!;
+      try {
+        expect(edited.rootNode.hasError).toBe(false);
+        expect(edited.rootNode.toString()).toBe(fresh.rootNode.toString());
+        expect(edited.rootNode.descendantsOfType('generic_type')[0]?.childForFieldName('name')?.text).toBe('number');
+      } finally {
+        tree.delete();
+        edited.delete();
+        fresh.delete();
+      }
+      for (const source of [
+        'type R = number<B>;',
+        'class C implements Box<number<B>> {}',
+        'class C implements number<B> {} type R = number<B>;',
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
       parser.delete();
     }
   });
