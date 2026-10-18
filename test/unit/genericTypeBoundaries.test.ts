@@ -1,9 +1,31 @@
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { Edit, Parser, Query, type Node } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
 
+import { compareEditedTree, position } from '../helpers/treeEdit';
 import { loadCurrentWasmBuild } from './wasmBuild';
+
+const heritageKeywords = [
+  'any',
+  'number',
+  'boolean',
+  'string',
+  'symbol',
+  'unknown',
+  'never',
+  'object',
+  'this',
+  'import',
+  'true',
+  'false',
+  'null',
+  'undefined',
+  'keyof',
+  'readonly',
+  'unique',
+  'infer',
+];
 
 await Parser.init();
 
@@ -102,29 +124,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser();
     parser.setLanguage(language);
     try {
-      for (const name of [
-        'any',
-        'number',
-        'boolean',
-        'string',
-        'symbol',
-        'unknown',
-        'never',
-        'object',
-        'this',
-        'import',
-        'true',
-        'false',
-        'null',
-        'undefined',
-        'keyof',
-        'readonly',
-        'unique',
-        'infer',
-        'abstract',
-        'as',
-        'satisfies',
-      ]) {
+      for (const name of [...heritageKeywords, 'abstract', 'as', 'satisfies']) {
         for (const gap of ['', '\n', '/*\n*/']) {
           for (const prefix of ['', 'A, ']) {
             const source = `class C implements ${prefix}${name}${gap}<Box<string>>, Other<number> { value: number; }`;
@@ -180,27 +180,27 @@ for (const dialect of ['typescript', 'tsx']) {
       const original = 'class C implements number<Box<string>> {}';
       const tree = parser.parse(original)!;
       const index = original.indexOf('<');
-      tree.edit(
-        new Edit({
-          startIndex: index,
-          oldEndIndex: index,
-          newEndIndex: index + 7,
-          startPosition: { row: 0, column: index },
-          oldEndPosition: { row: 0, column: index },
-          newEndPosition: { row: 0, column: index + 7 },
-        })
-      );
       const editedSource = `${original.slice(0, index)}/* c */${original.slice(index)}`;
-      const edited = parser.parse(editedSource, tree)!;
-      const fresh = parser.parse(editedSource)!;
       try {
-        expect(edited.rootNode.hasError).toBe(false);
-        expect(edited.rootNode.toString()).toBe(fresh.rootNode.toString());
-        expect(edited.rootNode.descendantsOfType('generic_type')[0]?.childForFieldName('name')?.text).toBe('number');
+        const edited = compareEditedTree(
+          parser,
+          tree,
+          editedSource,
+          new Edit({
+            startIndex: index,
+            oldEndIndex: index,
+            newEndIndex: index + 7,
+            startPosition: { row: 0, column: index },
+            oldEndPosition: { row: 0, column: index },
+            newEndPosition: { row: 0, column: index + 7 },
+          }),
+          (next) => {
+            expect(next.rootNode.descendantsOfType('generic_type')[0]?.childForFieldName('name')?.text).toBe('number');
+          }
+        );
+        edited.delete();
       } finally {
         tree.delete();
-        edited.delete();
-        fresh.delete();
       }
       for (const name of ['new', 'typeof', 'void']) {
         const source = `class C implements ${name}<B> {}`;
@@ -211,26 +211,7 @@ for (const dialect of ['typescript', 'tsx']) {
           tree.delete();
         }
       }
-      for (const name of [
-        'any',
-        'number',
-        'boolean',
-        'string',
-        'symbol',
-        'unknown',
-        'never',
-        'object',
-        'this',
-        'import',
-        'true',
-        'false',
-        'null',
-        'undefined',
-        'keyof',
-        'readonly',
-        'unique',
-        'infer',
-      ]) {
+      for (const name of heritageKeywords) {
         for (const type of [
           `A | ${name}<B>`,
           `A[] | ${name}<B>`,
@@ -294,39 +275,38 @@ for (const dialect of ['typescript', 'tsx']) {
       const direct = 'class C implements number<B> {}';
       const nameIndex = direct.indexOf('number');
       let incremental = parser.parse(direct)!;
-      for (const entry of [
-        'A | number<B>',
-        '{p: (x:number<B>)=>X}',
-        'number<B>[]',
-        'number<B> | A',
-        'number<Box\n<string>>',
-        'number<B>',
-      ]) {
-        const nextSource = `${direct.slice(0, nameIndex)}${entry} {}`;
-        const previousSource = incremental.rootNode.text;
-        incremental.edit(
-          new Edit({
-            startIndex: nameIndex,
-            oldEndIndex: previousSource.length,
-            newEndIndex: nextSource.length,
-            startPosition: { row: 0, column: nameIndex },
-            oldEndPosition: endPosition(previousSource),
-            newEndPosition: endPosition(nextSource),
-          })
-        );
-        const next = parser.parse(nextSource, incremental)!;
-        const fresh = parser.parse(nextSource)!;
-        try {
-          expect(next.rootNode.hasError, nextSource).toBe(entry !== 'number<B>');
-          expect(next.rootNode.toString()).toBe(fresh.rootNode.toString());
-          expect(nodeRanges(next.rootNode)).toEqual(nodeRanges(fresh.rootNode));
-        } finally {
-          fresh.delete();
+      try {
+        for (const entry of [
+          'A | number<B>',
+          '{p: (x:number<B>)=>X}',
+          'number<B>[]',
+          'number<B> | A',
+          'number<Box\n<string>>',
+          'number<B>',
+        ]) {
+          const nextSource = `${direct.slice(0, nameIndex)}${entry} {}`;
+          const previousSource = incremental.rootNode.text;
+          const next = compareEditedTree(
+            parser,
+            incremental,
+            nextSource,
+            new Edit({
+              startIndex: nameIndex,
+              oldEndIndex: previousSource.length,
+              newEndIndex: nextSource.length,
+              startPosition: { row: 0, column: nameIndex },
+              oldEndPosition: position(previousSource, previousSource.length),
+              newEndPosition: position(nextSource, nextSource.length),
+            }),
+            (edited) => expect(edited.rootNode.hasError, nextSource).toBe(entry !== 'number<B>'),
+            true
+          );
           incremental.delete();
+          incremental = next;
         }
-        incremental = next;
+      } finally {
+        incremental.delete();
       }
-      incremental.delete();
       for (const source of [
         'type R = number<B>;',
         'class C implements Box<number<B>> {}',
@@ -350,26 +330,7 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`matches compiler-valid heritage arguments and incremental spacing in ${dialect}`, async () => {
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
-      for (const name of [
-        'any',
-        'number',
-        'boolean',
-        'string',
-        'symbol',
-        'unknown',
-        'never',
-        'object',
-        'this',
-        'import',
-        'true',
-        'false',
-        'null',
-        'undefined',
-        'keyof',
-        'readonly',
-        'unique',
-        'infer',
-      ]) {
+      for (const name of heritageKeywords) {
         for (const prefix of ['', 'A, ']) {
           for (const args of [
             '< <T>()=>T>',
@@ -405,32 +366,31 @@ for (const dialect of ['typescript', 'tsx']) {
       let tree = parser.parse(source)!;
       const index = source.indexOf('<') + 1;
       let oldLength = 1;
-      for (const separator of ['/* gap */', ' ']) {
-        const nextSource = source.slice(0, index) + separator + source.slice(index + oldLength);
-        tree.edit(
-          new Edit({
-            startIndex: index,
-            oldEndIndex: index + oldLength,
-            newEndIndex: index + separator.length,
-            startPosition: { row: 0, column: index },
-            oldEndPosition: { row: 0, column: index + oldLength },
-            newEndPosition: { row: 0, column: index + separator.length },
-          })
-        );
-        const incremental = parser.parse(nextSource, tree)!;
-        const fresh = parser.parse(nextSource)!;
-        try {
-          expect(incremental.rootNode.hasError).toBe(false);
-          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
-        } finally {
+      try {
+        for (const separator of ['/* gap */', ' ']) {
+          const nextSource = source.slice(0, index) + separator + source.slice(index + oldLength);
+          const incremental = compareEditedTree(
+            parser,
+            tree,
+            nextSource,
+            new Edit({
+              startIndex: index,
+              oldEndIndex: index + oldLength,
+              newEndIndex: index + separator.length,
+              startPosition: { row: 0, column: index },
+              oldEndPosition: { row: 0, column: index + oldLength },
+              newEndPosition: { row: 0, column: index + separator.length },
+            }),
+            () => {}
+          );
           tree.delete();
-          fresh.delete();
+          tree = incremental;
+          source = nextSource;
+          oldLength = separator.length;
         }
-        tree = incremental;
-        source = nextSource;
-        oldLength = separator.length;
+      } finally {
+        tree.delete();
       }
-      tree.delete();
     } finally {
       parser.delete();
     }
@@ -447,36 +407,38 @@ for (const dialect of ['typescript', 'tsx']) {
             const valid = `class C implements ${prefix}${name}<${argument}> {}\nconst sentinel = 1;\nfunction after() {}`;
             const angle = valid.lastIndexOf('>');
             let tree = parser.parse(valid)!;
-            for (const remove of [true, false]) {
-              const source = remove ? valid.slice(0, angle) + valid.slice(angle + 1) : valid;
-              const oldEnd = angle + (remove ? 1 : 0);
-              const newEnd = angle + (remove ? 0 : 1);
-              tree.edit(
-                new Edit({
-                  startIndex: angle,
-                  oldEndIndex: oldEnd,
-                  newEndIndex: newEnd,
-                  startPosition: { row: 0, column: angle },
-                  oldEndPosition: { row: 0, column: oldEnd },
-                  newEndPosition: { row: 0, column: newEnd },
-                })
-              );
-              const next = parser.parse(source, tree)!;
-              const fresh = parser.parse(source)!;
-              try {
-                expect(next.rootNode.hasError, source).toBe(remove);
-                expect(next.rootNode.toString(), source).toBe(fresh.rootNode.toString());
-                expect(
-                  next.rootNode.namedChildren.map((node) => node.type),
-                  source
-                ).toEqual(['class_declaration', 'lexical_declaration', 'function_declaration']);
-              } finally {
-                fresh.delete();
+            try {
+              for (const remove of [true, false]) {
+                const source = remove ? valid.slice(0, angle) + valid.slice(angle + 1) : valid;
+                const oldEnd = angle + (remove ? 1 : 0);
+                const newEnd = angle + (remove ? 0 : 1);
+                const next = compareEditedTree(
+                  parser,
+                  tree,
+                  source,
+                  new Edit({
+                    startIndex: angle,
+                    oldEndIndex: oldEnd,
+                    newEndIndex: newEnd,
+                    startPosition: { row: 0, column: angle },
+                    oldEndPosition: { row: 0, column: oldEnd },
+                    newEndPosition: { row: 0, column: newEnd },
+                  }),
+                  (edited) => {
+                    expect(edited.rootNode.hasError, source).toBe(remove);
+                    expect(
+                      edited.rootNode.namedChildren.map((node) => node.type),
+                      source
+                    ).toEqual(['class_declaration', 'lexical_declaration', 'function_declaration']);
+                  },
+                  true
+                );
                 tree.delete();
+                tree = next;
               }
-              tree = next;
+            } finally {
+              tree.delete();
             }
-            tree.delete();
           }
         }
       }
@@ -484,13 +446,4 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
-}
-
-function endPosition(source: string): { row: number; column: number } {
-  const lines = source.split('\n');
-  return { row: lines.length - 1, column: lines.at(-1)!.length };
-}
-
-function nodeRanges(node: Node): unknown {
-  return [node.startIndex, node.endIndex, node.startPosition, node.endPosition, node.children.map(nodeRanges)];
 }
