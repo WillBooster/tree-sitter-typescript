@@ -204,6 +204,19 @@ for (const dialect of ['typescript', 'tsx']) {
           }
         }
       }
+      for (const source of [
+        'class C implements number;\ntype R = number<B>;',
+        'class C implements number\ntype R = number<B>;',
+        'class C implements number;\nconst x: number<B> = 1;',
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+          expect(tree.rootNode.descendantsOfType('generic_type'), source).toHaveLength(0);
+        } finally {
+          tree.delete();
+        }
+      }
       const direct = 'class C implements number<B> {}';
       const nameIndex = direct.indexOf('number');
       let incremental = parser.parse(direct)!;
