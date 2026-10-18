@@ -22,6 +22,11 @@ so this package defines two grammars: `typescript` in `typescript/` and `tsx` in
 external scanner in `common/scanner.h`. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type
 annotations.
 
+An error-free tree does not guarantee TypeScript validity. These grammars accept adjacent opening angles in
+heritage references such as `class C implements Foo<<T>() => T> {}` and `number<<T>() => T>`, which TypeScript
+rejects. Separated angles (`number< <T>() => T>`) and a parenthesized argument (`number<(<T>() => T)>`) are valid.
+Use the TypeScript compiler when syntax validation is required.
+
 ## Usage
 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for

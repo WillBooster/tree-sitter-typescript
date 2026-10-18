@@ -1,3 +1,4 @@
+import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
 import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
@@ -153,7 +154,7 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
       for (const name of ['number', 'readonly', 'keyof']) {
-        for (const argument of ['<T>() => T', 'T extends U ? X : Y', '`x${string}`', '{ [K in keyof T]: T[K] }']) {
+        for (const argument of ['(<T>() => T)', 'T extends U ? X : Y', '`x${string}`', '{ [K in keyof T]: T[K] }']) {
           const source = `class C implements ${name}<${argument}> {}`;
           const tree = parser.parse(source)!;
           try {
@@ -295,6 +296,97 @@ for (const dialect of ['typescript', 'tsx']) {
       }
     } finally {
       query.delete();
+      parser.delete();
+    }
+  });
+}
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`matches compiler-valid heritage arguments and incremental spacing in ${dialect}`, async () => {
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const name of [
+        'any',
+        'number',
+        'boolean',
+        'string',
+        'symbol',
+        'unknown',
+        'never',
+        'object',
+        'this',
+        'import',
+        'true',
+        'false',
+        'null',
+        'undefined',
+        'keyof',
+        'readonly',
+        'unique',
+        'infer',
+      ]) {
+        for (const prefix of ['', 'A, ']) {
+          for (const args of [
+            '< <T>()=>T>',
+            '</*c*/<T>()=>T>',
+            '<\n<T>()=>T>',
+            '<(<T>()=>T)>',
+            '<A,<T>()=>T>',
+            '<Box<<T>()=>T>>',
+          ]) {
+            const source = `class C implements ${prefix}${name}${args} {}`;
+            const diagnostics =
+              ts.transpileModule(source, {
+                reportDiagnostics: true,
+                compilerOptions: { target: ts.ScriptTarget.ESNext },
+              }).diagnostics ?? [];
+            const tree = parser.parse(source)!;
+            try {
+              expect(
+                diagnostics.filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error),
+                source
+              ).toEqual([]);
+              expect(tree.rootNode.hasError, source).toBe(false);
+              const generic = tree.rootNode.descendantsOfType('generic_type')[0]!;
+              expect(generic.childForFieldName('name')?.text).toBe(name);
+              expect(generic.childForFieldName('type_arguments')?.text).toBe(args);
+            } finally {
+              tree.delete();
+            }
+          }
+        }
+      }
+      let source = 'class C implements number< <T>()=>T> {}';
+      let tree = parser.parse(source)!;
+      const index = source.indexOf('<') + 1;
+      let oldLength = 1;
+      for (const separator of ['/* gap */', ' ']) {
+        const nextSource = source.slice(0, index) + separator + source.slice(index + oldLength);
+        tree.edit(
+          new Edit({
+            startIndex: index,
+            oldEndIndex: index + oldLength,
+            newEndIndex: index + separator.length,
+            startPosition: { row: 0, column: index },
+            oldEndPosition: { row: 0, column: index + oldLength },
+            newEndPosition: { row: 0, column: index + separator.length },
+          })
+        );
+        const incremental = parser.parse(nextSource, tree)!;
+        const fresh = parser.parse(nextSource)!;
+        try {
+          expect(incremental.rootNode.hasError).toBe(false);
+          expect(incremental.rootNode.toString()).toBe(fresh.rootNode.toString());
+        } finally {
+          tree.delete();
+          fresh.delete();
+        }
+        tree = incremental;
+        source = nextSource;
+        oldLength = separator.length;
+      }
+      tree.delete();
+    } finally {
       parser.delete();
     }
   });
