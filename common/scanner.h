@@ -58,6 +58,7 @@ enum TokenType {
     PREDEFINED_ANNOTATED_NAME,
     ARROW_PREDEFINED_RETURN_START,
     CONDITIONAL_PREDEFINED_PARAMETER_NAME,
+    COMMENT_OPTIONAL_PARAMETER_MARKER,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -733,49 +734,29 @@ static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool 
     return ascii_word;
 }
 
-static bool scan_ternary_qmark(TSLexer *lexer) {
-    for (;;) {
-        if (!is_whitespace(lexer->lookahead)) {
-            break;
-        }
-        skip(lexer);
-    }
+static bool scan_question_mark(TSLexer *lexer, const bool *valid_symbols) {
+    while (is_whitespace(lexer->lookahead)) skip(lexer);
+    if (lexer->lookahead != '?') return false;
+    advance(lexer);
+    if (lexer->lookahead == '?') return false;
+    lexer->mark_end(lexer);
+    lexer->result_symbol = TERNARY_QMARK;
+    while (is_whitespace(lexer->lookahead)) advance(lexer);
 
-    if (lexer->lookahead == '?') {
-        advance(lexer);
-
-        // `??` is an operator; `?.` is optional chaining unless a digit follows, as in `a?.1:.2`, which the check
-        // below tells apart.
-        if (lexer->lookahead == '?') {
-            return false;
-        }
-
-        lexer->mark_end(lexer);
-        lexer->result_symbol = TERNARY_QMARK;
-
-        /* TypeScript optional arguments contain the ?: sequence, possibly
-           with whitespace. */
-        for (;;) {
-            if (!is_whitespace(lexer->lookahead)) {
-                break;
-            }
-            advance(lexer);
-        }
-
-        if (lexer->lookahead == ':' || lexer->lookahead == ')' || lexer->lookahead == ',') {
-            return false;
-        }
-
-        if (lexer->lookahead == '.') {
-            advance(lexer);
-            if (is_ascii_digit(lexer->lookahead)) {
-                return true;
-            }
-            return false;
-        }
+    bool comment_candidate = valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER] &&
+        !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '/';
+    if (comment_candidate && scan_default_trivia(lexer, true, false) &&
+        (lexer->lookahead == ':' || lexer->lookahead == ')' || lexer->lookahead == ',')) {
+        lexer->result_symbol = COMMENT_OPTIONAL_PARAMETER_MARKER;
         return true;
     }
-    return false;
+    if (comment_candidate) return valid_symbols[TERNARY_QMARK];
+    if (lexer->lookahead == ':' || lexer->lookahead == ')' || lexer->lookahead == ',') return false;
+    if (lexer->lookahead == '.') {
+        advance(lexer);
+        return valid_symbols[TERNARY_QMARK] && is_ascii_digit(lexer->lookahead);
+    }
+    return valid_symbols[TERNARY_QMARK];
 }
 
 static bool scan_html_comment(TSLexer *lexer) {
@@ -1209,7 +1190,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             return (infix_operator || (saw_newline && first_binding)) && valid_symbols[AWAIT_OPERAND_END];
         }
         if (!valid_symbols[AWAIT_OPERAND_END]) {
-            return !scanned_comment && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?' && scan_ternary_qmark(lexer);
+            return !scanned_comment && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?' && scan_question_mark(lexer, valid_symbols);
         }
     }
     if (after_postfix && lexer->lookahead != '(' && lexer->lookahead != '[' && lexer->lookahead != '`') {
@@ -3074,8 +3055,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
                 lexer->result_symbol = STATEMENT_BOUNDARY;
             }
         }
-        if (!ret && !scanned_content && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
-            return scan_ternary_qmark(lexer);
+        if (!ret && !scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
+            return scan_question_mark(lexer, valid_symbols);
         }
         return ret;
     }
@@ -3084,7 +3065,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         valid_symbols[RESOURCE_BINDING_START] || valid_symbols[RESOURCE_BINDING_CONTINUATION] ||
         valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT]) {
         if (valid_symbols[COMPLETED_ARROW_FUNCTION]) {
-            return valid_symbols[TERNARY_QMARK] && scan_ternary_qmark(lexer);
+            return (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && scan_question_mark(lexer, valid_symbols);
         }
         bool statement_end = false;
         bool ret = scan_expression_end(lexer, false, &statement_end, valid_symbols);
@@ -3120,8 +3101,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (ret && !after_block_arrow && valid_symbols[STATEMENT_BOUNDARY] && !valid_symbols[NAMESPACE_EXPRESSION_END] && lexer->result_symbol == AUTOMATIC_SEMICOLON) {
             lexer->result_symbol = STATEMENT_BOUNDARY;
         }
-        if (!ret && !scanned_content && valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
-            return scan_ternary_qmark(lexer);
+        if (!ret && !scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
+            return scan_question_mark(lexer, valid_symbols);
         }
         if (!ret && before_line_break && !scanned_content && valid_symbols[GLOBAL_DECLARATION_START] &&
             !valid_symbols[ERROR_RECOVERY] && (lexer->lookahead == 'g' || lexer->lookahead == '\\')) {
@@ -3174,8 +3155,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     if (valid_symbols[AWAIT_KEYWORD] && lexer->lookahead == 'a') {
         return scan_await_keyword(lexer);
     }
-    if (valid_symbols[TERNARY_QMARK] && lexer->lookahead == '?') {
-        return scan_ternary_qmark(lexer);
+    if ((valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
+        return scan_question_mark(lexer, valid_symbols);
     }
 
     if (valid_symbols[LET] && !valid_symbols[SINGLE_STATEMENT_CONTEXT] && lexer->lookahead == 'l') {

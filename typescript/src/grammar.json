@@ -13805,8 +13805,22 @@
           "name": "_parameter_name"
         },
         {
-          "type": "STRING",
-          "value": "?"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "?"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_comment_optional_parameter_marker"
+              },
+              "named": false,
+              "value": "?"
+            }
+          ]
         },
         {
           "type": "FIELD",
@@ -15001,8 +15015,22 @@
           }
         },
         {
-          "type": "STRING",
-          "value": "?"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "?"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_comment_optional_parameter_marker"
+              },
+              "named": false,
+              "value": "?"
+            }
+          ]
         }
       ]
     },
@@ -18469,6 +18497,10 @@
     {
       "type": "SYMBOL",
       "name": "_conditional_predefined_parameter_name"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_comment_optional_parameter_marker"
     }
   ],
   "inline": [

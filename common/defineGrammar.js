@@ -91,6 +91,7 @@ module.exports = function defineGrammar(dialect) {
       $._predefined_annotated_name,
       $._arrow_predefined_return_start,
       $._conditional_predefined_parameter_name,
+      $._comment_optional_parameter_marker,
     ],
 
     supertypes: ($, previous) => [
@@ -1106,7 +1107,12 @@ module.exports = function defineGrammar(dialect) {
         seq($._parameter_name, field('type', optional($.type_annotation)), optional($._initializer)),
 
       optional_parameter: ($) =>
-        seq($._parameter_name, '?', field('type', optional($.type_annotation)), optional($._initializer)),
+        seq(
+          $._parameter_name,
+          choice('?', alias($._comment_optional_parameter_marker, '?')),
+          field('type', optional($.type_annotation)),
+          optional($._initializer)
+        ),
 
       pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
 
@@ -1319,7 +1325,10 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _conditional_untyped_optional_parameter: ($) =>
-        seq(field('pattern', alias($._conditional_parameter_pattern, $.pattern)), '?'),
+        seq(
+          field('pattern', alias($._conditional_parameter_pattern, $.pattern)),
+          choice('?', alias($._comment_optional_parameter_marker, '?'))
+        ),
 
       _conditional_untyped_parameter: ($) => field('pattern', alias($._conditional_parameter_pattern, $.pattern)),
 
