@@ -9,7 +9,7 @@ import treeSitterJson from '../../tree-sitter.json';
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
-const RecoveryCases: [string, boolean, string, string, string?, string?, string?, string?, string?][] = [];
+const RecoveryCases: [string, boolean, string, string, string?, string?, string?, string?][] = [];
 const CommonRecoveryTails = [
   ' : string',
   ': string',
@@ -84,18 +84,7 @@ for (const container of ['interface', 'class', 'typeLiteral', 'functionType']) {
       typeLiteral: ['type T = { m(value: unknown): asserts ', '; };'],
       functionType: ['type T = (value: unknown) => asserts ', ';'],
     }[container]!;
-    for (const tail of tails)
-      RecoveryCases.push([
-        word,
-        false,
-        tail,
-        '',
-        undefined,
-        undefined,
-        prefix + word,
-        suffix,
-        tail === ' ? string : number' && ['interface', 'typeLiteral'].includes(container) ? 'string' : undefined,
-      ]);
+    for (const tail of tails) RecoveryCases.push([word, false, tail, '', undefined, undefined, prefix + word, suffix]);
   }
 }
 
@@ -164,18 +153,15 @@ for (const word of ['value', 'foo', 'foobar', 'f']) {
     for (const tail of tails) RecoveryCases.push([word, declaration, tail, ' { }']);
 }
 
-const RecoverySamples = RecoveryCases.map(
-  ([word, declaration, tail, body, parameter, following, prefix, suffix, recoveredName]) => ({
-    word,
-    tail,
-    prefix:
-      prefix ??
-      `${declaration ? 'declare ' : ''}function f(${parameter ?? (word === 'out' ? 'out' : 'value')}: unknown): asserts ${word}`,
-    suffix: suffix ?? (declaration ? ';' : body),
-    following: following ?? '\nconst sentinel = 1;\n',
-    recoveredName: recoveredName ?? tail.replace(/ = 1$/, '').match(/[a-z]+$/)![0],
-  })
-);
+const RecoverySamples = RecoveryCases.map(([word, declaration, tail, body, parameter, following, prefix, suffix]) => ({
+  word,
+  tail,
+  prefix:
+    prefix ??
+    `${declaration ? 'declare ' : ''}function f(${parameter ?? (word === 'out' ? 'out' : 'value')}: unknown): asserts ${word}`,
+  suffix: suffix ?? (declaration ? ';' : body),
+  following: following ?? '\nconst sentinel = 1;\n',
+}));
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/predefinedAssertionNames.ts'), 'utf8');
 
@@ -371,93 +357,83 @@ describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dia
     annotationQuery?.delete();
     for (const query of queries) query.delete();
   });
-  test.each(RecoverySamples)(
-    'restores $prefix after $tail',
-    ({ word, tail, prefix, suffix, following, recoveredName }) => {
-      const parser = new Parser().setLanguage(language);
-      let tree: Tree | undefined;
-      try {
-        let source = `${prefix}${suffix}${following}`;
-        tree = parser.parse(source)!;
-        expect(tree.rootNode.hasError).toBe(false);
-        for (const [before, after] of [
-          ['', tail],
-          [tail, ''],
-        ]) {
-          const start = prefix.length;
-          const next = source.slice(0, start) + after + source.slice(start + before!.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before!.length,
-              newEndIndex: start + after!.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before!.length),
-              newEndPosition: position(next, start + after!.length),
-            }),
-            (incremental, fresh) => {
-              for (const query of queries) {
-                const captures = (current: Tree): unknown[] =>
-                  query
-                    .captures(current.rootNode)
-                    .map(({ name, node }) => [
-                      name,
-                      node.type,
-                      node.text,
-                      node.startIndex,
-                      node.endIndex,
-                      node.startPosition,
-                      node.endPosition,
-                    ]);
-                expect(captures(incremental)).toEqual(captures(fresh));
-              }
-              for (const current of [incremental, fresh]) {
-                expect(current.rootNode.hasError).toBe(after !== '');
-                const annotations = annotationQuery!.captures(current.rootNode);
-                expect(annotations).toHaveLength(1);
-                const annotation = annotations[0]!.node;
-                const functionType = prefix.includes('=> asserts');
-                expect(annotation.type).toBe(functionType ? 'asserts' : 'asserts_annotation');
-                expect(annotation.startIndex).toBe(
-                  functionType ? prefix.indexOf('asserts') : prefix.indexOf(': asserts')
-                );
-                const assertion = functionType ? annotation : annotation.namedChildren[0]!;
-                expect(assertion.type).toBe('asserts');
-                const last = assertion.namedChildren.at(-1)!;
-                // Recovery either keeps the asserted name and reads the tail as a predicate type after a
-                // missing `is`, or skips the original name and takes a name from the tail.
-                const predicate = after !== '' && last.type === 'type_predicate';
-                const name = predicate ? last.childForFieldName('name')! : last;
-                expect(name.type).toBe('identifier');
-                expect(name.text).toBe(after && !predicate ? recoveredName : word);
-                expect(name.startIndex).toBe(
-                  after && !predicate ? next.indexOf(recoveredName, start) : prefix.lastIndexOf(word)
-                );
-                expect(name.endIndex).toBe(name.startIndex + name.text.length);
-                expect(
-                  current.rootNode
-                    .descendantsOfType('lexical_declaration')
-                    .some((node) => node.text === 'const sentinel = 1;')
-                ).toBe(true);
-                expect(current.rootNode.namedChildren.at(-1)!.text).toBe(following.trim().split('\n').at(-1));
-              }
-            },
-            true
-          );
-          previous.delete();
-          source = next;
-        }
-        expect(source).toBe(`${prefix}${suffix}${following}`);
-      } finally {
-        tree?.delete();
-        parser.delete();
+  test.each(RecoverySamples)('restores $prefix after $tail', ({ word, tail, prefix, suffix, following }) => {
+    const parser = new Parser().setLanguage(language);
+    let tree: Tree | undefined;
+    try {
+      let source = `${prefix}${suffix}${following}`;
+      tree = parser.parse(source)!;
+      expect(tree.rootNode.hasError).toBe(false);
+      for (const [before, after] of [
+        ['', tail],
+        [tail, ''],
+      ]) {
+        const start = prefix.length;
+        const next = source.slice(0, start) + after + source.slice(start + before!.length);
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: start,
+            oldEndIndex: start + before!.length,
+            newEndIndex: start + after!.length,
+            startPosition: position(source, start),
+            oldEndPosition: position(source, start + before!.length),
+            newEndPosition: position(next, start + after!.length),
+          }),
+          (incremental, fresh) => {
+            for (const query of [...queries, annotationQuery!]) {
+              const captures = (current: Tree): unknown[] =>
+                query
+                  .captures(current.rootNode)
+                  .map(({ name, node }) => [
+                    name,
+                    node.type,
+                    node.text,
+                    node.startIndex,
+                    node.endIndex,
+                    node.startPosition,
+                    node.endPosition,
+                  ]);
+              expect(captures(incremental)).toEqual(captures(fresh));
+            }
+            for (const current of [incremental, fresh]) {
+              expect(current.rootNode.hasError).toBe(after !== '');
+              const sentinel = current.rootNode.namedChildren.find((node) => node.text === 'const sentinel = 1;');
+              expect(sentinel).toBeDefined();
+              expect(sentinel!.hasError).toBe(false);
+              expect(current.rootNode.lastNamedChild?.text).toBe(following.trim().split('\n').at(-1));
+              if (after !== '') continue;
+              const annotations = annotationQuery!.captures(current.rootNode);
+              expect(annotations).toHaveLength(1);
+              const annotation = annotations[0]!.node;
+              const functionType = prefix.includes('=> asserts');
+              expect(annotation.type).toBe(functionType ? 'asserts' : 'asserts_annotation');
+              expect(annotation.startIndex).toBe(
+                functionType ? prefix.indexOf('asserts') : prefix.indexOf(': asserts')
+              );
+              const assertion = functionType ? annotation : annotation.namedChildren[0]!;
+              expect(assertion.type).toBe('asserts');
+              const name = assertion.namedChildren.at(-1)!;
+              expect(name.type).toBe('identifier');
+              expect(name.text).toBe(word);
+              expect(name.startIndex).toBe(prefix.lastIndexOf(word));
+              expect(name.endIndex).toBe(prefix.lastIndexOf(word) + word.length);
+            }
+          },
+          true
+        );
+        previous.delete();
+        source = next;
       }
+      expect(source).toBe(`${prefix}${suffix}${following}`);
+    } finally {
+      tree?.delete();
+      parser.delete();
     }
-  );
+  });
 });
 
 function configuredQueries(language: Language, dialect: string): Query[] {

@@ -17355,6 +17355,10 @@
       "class"
     ],
     [
+      "class",
+      "_parameter_name"
+    ],
+    [
       "nested_identifier",
       "nested_type_identifier",
       "_generic_nested_type_identifier",

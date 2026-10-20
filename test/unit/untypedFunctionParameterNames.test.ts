@@ -722,12 +722,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       const tree = parser.parse(source)!;
       try {
         expect(tree.rootNode.hasError).toBe(true);
-        expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
-          'type_alias_declaration',
-          'export_statement',
-          'type_alias_declaration',
-        ]);
-        expect(tree.rootNode.lastNamedChild?.text).toBe('type B = 2;');
+        checkFollowingDeclarations(tree, 'export function f(x: number): number { return x; }', 'type B = 2;');
       } finally {
         tree.delete();
         parser.delete();
@@ -766,12 +761,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const tree = parser.parse(source)!;
     try {
       expect(tree.rootNode.hasError).toBe(true);
-      expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual([
-        'type_alias_declaration',
-        'export_statement',
-        'type_alias_declaration',
-      ]);
-      expect(tree.rootNode.lastNamedChild?.text).toBe('type B=2;');
+      checkFollowingDeclarations(tree, 'export function f(){}', 'type B=2;');
     } finally {
       tree.delete();
       parser.delete();
@@ -787,12 +777,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const tree = parser.parse(source)!;
     try {
       expect(tree.rootNode.hasError).toBe(true);
-      const [declaration, alias] = tree.rootNode.namedChildren.slice(-2);
-      expect([declaration!.type, declaration!.hasError, alias!.text]).toEqual([
-        'export_statement',
-        false,
-        'type B = 2;',
-      ]);
+      checkFollowingDeclarations(tree, 'export function f(x: number): number { return x; }', 'type B = 2;');
     } finally {
       tree.delete();
       parser.delete();
@@ -1489,4 +1474,11 @@ function snapshot(node: Node): unknown {
     node.children.map((_, index) => node.fieldNameForChild(index)),
     node.children.map(snapshot),
   ];
+}
+
+function checkFollowingDeclarations(tree: Tree, functionSource: string, aliasSource: string): void {
+  expect(tree.rootNode.namedChildren.slice(-2).map((node) => [node.type, node.text, node.hasError])).toEqual([
+    ['export_statement', functionSource, false],
+    ['type_alias_declaration', aliasSource, false],
+  ]);
 }

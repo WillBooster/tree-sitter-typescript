@@ -32,7 +32,7 @@ Use the TypeScript compiler when syntax validation is required.
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The parsers load only with the WillBooster runtime, version 7.0.5 or later within 7.x. Its CLI
+for `.tsx` files. The supported runtime is WillBooster version 7.0.10 or later within 7.x. Its CLI
 generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
@@ -79,10 +79,10 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 7.0.5 or later within 7.x:
+fuzzed with. Use version 7.0.10 or later within 7.x:
 
 ```sh
-cargo add willbooster-tree-sitter@7.0.5 --rename tree-sitter
+cargo add willbooster-tree-sitter@7.0.10 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 

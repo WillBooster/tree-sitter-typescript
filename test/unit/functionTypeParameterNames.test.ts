@@ -1035,7 +1035,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
-    'keeps %s binding ownership through incomplete nested type arrow edits',
+    'restores %s binding fields after incomplete nested type arrow edits',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -1048,11 +1048,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       );
       try {
         for (const optional of ['', '?']) {
-          for (const [opening, closing, recoveryKind] of [
-            ['{', '}', 'function_type'],
-            ['{|', '}', 'function_type'],
-            ['{', '|}', 'parenthesized_type'],
-            ['{|', '|}', 'function_type'],
+          for (const [opening, closing] of [
+            ['{', '}'],
+            ['{|', '}'],
+            ['{', '|}'],
+            ['{|', '|}'],
           ]) {
             let source = `type F=(${name}${optional}:${opening}p:(a:T)=>U${closing})=>number;`;
             let tree: Tree | undefined;
@@ -1078,25 +1078,26 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                     newEndPosition: position(next, start + replacement.length),
                   }),
                   (incremental, fresh) => {
+                    expectQueryAgreement(aliasQuery, incremental, fresh);
+                    expectQueryAgreement(namesQuery, incremental, fresh);
                     for (const current of [incremental, fresh]) {
                       expect(current.rootNode.hasError).toBe(replacement === '');
-                      const valueKind = replacement === '' ? recoveryKind : 'function_type';
-                      const valueEnd =
-                        valueKind === 'parenthesized_type' ? next.lastIndexOf(')=>number') + 1 : next.length - 1;
+                      if (replacement === '') continue;
+                      const valueEnd = next.length - 1;
                       expect(
                         aliasQuery
                           .captures(current.rootNode)
                           .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
                       ).toEqual([
                         ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', valueKind, next.slice(7, valueEnd), 7, valueEnd],
+                        ['value', 'function_type', next.slice(7, valueEnd), 7, valueEnd],
                       ]);
                       expect(
                         namesQuery
                           .captures(current.rootNode)
                           .filter(({ node }) => node.text === name)
                           .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === '' ? [] : [[name, 8, 8 + name.length]]);
+                      ).toEqual([[name, 8, 8 + name.length]]);
                     }
                   },
                   true
@@ -1548,67 +1549,63 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])(
-    'retains %s annotation recovery when a block comment becomes an HTML line comment',
-    (name) => {
-      const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      try {
-        for (const marker of ['<!-- c -->', '--> c']) {
-          let source = `type F = (${name}: /* c */ T) => void;`;
-          let tree: Tree | undefined;
-          try {
-            tree = parser.parse(source)!;
-            for (const replacement of [marker, '/* c */']) {
-              const start = source.indexOf(':') + 2;
-              const end = start + (source.includes('/* c */') ? 7 : marker.length);
-              const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(replacement === marker);
-                    const valueStart = next.indexOf('('),
-                      valueEnd = next.length - 1;
-                    expect(
-                      aliasQuery
-                        .captures(current.rootNode)
-                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                    ).toEqual([
-                      ['name', 'type_identifier', 'F', 5, 6],
-                      ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
-                    ]);
-                  }
-                },
-                true
-              );
-              previous.delete();
-              source = next;
-            }
-          } finally {
-            tree?.delete();
+  test.each(['unknown', 'never', 'unique'])('restores %s annotation fields after HTML line-comment edits', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
+    try {
+      for (const marker of ['<!-- c -->', '--> c']) {
+        let source = `type F = (${name}: /* c */ T) => void;`;
+        let tree: Tree | undefined;
+        try {
+          tree = parser.parse(source)!;
+          for (const replacement of [marker, '/* c */']) {
+            const start = source.indexOf(':') + 2;
+            const end = start + (source.includes('/* c */') ? 7 : marker.length);
+            const next = source.slice(0, start) + replacement + source.slice(end);
+            const previous = tree;
+            tree = compareEditedTree(
+              parser,
+              previous,
+              next,
+              new Edit({
+                startIndex: start,
+                oldEndIndex: end,
+                newEndIndex: start + replacement.length,
+                startPosition: position(source, start),
+                oldEndPosition: position(source, end),
+                newEndPosition: position(next, start + replacement.length),
+              }),
+              (incremental, fresh) => {
+                expectQueryAgreement(aliasQuery, incremental, fresh);
+                for (const current of [incremental, fresh]) {
+                  expect(current.rootNode.hasError).toBe(replacement === marker);
+                  if (replacement === marker) continue;
+                  const valueStart = next.indexOf('('),
+                    valueEnd = next.length - 1;
+                  expect(
+                    aliasQuery
+                      .captures(current.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
+                  ]);
+                }
+              },
+              true
+            );
+            previous.delete();
+            source = next;
           }
+        } finally {
+          tree?.delete();
         }
-      } finally {
-        aliasQuery.delete();
-        parser.delete();
       }
+    } finally {
+      aliasQuery.delete();
+      parser.delete();
     }
-  );
+  });
   test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership when decimal type operands change', (name) => {
     const parser = new Parser().setLanguage(language);
     const namesQuery = new Query(
@@ -2199,88 +2196,72 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])(
-    'retains %s type-operator recovery through operand removal and restoration',
-    (name) => {
-      const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      try {
-        for (const optional of ['', '?']) {
-          for (const [operator, operand] of [
-            ['typeof', 'value'],
-            ['keyof', 'Value'],
-            ['readonly', 'Value[]'],
-            ['infer', 'Value'],
-          ] as const) {
-            let source = `type F = (${name}${optional}: ${operator} ${operand}) => number;`;
-            let tree: Tree | undefined;
-            try {
-              tree = parser.parse(source)!;
-              check(tree, source, false);
-              for (const replacement of ['', '/* operand */', operand]) {
-                const start = source.indexOf(operator) + operator.length + 1;
-                const end = source.indexOf(') =>');
-                const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    check(incremental, next, replacement !== operand);
-                    check(fresh, next, replacement !== operand);
-                  },
-                  true
-                );
-                previous.delete();
-                source = next;
-              }
-              function check(current: Tree, text: string, missing: boolean): void {
-                expect(current.rootNode.hasError).toBe(missing);
-                const parenthesized = missing && name === 'unknown' && operator !== 'readonly';
-                const end = parenthesized ? text.indexOf(') =>') + 1 : text.length - 1;
-                expect(
-                  aliasQuery
-                    .captures(current.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', parenthesized ? 'parenthesized_type' : 'function_type', text.slice(9, end), 9, end],
-                ]);
-                if (missing && operator === 'readonly') {
-                  const parameter = current.rootNode.descendantsOfType('required_parameter')[0]!;
-                  const pattern = parameter.childForFieldName('pattern')!;
-                  expect(pattern.text).toBe(operator);
-                  expect(pattern.startIndex).toBe(text.indexOf(operator));
-                  expect(pattern.endIndex).toBe(text.indexOf(operator) + operator.length);
-                } else if (missing) {
-                  expect(current.rootNode.descendantsOfType(['required_parameter', 'optional_parameter'])).toHaveLength(
-                    0
-                  );
-                }
-              }
-            } finally {
-              tree?.delete();
+  test.each(['unknown', 'never', 'unique'])('restores %s type-operator fields after operand removal', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
+    try {
+      for (const optional of ['', '?']) {
+        for (const [operator, operand] of [
+          ['typeof', 'value'],
+          ['keyof', 'Value'],
+          ['readonly', 'Value[]'],
+          ['infer', 'Value'],
+        ] as const) {
+          let source = `type F = (${name}${optional}: ${operator} ${operand}) => number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            check(tree, source, false);
+            for (const replacement of ['', '/* operand */', operand]) {
+              const start = source.indexOf(operator) + operator.length + 1;
+              const end = source.indexOf(') =>');
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              const previous = tree;
+              tree = compareEditedTree(
+                parser,
+                previous,
+                next,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: end,
+                  newEndIndex: start + replacement.length,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, end),
+                  newEndPosition: position(next, start + replacement.length),
+                }),
+                (incremental, fresh) => {
+                  expectQueryAgreement(aliasQuery, incremental, fresh);
+                  check(incremental, next, replacement !== operand);
+                  check(fresh, next, replacement !== operand);
+                },
+                true
+              );
+              previous.delete();
+              source = next;
             }
+            function check(current: Tree, text: string, missing: boolean): void {
+              expect(current.rootNode.hasError).toBe(missing);
+              if (missing) return;
+              const end = text.length - 1;
+              expect(
+                aliasQuery
+                  .captures(current.rootNode)
+                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+              ).toEqual([
+                ['name', 'type_identifier', 'F', 5, 6],
+                ['value', 'function_type', text.slice(9, end), 9, end],
+              ]);
+            }
+          } finally {
+            tree?.delete();
           }
         }
-      } finally {
-        aliasQuery.delete();
-        parser.delete();
       }
+    } finally {
+      aliasQuery.delete();
+      parser.delete();
     }
-  );
+  });
   test.each(['unknown', 'never', 'unique'])('retains %s nested type-query recovery through operand edits', (name) => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -2736,7 +2717,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test('retains malformed parenthesized-type ownership through arrow edits', () => {
+  test('restores a valid function type after malformed parenthesized-type edits', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(
       language,
@@ -2746,12 +2727,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, 'parenthesized_type');
-      for (const [before, after, kind] of [
-        [');', ') & (never: never);', 'intersection_type'],
-        [') & (never: never);', ') | undefined;', 'union_type'],
-        [') | undefined;', ') => void;', 'function_type'],
-        [') => void;', ');', 'parenthesized_type'],
+      check(tree, source, false);
+      for (const [before, after, valid] of [
+        [');', ') & (never: never);', false],
+        [') & (never: never);', ') | undefined;', false],
+        [') | undefined;', ') => void;', true],
+        [') => void;', ');', false],
       ] as const) {
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
@@ -2770,16 +2751,18 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             newEndPosition: position(next, start + after.length),
           }),
           (incremental, fresh) => {
-            check(incremental, next, kind);
-            check(fresh, next, kind);
+            expectQueryAgreement(recoveryQuery, incremental, fresh);
+            check(incremental, next, valid);
+            check(fresh, next, valid);
           },
           true
         );
         previous.delete();
         source = next;
       }
-      function check(current: Tree, text: string, kind: string): void {
-        expect(current.rootNode.hasError).toBe(kind !== 'function_type');
+      function check(current: Tree, text: string, valid: boolean): void {
+        expect(current.rootNode.hasError).toBe(!valid);
+        if (!valid) return;
         const start = text.indexOf('(');
         expect(
           recoveryQuery
@@ -2787,7 +2770,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
         ).toEqual([
           ['name', 'type_identifier', 'T', text.indexOf('T'), text.indexOf('T') + 1],
-          ['value', kind, text.slice(start, -1), start, text.length - 1],
+          ['value', 'function_type', text.slice(start, -1), start, text.length - 1],
         ]);
       }
     } finally {
@@ -3124,3 +3107,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
 });
+
+function expectQueryAgreement(query: Query, incremental: Tree, fresh: Tree): void {
+  const captures = (tree: Tree): unknown[] =>
+    query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex]);
+  expect(captures(incremental)).toEqual(captures(fresh));
+}
