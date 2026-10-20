@@ -47,6 +47,7 @@ enum TokenType {
     TYPE_MEMBER_SEMICOLON,
     HERITAGE_TYPE_START,
     HERITAGE_TYPE_END,
+    KEYWORD_HERITAGE_ARGUMENTS_END,
     GLOBAL_DECLARATION_START,
     GLOBAL_DECLARATION_END,
     ERROR_RECOVERY,
@@ -2943,6 +2944,17 @@ static bool scan_arrow_predefined_return_start(TSLexer *lexer) {
     return true;
 }
 
+static bool starts_keyword_heritage_generic(TSLexer *lexer) {
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
+    char word[16] = {0};
+    if (!scan_identifier(lexer, word, sizeof(word), false)) return false;
+    if (!((is_nonreference_type_word(word) && strcmp(word, "void") != 0) ||
+          strcmp(word, "import") == 0 || strcmp(word, "keyof") == 0 ||
+          strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0)) return false;
+    return scan_default_trivia(lexer, true, false) && lexer->lookahead == '<';
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
@@ -2960,6 +2972,20 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return true;
     }
 
+    if (valid_symbols[KEYWORD_HERITAGE_ARGUMENTS_END] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == '>' || lexer->lookahead == '{') {
+            lexer->mark_end(lexer);
+            if (lexer->lookahead == '>') {
+                advance(lexer);
+                if (!scan_default_trivia(lexer, true, false)) return false;
+                if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
+            }
+            lexer->result_symbol = KEYWORD_HERITAGE_ARGUMENTS_END;
+            return true;
+        }
+    }
+
     if (!valid_symbols[ERROR_RECOVERY] && (valid_symbols[HERITAGE_TYPE_START] || valid_symbols[HERITAGE_TYPE_END])) {
         lexer->mark_end(lexer);
         if (valid_symbols[HERITAGE_TYPE_END]) {
@@ -2967,8 +2993,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             if (scan_whitespace_and_comments(lexer, &comment, true, true) == REJECT) return false;
             if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
         }
-        scanner->heritage_type_pending = valid_symbols[HERITAGE_TYPE_START];
-        lexer->result_symbol = scanner->heritage_type_pending ? HERITAGE_TYPE_START : HERITAGE_TYPE_END;
+        scanner->heritage_type_pending = valid_symbols[HERITAGE_TYPE_START] && !starts_keyword_heritage_generic(lexer);
+        lexer->result_symbol = valid_symbols[HERITAGE_TYPE_START] ? HERITAGE_TYPE_START : HERITAGE_TYPE_END;
         return true;
     }
 

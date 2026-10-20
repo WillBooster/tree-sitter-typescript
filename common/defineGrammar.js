@@ -80,6 +80,7 @@ module.exports = function defineGrammar(dialect) {
       $._type_member_semicolon,
       $._heritage_type_start,
       $._heritage_type_end,
+      $._keyword_heritage_arguments_end,
       $._global_declaration_start,
       $._global_declaration_end,
       $.__error_recovery,
@@ -102,6 +103,8 @@ module.exports = function defineGrammar(dialect) {
       $._decorated_export_ambient_class_declaration,
       $._conditional_right_type,
       $._conditional_parameter_pattern,
+      $._implements_keyword_type,
+      $._implements_keyword_primary_type,
     ],
 
     precedences: ($, previous) => [
@@ -180,6 +183,7 @@ module.exports = function defineGrammar(dialect) {
     conflicts: ($, previous) => [
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
+      [$.primary_type, $.type_parameter],
       [$.infer_type],
       [$.infer_type, $.type_predicate],
       [$.asserts, $.type_predicate],
@@ -889,7 +893,59 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      implements_clause: ($) => seq('implements', commaSep1(seq($._heritage_type_start, $.type, $._heritage_type_end))),
+      implements_clause: ($) =>
+        seq(
+          'implements',
+          commaSep1(
+            seq(
+              $._heritage_type_start,
+              choice(seq($.type, $._heritage_type_end), alias($._implements_keyword_type, $.type))
+            )
+          )
+        ),
+
+      _implements_keyword_type: ($) => alias($._implements_keyword_primary_type, $.primary_type),
+
+      _implements_keyword_primary_type: ($) => alias($._implements_keyword_generic_type, $.generic_type),
+
+      _implements_keyword_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field(
+              'name',
+              alias(
+                choice(
+                  'any',
+                  'number',
+                  'boolean',
+                  'string',
+                  'symbol',
+                  'unknown',
+                  'never',
+                  'object',
+                  $.this,
+                  'import',
+                  $.true,
+                  $.false,
+                  $.null,
+                  $.undefined,
+                  'keyof',
+                  'readonly',
+                  'unique',
+                  'infer'
+                ),
+                $.type_identifier
+              )
+            ),
+            choice(
+              seq(field('type_arguments', $.type_arguments), $._heritage_type_end),
+              prec.dynamic(-1, field('type_arguments', alias($._implements_keyword_arguments, $.type_arguments)))
+            )
+          )
+        ),
+
+      _implements_keyword_arguments: ($) => seq('<', commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(
