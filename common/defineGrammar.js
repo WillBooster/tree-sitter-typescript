@@ -201,6 +201,7 @@ module.exports = function defineGrammar(dialect) {
       [$._property_name, $.public_field_definition],
 
       [$.class],
+      [$.class, $._parameter_name],
 
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
