@@ -14,9 +14,9 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The parsers load only with the [willbooster-tree-sitter] runtime, version 2.0.0 or later.
+//! The parsers load only with the [willbooster-tree-sitter] runtime, version 7.0.5 or later within 7.x.
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/2/tree_sitter/struct.Parser.html
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/7/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 //! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 
