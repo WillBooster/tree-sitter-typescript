@@ -62,15 +62,7 @@ module.exports = function defineGrammar(dialect) {
     name: dialect,
 
     externals: ($, previous) => [
-      // JavaScript reads these only in `export_statement` and its constructor chain: the export and `new` rules below
-      // replace those readings, leaving the chain's rules inherited but unreachable. Dropping them keeps the external
-      // token order that `enum TokenType` in scanner.h mirrors; keeping them requires declaring them there in order.
-      ...previous.filter(
-        (rule) =>
-          !['_export_default_declaration', '_argumentless_new_end', '_constructor_async_function_start'].includes(
-            rule.name
-          )
-      ),
+      ...previous,
       $._function_signature_automatic_semicolon,
       $._type_arguments_end,
       $._type_arguments_end_before_expression,
@@ -92,6 +84,10 @@ module.exports = function defineGrammar(dialect) {
       $._arrow_predefined_return_start,
       $._conditional_predefined_parameter_name,
       $._comment_optional_parameter_marker,
+      $._method_signature_end,
+      $._function_signature_end,
+      $._bare_assertion_context,
+      $._annotated_signature_context,
     ],
 
     supertypes: ($, previous) => [
@@ -197,7 +193,7 @@ module.exports = function defineGrammar(dialect) {
       [$.export_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier],
       ...withTypeArgumentsTarget($, previous),
-      [$._for_header, $._lexical_binding_identifier],
+      [$.for_in_clause, $._lexical_binding_identifier],
       [$._field_name, $._property_name],
       [$._property_name, $.public_field_definition],
 
@@ -221,7 +217,7 @@ module.exports = function defineGrammar(dialect) {
       [$.pattern, $.primary_type],
       [$.pattern, $.primary_expression],
       [$.rest_pattern, $.primary_expression],
-      [$._for_header, $.primary_expression],
+      [$.for_in_clause, $.primary_expression],
 
       [$._tuple_label, $.primary_type],
       [$._tuple_label, $.literal_type],
@@ -273,7 +269,10 @@ module.exports = function defineGrammar(dialect) {
           seq(
             field(
               'label',
-              alias(choice($.identifier, $._reserved_identifier, $._predefined_annotated_name), $.statement_identifier)
+              alias(
+                choice($.identifier, $._reserved_identifier, $._predefined_annotated_name, $._async_keyword),
+                $.statement_identifier
+              )
             ),
             ':',
             field('body', $._single_statement)
@@ -301,8 +300,8 @@ module.exports = function defineGrammar(dialect) {
                 seq(
                   field('name', $._field_name),
                   choice(
-                    optional(choice($._initializer, $._line_break_after_field)),
-                    seq($._field_annotations, optional($._initializer))
+                    optional(choice($._field_initializer, $._line_break_after_field)),
+                    seq($._field_annotations, optional($._field_initializer))
                   )
                 ),
                 // A line break after `get` or `set` continues a getter or setter. Allowing both sentinels here tells
@@ -310,8 +309,8 @@ module.exports = function defineGrammar(dialect) {
                 seq(
                   field('name', alias(choice('get', 'set'), $.property_identifier)),
                   choice(
-                    optional(choice($._initializer, $._line_break_after_modifier, $._line_break_after_field)),
-                    seq($._field_annotations, optional($._initializer))
+                    optional(choice($._field_initializer, $._line_break_after_modifier, $._line_break_after_field)),
+                    seq($._field_annotations, optional($._field_initializer))
                   )
                 )
               )
@@ -320,8 +319,8 @@ module.exports = function defineGrammar(dialect) {
             seq(
               field('name', alias('static', $.property_identifier)),
               choice(
-                optional(choice($._initializer, $._line_break_after_modifier)),
-                seq($._field_annotations, optional($._initializer))
+                optional(choice($._field_initializer, $._line_break_after_modifier)),
+                seq($._field_annotations, optional($._field_initializer))
               )
             ),
             // After a modifier, `static` is a field name, which a line break ends.
@@ -336,8 +335,8 @@ module.exports = function defineGrammar(dialect) {
               ),
               field('name', alias('static', $.property_identifier)),
               choice(
-                optional(choice($._initializer, $._line_break_after_field)),
-                seq($._field_annotations, optional($._initializer))
+                optional(choice($._field_initializer, $._line_break_after_field)),
+                seq($._field_annotations, optional($._field_initializer))
               )
             )
           )
@@ -705,7 +704,7 @@ module.exports = function defineGrammar(dialect) {
       _lexical_binding_identifier: ($) =>
         choice(reserved('lexical', $.identifier), alias(choice('of', 'as', 'satisfies'), $.identifier)),
 
-      _for_header: ($) =>
+      for_in_clause: ($) =>
         seq(
           '(',
           choice(
@@ -745,16 +744,20 @@ module.exports = function defineGrammar(dialect) {
       _lexical_variable_declarator: ($) => variableDeclarator($, $._lexical_binding_identifier),
 
       method_signature: ($) =>
-        seq(
-          optional($.accessibility_modifier),
-          optional('static'),
-          optional($.override_modifier),
-          optional('readonly'),
-          optional('async'),
-          optional(choice('get', 'set', '*')),
-          field('name', $._property_name),
-          optional('?'),
-          $._call_signature
+        functionContext((async) =>
+          seq(
+            optional($.accessibility_modifier),
+            optional('static'),
+            optional($.override_modifier),
+            optional('readonly'),
+            ...(async ? [alias($._async_keyword, 'async')] : []),
+            optional(choice('get', 'set', '*')),
+            field('name', $._property_name),
+            optional('?'),
+            $[async ? '_async_function_signature_start' : '_function_signature_start'],
+            $._call_signature,
+            $._method_signature_end
+          )
         ),
 
       abstract_method_signature: ($) =>
@@ -765,7 +768,9 @@ module.exports = function defineGrammar(dialect) {
           optional(choice('get', 'set', '*')),
           field('name', $._property_name),
           optional('?'),
-          $._call_signature
+          $._function_signature_start,
+          $._call_signature,
+          $._method_signature_end
         ),
 
       parenthesized_expression: ($) =>
@@ -774,13 +779,22 @@ module.exports = function defineGrammar(dialect) {
       _formal_parameter: ($) => choice($.required_parameter, $.optional_parameter),
 
       function_signature: ($) =>
-        seq(
-          choice(
-            seq($._default_declaration_start, optional('async'), 'function', field('name', optional($.identifier))),
-            seq(optional('async'), 'function', field('name', $.identifier))
-          ),
-          $._call_signature,
-          choice($._semicolon, $._function_signature_automatic_semicolon)
+        functionContext((async) =>
+          seq(
+            choice(
+              seq(
+                $._default_declaration_start,
+                ...(async ? [alias($._async_keyword, 'async')] : []),
+                'function',
+                field('name', optional($.identifier))
+              ),
+              seq(...(async ? [alias($._async_keyword, 'async')] : []), 'function', field('name', $.identifier))
+            ),
+            $[async ? '_async_function_signature_start' : '_function_signature_start'],
+            $._call_signature,
+            $._function_signature_end,
+            choice($._semicolon, $._function_signature_automatic_semicolon)
+          )
         ),
 
       decorator: ($) =>
@@ -1150,32 +1164,37 @@ module.exports = function defineGrammar(dialect) {
           'asserts',
           choice(
             $.type_predicate,
-            $.identifier,
-            alias(
+            seq(
               choice(
-                'out',
-                'as',
-                'satisfies',
-                'is',
-                $.undefined,
-                'keyof',
-                'infer',
-                'readonly',
-                'abstract',
-                'asserts',
-                'any',
-                'number',
-                'boolean',
-                'string',
-                'symbol',
-                'unknown',
-                'never',
-                'object',
-                'unique'
+                $.identifier,
+                alias(
+                  choice(
+                    'out',
+                    'as',
+                    'satisfies',
+                    'is',
+                    $.undefined,
+                    'keyof',
+                    'infer',
+                    'readonly',
+                    'abstract',
+                    'asserts',
+                    'any',
+                    'number',
+                    'boolean',
+                    'string',
+                    'symbol',
+                    'unknown',
+                    'never',
+                    'object',
+                    'unique'
+                  ),
+                  $.identifier
+                ),
+                $.this
               ),
-              $.identifier
-            ),
-            $.this
+              optional($._bare_assertion_context)
+            )
           )
         ),
 
@@ -1571,7 +1590,12 @@ module.exports = function defineGrammar(dialect) {
         seq(
           field('type_parameters', optional($.type_parameters)),
           field('parameters', $.formal_parameters),
-          field('return_type', optional(choice($.type_annotation, $.asserts_annotation, $.type_predicate_annotation)))
+          optional(
+            seq(
+              field('return_type', choice($.type_annotation, $.asserts_annotation, $.type_predicate_annotation)),
+              optional($._annotated_signature_context)
+            )
+          )
         ),
 
       type_parameters: ($) => seq('<', commaSep1($.type_parameter), optional(','), '>'),
@@ -1770,20 +1794,49 @@ function replaceArrowCallSignature(rule, replacement) {
 
 function methodDefinition($, decorators) {
   return prec.left(
-    seq(
-      ...(decorators ? [decorators] : []),
-      optional($.accessibility_modifier),
-      optional('static'),
-      optional($.override_modifier),
-      optional('readonly'),
-      optional('async'),
-      optional(choice('get', 'set', '*')),
-      field('name', $._property_name),
-      optional('?'),
-      $._call_signature,
-      field('body', alias($._class_member_body, $.statement_block))
+    functionContext((async) =>
+      choice(
+        ...[false, true].map((generator) =>
+          seq(
+            ...(decorators ? [decorators] : []),
+            optional($.accessibility_modifier),
+            optional('static'),
+            optional($.override_modifier),
+            optional('readonly'),
+            ...(async ? [alias($._async_keyword, 'async')] : []),
+            ...(generator ? ['*'] : [optional(choice('get', 'set'))]),
+            field('name', $._property_name),
+            optional('?'),
+            choice(
+              functionScope(
+                $,
+                async,
+                seq($._call_signature, field('body', alias($._class_member_body, $.statement_block))),
+                generator ? 'generator_function' : 'function_signature'
+              ),
+              ...(generator
+                ? []
+                : [
+                    seq(
+                      $._call_signature,
+                      functionScope($, async, field('body', alias($._class_member_body, $.statement_block)), 'function')
+                    ),
+                  ])
+            )
+          )
+        )
+      )
     )
   );
+}
+
+function functionContext(makeRule) {
+  return choice(makeRule(false), makeRule(true));
+}
+
+function functionScope($, async, content, kind = 'function_signature') {
+  const name = kind === 'function' && !async ? 'sync_function' : `${async ? 'async_' : ''}${kind}`;
+  return seq($[`_${name}_start`], content, $._function_context_end);
 }
 
 function decoratedExportClass($, abstract, ambient = false) {

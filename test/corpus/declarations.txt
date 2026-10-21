@@ -173,12 +173,14 @@ declare module Foo {
           condition: (parenthesized_expression
             (true)))
         (for_in_statement
-          left: (identifier)
-          right: (null)
+          header: (for_in_clause
+            left: (identifier)
+            right: (null))
           body: (statement_block))
         (for_statement
-          initializer: (empty_statement)
-          condition: (empty_statement)
+          header: (for_clause
+            initializer: (empty_statement)
+            condition: (empty_statement))
           body: (statement_block))
         (if_statement
           condition: (parenthesized_expression
