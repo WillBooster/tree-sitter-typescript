@@ -877,7 +877,8 @@ module.exports = function defineGrammar(dialect) {
           $.ambient_declaration
         ),
 
-      type_assertion: ($) => prec.left('unary', seq($.type_arguments, $.expression)),
+      type_assertion: ($) =>
+        prec.left('unary', seq(alias($._unprefixed_type_arguments, $.type_arguments), $.expression)),
 
       as_expression: ($) =>
         prec.left('binary', seq($.expression, 'as', choice('const', $.type), optional($._type_assertion_context))),
@@ -1472,7 +1473,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
           ),
-          field('type_arguments', alias($._type_query_arguments, $.type_arguments))
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
         ),
       type_query: ($) =>
         prec.right(
@@ -1532,7 +1533,7 @@ module.exports = function defineGrammar(dialect) {
 
       type_arguments: ($) => typeArguments($, choice('<', seq($._adjacent_type_angles, '<'))),
 
-      _type_query_arguments: ($) => typeArguments($, '<'),
+      _unprefixed_type_arguments: ($) => typeArguments($, '<'),
 
       object_type: ($) =>
         seq(

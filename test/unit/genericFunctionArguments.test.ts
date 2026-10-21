@@ -66,6 +66,17 @@ for (const dialect of ['typescript', 'tsx']) {
     };
     try {
       checkArguments(tree, source, dialect, query, highlights);
+      if (dialect === 'typescript') {
+        for (const assertion of ['< <T>() => T>x', '<Box<<T>() => T>>x']) {
+          const text = prefix + assertion + suffix;
+          const control = parser.parse(text)!;
+          try {
+            checkArguments(control, text, dialect, query, highlights);
+          } finally {
+            control.delete();
+          }
+        }
+      }
       for (const nextExpression of [
         'a < b < c',
         'a >= b < c',
@@ -98,6 +109,8 @@ for (const dialect of ['typescript', 'tsx']) {
         'async () => await f! << 1',
         'async () => await f! /*\n*/ << 1',
         'async () => await instanceOfFoo << 1',
+        'yield << 1',
+        'yield /* gap */ << 1',
         'a > b < c',
       ]) {
         const next = prefix + nextExpression + suffix;
@@ -413,6 +426,11 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
       const close = node.getChildren(reference).find((child) => child.kind === ts.SyntaxKind.GreaterThanToken)!;
       argumentsRanges.push([source.slice(start, close.end), start, close.end]);
     }
+    if (ts.isTypeAssertionExpression(node)) {
+      const close = node.getChildren(reference).find((child) => child.kind === ts.SyntaxKind.GreaterThanToken)!;
+      const start = node.getStart(reference);
+      argumentsRanges.push([source.slice(start, close.end), start, close.end]);
+    }
     if (ts.isFunctionTypeNode(node)) functionRanges.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isBinaryExpression(node)) {
       binaryRanges.push([
@@ -485,7 +503,10 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
     ).toEqual([[node.text, node.startIndex, node.endIndex]]);
   }
   for (const { node } of captures.filter((capture) => capture.name === 'arguments')) {
-    expect(node.parent!.childForFieldName('type_arguments')?.id).toBe(node.id);
+    const parent = node.parent!;
+    expect(
+      parent.type === 'type_assertion' ? parent.firstNamedChild!.id : parent.childForFieldName('type_arguments')?.id
+    ).toBe(node.id);
   }
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }

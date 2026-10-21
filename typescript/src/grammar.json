@@ -15075,8 +15075,13 @@
         "type": "SEQ",
         "members": [
           {
-            "type": "SYMBOL",
-            "name": "type_arguments"
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_unprefixed_type_arguments"
+            },
+            "named": true,
+            "value": "type_arguments"
           },
           {
             "type": "SYMBOL",
@@ -18546,7 +18551,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_type_query_arguments"
+              "name": "_unprefixed_type_arguments"
             },
             "named": true,
             "value": "type_arguments"
@@ -19012,7 +19017,7 @@
         }
       ]
     },
-    "_type_query_arguments": {
+    "_unprefixed_type_arguments": {
       "type": "SEQ",
       "members": [
         {
