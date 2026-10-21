@@ -261,8 +261,7 @@ typedef enum {
     REJECT,     // Semicolon is illegal, ie a syntax error occurred
     NO_NEWLINE, // Unclear if semicolon will be legal, continue
     ACCEPT,     // Semicolon is legal, assuming a comment was encountered
-    // Like ACCEPT, but the line break is inside the block comment that the lexer stopped after, so it will not be seen
-    // again once tree-sitter has consumed that comment.
+    // The probe crossed a comment-related line break, so ASI cannot rely on finding it at the current lookahead.
     ACCEPT_AFTER_COMMENT_LINE_BREAK,
     ACCEPT_AFTER_COMMENT_LINE_BREAK_BEFORE_SLASH,
 } WhitespaceResult;
