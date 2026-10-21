@@ -29,26 +29,26 @@ const Signatures = [
 const Following = 'export function after() { return 1; }';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves ${dialect} optional-parameter fields and comments through edits`, async () => {
-    await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const queries: Query[] = [];
-    const captures = (current: Tree): unknown[] =>
-      queries.map((query) =>
-        query
-          .captures(current.rootNode)
-          .map(({ name: capture, node }) => [capture, node.type, node.text, node.startIndex, node.endIndex])
-      );
-    try {
-      queries.push(...configuredQueries(language, dialect));
-      queries.push(
-        new Query(
-          language,
-          '(optional_parameter pattern: (identifier) @binding type: (type_annotation) @type) @parameter'
-        )
-      );
-      for (const signature of Signatures) {
+  for (const signature of Signatures) {
+    test(`preserves ${dialect} optional-parameter fields and comments through edits in ${signature('value? : string')}`, async () => {
+      await Parser.init();
+      const language = await loadCurrentWasmBuild(dialect);
+      const parser = new Parser().setLanguage(language);
+      const queries: Query[] = [];
+      const captures = (current: Tree): unknown[] =>
+        queries.map((query) =>
+          query
+            .captures(current.rootNode)
+            .map(({ name: capture, node }) => [capture, node.type, node.text, node.startIndex, node.endIndex])
+        );
+      try {
+        queries.push(...configuredQueries(language, dialect));
+        queries.push(
+          new Query(
+            language,
+            '(optional_parameter pattern: (identifier) @binding type: (type_annotation) @type) @parameter'
+          )
+        );
         for (const name of Names) {
           for (const [comment, expectedComments] of Comments) {
             let source = `${signature(`${name}? ${comment} : string`)}\n${Following}`;
@@ -99,12 +99,12 @@ for (const dialect of ['typescript', 'tsx']) {
             }
           }
         }
+      } finally {
+        for (const query of queries) query.delete();
+        parser.delete();
       }
-    } finally {
-      for (const query of queries) query.delete();
-      parser.delete();
-    }
-  });
+    });
+  }
   test(`retains ${dialect} ternary operands through consequence repair`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));

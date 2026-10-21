@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import ts from 'typescript-reference';
 import { grammarOperandKeywords } from './grammarKeywordStarts';
 
@@ -65,6 +65,6 @@ ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
   assert.equal(readFileSync(path, 'utf8'), header, 'Run bun run generate-keywords to update the scanner header.');
-} else {
+} else if (!existsSync(path) || readFileSync(path, 'utf8') !== header) {
   writeFileSync(path, header);
 }
