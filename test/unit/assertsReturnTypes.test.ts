@@ -95,6 +95,8 @@ for (const dialect of ['typescript', 'tsx']) {
         'asserts<string>',
         'asserts.X',
         'asserts.X<string>',
+        'T1 extends (typeof asserts) ? X : Y',
+        'T1 extends { value: typeof asserts } ? X : Y',
         'asserts value',
         'asserts value is string',
         'value is asserts',
