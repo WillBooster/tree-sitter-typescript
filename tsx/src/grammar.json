@@ -10804,17 +10804,8 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "_predefined_parameter_name"
-              },
-              {
-                "type": "STRING",
-                "value": "asserts"
-              }
-            ]
+            "type": "SYMBOL",
+            "name": "_predefined_parameter_name"
           },
           "named": true,
           "value": "identifier"
@@ -11639,6 +11630,10 @@
               },
               {
                 "type": "STRING",
+                "value": "asserts"
+              },
+              {
+                "type": "STRING",
                 "value": "as"
               },
               {
@@ -11812,6 +11807,10 @@
         {
           "type": "STRING",
           "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
         },
         {
           "type": "STRING",
@@ -12855,6 +12854,10 @@
         {
           "type": "STRING",
           "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
         },
         {
           "type": "STRING",

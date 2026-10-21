@@ -3,6 +3,7 @@ const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
 const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'abstract',
+  'asserts',
   'as',
   'satisfies',
   'is',
@@ -1128,7 +1129,7 @@ module.exports = function defineGrammar(dialect) {
           optional($._initializer)
         ),
 
-      pattern: ($, previous) => choice(previous, alias(choice($._predefined_parameter_name, 'asserts'), $.identifier)),
+      pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
 
       _parameter_name: ($) =>
         seq(

@@ -12,6 +12,11 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 const Prefix = `type asserts<T = unknown> = T;
 namespace asserts { export interface X {} }
 let qualified: asserts.X;
+class ComputedField { [asserts]: number }
+class ComputedMethod { [asserts]() {} }
+interface ComputedInterface { [asserts]: 1; [asserts.x]: 2 }
+type Indexed = { [asserts: string]: 1 };
+class IndexedClass { [asserts: string]: number }
 type RequiredLabel = [asserts: string];
 type OptionalLabel = [asserts?: string];
 type RestLabel = [...asserts: string[]];
@@ -56,7 +61,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
-      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding)'
+      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding) (computed_property_name) @computed (index_signature name: (_) @indexName)'
     );
     const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
     const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
@@ -145,8 +150,10 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   const expectedParameters: (string | number)[][] = [];
   const expectedLabels: (string | number | boolean)[][] = [];
   const expectedBindings: (string | number | boolean)[][] = [];
+  const expectedComputed: (string | number)[][] = [];
+  const expectedIndices: (string | number)[][] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isFunctionLike(node) && node.type) {
+    if (ts.isFunctionLike(node) && !ts.isIndexSignatureDeclaration(node) && node.type) {
       expected.push([
         node.type.getText(reference),
         node.type.getStart(reference),
@@ -174,7 +181,14 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
         !!node.dotDotDotToken,
       ]);
     }
-    if (ts.isParameter(node)) {
+    if (ts.isComputedPropertyName(node)) {
+      expectedComputed.push([node.getText(reference), node.getStart(reference), node.end]);
+    }
+    if (ts.isIndexSignatureDeclaration(node)) {
+      const name = node.parameters[0]!.name;
+      expectedIndices.push([name.getText(reference), name.getStart(reference), name.end]);
+    }
+    if (ts.isParameter(node) && !ts.isIndexSignatureDeclaration(node.parent)) {
       expectedBindings.push([
         node.name.getText(reference),
         node.name.getStart(reference),
@@ -204,6 +218,12 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   expect(
     captures.filter(({ name }) => name === 'parameters').map(({ node }) => [node.text, node.startIndex, node.endIndex])
   ).toEqual(expectedParameters);
+  expect(
+    captures.filter(({ name }) => name === 'computed').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(expectedComputed);
+  expect(
+    captures.filter(({ name }) => name === 'indexName').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(expectedIndices);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
 
