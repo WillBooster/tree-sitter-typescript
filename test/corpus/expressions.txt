@@ -1288,6 +1288,36 @@ Type assertions
       (number)))))
 
 ==========================================================
+Postfix updates in type assertions
+:language(typescript)
+==========================================================
+
+<number>value++;
+(<number>value)++;
+<number>value
+++value;
+
+---
+
+(program
+  (expression_statement
+    (type_assertion
+      (type_arguments (predefined_type))
+      (update_expression (identifier))))
+  (expression_statement
+    (update_expression
+      (parenthesized_expression
+        (type_assertion
+          (type_arguments (predefined_type))
+          (identifier)))))
+  (expression_statement
+    (type_assertion
+      (type_arguments (predefined_type))
+      (identifier)))
+  (expression_statement
+    (update_expression (identifier))))
+
+==========================================================
 Type arguments in JSX
 :language(tsx)
 ==========================================================
