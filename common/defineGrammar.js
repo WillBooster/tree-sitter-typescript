@@ -110,6 +110,8 @@ module.exports = function defineGrammar(dialect) {
       $._implements_keyword_primary_type,
       $._implements_keyword_qualified_type,
       $._implements_keyword_qualified_primary_type,
+      $._implements_keyword_bare_type,
+      $._implements_keyword_bare_primary_type,
     ],
 
     precedences: ($, previous) => [
@@ -929,6 +931,7 @@ module.exports = function defineGrammar(dialect) {
               choice(
                 seq($.type, $._heritage_type_end),
                 seq(alias($._implements_keyword_qualified_type, $.type), $._heritage_type_end),
+                seq(alias($._implements_keyword_bare_type, $.type), $._heritage_type_end),
                 alias($._implements_keyword_type, $.type)
               )
             )
@@ -986,6 +989,10 @@ module.exports = function defineGrammar(dialect) {
             field('type_arguments', $.type_arguments)
           )
         ),
+      _implements_keyword_bare_type: ($) => alias($._implements_keyword_bare_primary_type, $.primary_type),
+
+      _implements_keyword_bare_primary_type: ($) =>
+        alias(choice('keyof', 'readonly', 'unique', 'infer'), $.type_identifier),
 
       _implements_keyword_generic_type: ($) =>
         prec(

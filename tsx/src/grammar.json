@@ -15425,6 +15425,24 @@
                       ]
                     },
                     {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_implements_keyword_bare_type"
+                          },
+                          "named": true,
+                          "value": "type"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_heritage_type_end"
+                        }
+                      ]
+                    },
+                    {
                       "type": "ALIAS",
                       "content": {
                         "type": "SYMBOL",
@@ -15477,6 +15495,24 @@
                                 "content": {
                                   "type": "SYMBOL",
                                   "name": "_implements_keyword_qualified_type"
+                                },
+                                "named": true,
+                                "value": "type"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "_heritage_type_end"
+                              }
+                            ]
+                          },
+                          {
+                            "type": "SEQ",
+                            "members": [
+                              {
+                                "type": "ALIAS",
+                                "content": {
+                                  "type": "SYMBOL",
+                                  "name": "_implements_keyword_bare_type"
                                 },
                                 "named": true,
                                 "value": "type"
@@ -15768,6 +15804,41 @@
           }
         ]
       }
+    },
+    "_implements_keyword_bare_type": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_implements_keyword_bare_primary_type"
+      },
+      "named": true,
+      "value": "primary_type"
+    },
+    "_implements_keyword_bare_primary_type": {
+      "type": "ALIAS",
+      "content": {
+        "type": "CHOICE",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "keyof"
+          },
+          {
+            "type": "STRING",
+            "value": "readonly"
+          },
+          {
+            "type": "STRING",
+            "value": "unique"
+          },
+          {
+            "type": "STRING",
+            "value": "infer"
+          }
+        ]
+      },
+      "named": true,
+      "value": "type_identifier"
     },
     "_implements_keyword_generic_type": {
       "type": "PREC",
@@ -22034,7 +22105,9 @@
     "_implements_keyword_type",
     "_implements_keyword_primary_type",
     "_implements_keyword_qualified_type",
-    "_implements_keyword_qualified_primary_type"
+    "_implements_keyword_qualified_primary_type",
+    "_implements_keyword_bare_type",
+    "_implements_keyword_bare_primary_type"
   ],
   "reserved": {
     "global": [
