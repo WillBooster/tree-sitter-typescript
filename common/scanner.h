@@ -589,6 +589,10 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
     if (before_slash) {
         return !valid_symbols[LOGICAL_OR] && !valid_symbols[ERROR_RECOVERY];
     }
+    if (!valid_symbols[LOGICAL_OR] &&
+        (lexer->lookahead == '`' || lexer->lookahead == '<' || lexer->lookahead == '+' || lexer->lookahead == '-')) {
+        return true;
+    }
 
     switch (lexer->lookahead) {
         case '`':
