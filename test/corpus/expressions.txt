@@ -1743,3 +1743,40 @@ async function f() { await
             (non_null_expression
               (identifier)))
           (identifier))))))
+
+==================
+Line breaks after as and satisfies expressions
+==================
+
+value as T
+(value);
+value satisfies T
+[0];
+value as T
+`text`;
+(value as T)
+(value);
+const following = 1;
+
+---
+
+(program
+  (expression_statement
+    (as_expression (identifier) (type_identifier)))
+  (expression_statement
+    (parenthesized_expression (identifier)))
+  (expression_statement
+    (satisfies_expression (identifier) (type_identifier)))
+  (expression_statement
+    (array (number)))
+  (expression_statement
+    (as_expression (identifier) (type_identifier)))
+  (expression_statement
+    (template_string (string_fragment)))
+  (expression_statement
+    (call_expression
+      function: (parenthesized_expression
+        (as_expression (identifier) (type_identifier)))
+      arguments: (arguments (identifier))))
+  (lexical_declaration
+    (variable_declarator name: (identifier) value: (number))))
