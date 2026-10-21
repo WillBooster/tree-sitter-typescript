@@ -69,7 +69,7 @@ module.exports = function defineGrammar(dialect) {
       $._type_arguments_end_before_expression,
       $._new_type_arguments_end,
       $._type_reference_arguments_start,
-      $._unqualified_type_reference_arguments_start,
+      $._type_identifier_before_angle,
       $._type_member_semicolon,
       $._heritage_type_start,
       $._heritage_type_end,
@@ -90,6 +90,7 @@ module.exports = function defineGrammar(dialect) {
       $._bare_assertion_context,
       $._annotated_signature_context,
       $._type_assertion_context,
+      $._adjacent_type_angles,
     ],
 
     supertypes: ($, previous) => [
@@ -455,6 +456,8 @@ module.exports = function defineGrammar(dialect) {
 
       _lhs_expression: ($, previous) =>
         choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
+
+      binary_expression: withShiftPrefix,
 
       await_expression: (_, previous) => {
         const members = previous.content.content.members;
@@ -872,7 +875,8 @@ module.exports = function defineGrammar(dialect) {
           $.ambient_declaration
         ),
 
-      type_assertion: ($) => prec.left('unary', seq($.type_arguments, $.expression)),
+      type_assertion: ($) =>
+        prec.left('unary', seq(alias($._unprefixed_type_arguments, $.type_arguments), $.expression)),
 
       as_expression: ($) =>
         prec.left('binary', seq($.expression, 'as', choice('const', $.type), optional($._type_assertion_context))),
@@ -1358,7 +1362,7 @@ module.exports = function defineGrammar(dialect) {
 
       _generic_type_guarded_name: ($) =>
         choice(
-          seq($._unqualified_type_reference_arguments_start, field('name', $._type_reference_identifier)),
+          field('name', alias($._type_identifier_before_angle, $.type_identifier)),
           field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier)),
           field('name', alias($._generic_type_query_member_expression, $.member_expression))
         ),
@@ -1464,7 +1468,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
           ),
-          field('type_arguments', $.type_arguments)
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
         ),
       type_query: ($) =>
         prec.right(
@@ -1522,7 +1526,9 @@ module.exports = function defineGrammar(dialect) {
           'object'
         ),
 
-      type_arguments: ($) => seq('<', commaSep1($.type), optional(','), '>'),
+      type_arguments: ($) => typeArguments($, choice('<', seq($._adjacent_type_angles, '<'))),
+
+      _unprefixed_type_arguments: ($) => typeArguments($, '<'),
 
       object_type: ($) =>
         seq(
@@ -1686,6 +1692,27 @@ module.exports = function defineGrammar(dialect) {
   });
 };
 
+function withShiftPrefix($, rule) {
+  return mapRule(rule, (part) => {
+    if (part.type !== 'SEQ') return part;
+    return {
+      ...part,
+      members: part.members.flatMap((member) =>
+        member.type === 'FIELD' &&
+        member.name === 'operator' &&
+        member.content.type === 'STRING' &&
+        member.content.value === '<<'
+          ? [optional($._adjacent_type_angles), member]
+          : [member]
+      ),
+    };
+  });
+}
+
+function typeArguments($, opening) {
+  return seq(opening, commaSep1($.type), optional(','), '>');
+}
+
 function variableDeclarator($, name) {
   return choice(
     seq(
@@ -1795,12 +1822,15 @@ function typeQueryMember($, generic) {
 }
 
 function replaceSymbol(rule, name, replacement) {
-  if (rule.type === 'SYMBOL' && rule.name === name) return replacement;
-  return {
+  return mapRule(rule, (part) => (part.type === 'SYMBOL' && part.name === name ? replacement : part));
+}
+
+function mapRule(rule, transform) {
+  return transform({
     ...rule,
-    ...(rule.members ? { members: rule.members.map((member) => replaceSymbol(member, name, replacement)) } : {}),
-    ...(rule.content ? { content: replaceSymbol(rule.content, name, replacement) } : {}),
-  };
+    ...(rule.members ? { members: rule.members.map((member) => mapRule(member, transform)) } : {}),
+    ...(rule.content ? { content: mapRule(rule.content, transform) } : {}),
+  });
 }
 
 function methodSignature($) {
