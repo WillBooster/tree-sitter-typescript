@@ -91,6 +91,7 @@ module.exports = function defineGrammar(dialect) {
       $._annotated_signature_context,
       $._type_assertion_context,
       $._adjacent_type_angles,
+      $._import_type_arguments_start,
     ],
 
     supertypes: ($, previous) => [
@@ -1287,6 +1288,7 @@ module.exports = function defineGrammar(dialect) {
           $.index_type_query,
           prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
           prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression)),
+          prec(-1, alias($._typed_import_type, $.call_expression)),
           alias($.this, $.this_type),
           $.existential_type,
           $.literal_type,
@@ -1457,6 +1459,19 @@ module.exports = function defineGrammar(dialect) {
           ),
           field('arguments', $.arguments)
         ),
+      _typed_import_arguments: ($) => {
+        const rule = JavaScript.grammar.rules.arguments;
+        const members = rule.members;
+        return { ...rule, members: [...members.slice(0, -1), $._import_type_arguments_start, members.at(-1)] };
+      },
+
+      _typed_import_type: ($) =>
+        seq(
+          field('function', $.import),
+          field('arguments', alias($._typed_import_arguments, $.arguments)),
+          field('type_arguments', $.type_arguments)
+        ),
+
       _type_query_instantiation_expression: ($) =>
         seq(
           field(
@@ -1478,6 +1493,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression),
+              alias($._typed_import_type, $.call_expression),
               alias($._type_query_instantiation_expression, $.instantiation_expression),
               $._type_query_identifier,
               $.this

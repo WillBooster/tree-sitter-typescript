@@ -82,6 +82,7 @@ enum TokenType {
     ANNOTATED_SIGNATURE_CONTEXT,
     TYPE_ASSERTION_CONTEXT,
     ADJACENT_TYPE_ANGLES,
+    IMPORT_TYPE_ARGUMENTS_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -106,6 +107,7 @@ static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool htm
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break);
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 static bool scan_type_parameter_prefix(TSLexer *lexer);
+static bool scan_import_type_arguments_start(TSLexer *lexer);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
 
@@ -3190,6 +3192,11 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
+    if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == ')') return scan_import_type_arguments_start(lexer);
+    }
+
     if (!(valid_symbols[TEMPLATE_CHARS] && valid_symbols[AUTOMATIC_SEMICOLON])) {
         if (valid_symbols[FUNCTION_SIGNATURE_END]) return scan_function_signature_end(scanner, lexer, valid_symbols);
         if (valid_symbols[METHOD_SIGNATURE_END]) return scan_method_signature_end(scanner, lexer, valid_symbols);
@@ -3466,6 +3473,16 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
     return scan_contextual_keyword(scanner, lexer, valid_symbols);
+}
+
+static bool scan_import_type_arguments_start(TSLexer *lexer) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (!scan_default_trivia(lexer, false, false) || lexer->lookahead != '<') return false;
+    advance(lexer);
+    if (lexer->lookahead == '=' || lexer->lookahead == '!') return false;
+    lexer->result_symbol = IMPORT_TYPE_ARGUMENTS_START;
+    return true;
 }
 
 static bool scan_let(TSLexer *lexer) {
