@@ -11,6 +11,7 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `declare function f<T>(value?: unknown): T;
 declare class Box<T> {}
+declare class Ｂｏｘ<T> {}
 declare const holder: { f: typeof f };
 const call = f<<T>() => T>();
 const instance = f<<T>() => T>;
@@ -25,6 +26,8 @@ const bareArrow = () => f<<T>() => T>;
 async function awaited() { return await f<<T>() => T>(); }
 class Scope { field = f<<T>() => T>; after = 1; }
 type GenericBox = Box<<T, U = Box<string>>(value: T) => U>;
+type ConstrainedBox = Box<<T, U extends <V>() => V>() => U>;
+type UnicodeBox = Ｂｏｘ/* gap */<<T>() => T>;
 const shifted = (1 << 2) >> 1;
 let bits = 1;
 bits <<= 2;
@@ -92,6 +95,53 @@ for (const dialect of ['typescript', 'tsx']) {
       tree?.delete();
       query?.delete();
       highlights?.delete();
+      parser.delete();
+    }
+  });
+
+  test(`preserves Flow generic constraints through ${dialect} edits`, async () => {
+    await Parser.init();
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    const prefix = 'type U = string; type Box<T> = T;\ntype Result = Box<<T';
+    const suffix = '>(value: T) => T>;\nconst following = 1;';
+    let clause = ': U';
+    let source = prefix + clause + suffix;
+    let tree = parser.parse(source)!;
+    try {
+      checkFlowConstraint(tree, source, clause);
+      for (const nextClause of [
+        ' extends U',
+        ': <V>() => V',
+        ' extends <V>() => V',
+        ': { item: U }',
+        ' extends { item: U }',
+        ': U',
+      ]) {
+        const next = prefix + nextClause + suffix;
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + clause.length,
+            newEndIndex: prefix.length + nextClause.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + clause.length),
+            newEndPosition: position(next, prefix.length + nextClause.length),
+          }),
+          (incremental, fresh) => {
+            checkFlowConstraint(incremental, next, nextClause);
+            checkFlowConstraint(fresh, next, nextClause);
+          }
+        );
+        previous.delete();
+        source = next;
+        clause = nextClause;
+      }
+    } finally {
+      tree.delete();
       parser.delete();
     }
   });
@@ -212,5 +262,29 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
   for (const { node } of captures.filter((capture) => capture.name === 'arguments')) {
     expect(node.parent!.childForFieldName('type_arguments')?.id).toBe(node.id);
   }
+  expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+}
+
+function checkFlowConstraint(tree: Tree, source: string, clause: string): void {
+  expect(tree.rootNode.hasError, source).toBe(false);
+  const argument = `<T${clause}>(value: T) => T`;
+  const generic = tree.rootNode.descendantsOfType('generic_type').find((node) => node.text.startsWith('Box<'))!;
+  const args = generic.childForFieldName('type_arguments')!;
+  expect(args.text).toBe(`<${argument}>`);
+  const functionType = args.namedChildren[0]!;
+  expect([functionType.type, functionType.text, functionType.startIndex, functionType.endIndex]).toEqual([
+    'function_type',
+    argument,
+    source.indexOf(argument),
+    source.indexOf(argument) + argument.length,
+  ]);
+  const parameter = functionType.childForFieldName('type_parameters')!.namedChildren[0]!;
+  expect(parameter.childForFieldName('name')!.text).toBe('T');
+  const constraint = parameter.childForFieldName('constraint')!;
+  expect([constraint.text, constraint.startIndex, constraint.endIndex]).toEqual([
+    clause.trimStart(),
+    source.indexOf(clause) + clause.length - clause.trimStart().length,
+    source.indexOf(clause) + clause.length,
+  ]);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
