@@ -8242,6 +8242,18 @@
                 }
               },
               {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_adjacent_type_angles"
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
+              },
+              {
                 "type": "FIELD",
                 "name": "operator",
                 "content": {
@@ -15099,8 +15111,13 @@
         "type": "SEQ",
         "members": [
           {
-            "type": "SYMBOL",
-            "name": "type_arguments"
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_unprefixed_type_arguments"
+            },
+            "named": true,
+            "value": "type_arguments"
           },
           {
             "type": "SYMBOL",
@@ -17976,21 +17993,17 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SEQ",
-          "members": [
-            {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "ALIAS",
+            "content": {
               "type": "SYMBOL",
-              "name": "_unqualified_type_reference_arguments_start"
+              "name": "_type_identifier_before_angle"
             },
-            {
-              "type": "FIELD",
-              "name": "name",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_type_reference_identifier"
-              }
-            }
-          ]
+            "named": true,
+            "value": "type_identifier"
+          }
         },
         {
           "type": "FIELD",
@@ -18743,8 +18756,13 @@
           "type": "FIELD",
           "name": "type_arguments",
           "content": {
-            "type": "SYMBOL",
-            "name": "type_arguments"
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_unprefixed_type_arguments"
+            },
+            "named": true,
+            "value": "type_arguments"
           }
         }
       ]
@@ -19144,6 +19162,74 @@
       ]
     },
     "type_arguments": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_adjacent_type_angles"
+                },
+                {
+                  "type": "STRING",
+                  "value": "<"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "type"
+            },
+            {
+              "type": "REPEAT",
+              "content": {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": ","
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "type"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": ","
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "STRING",
+          "value": ">"
+        }
+      ]
+    },
+    "_unprefixed_type_arguments": {
       "type": "SEQ",
       "members": [
         {
@@ -21568,7 +21654,7 @@
     },
     {
       "type": "SYMBOL",
-      "name": "_unqualified_type_reference_arguments_start"
+      "name": "_type_identifier_before_angle"
     },
     {
       "type": "SYMBOL",
@@ -21649,6 +21735,10 @@
     {
       "type": "SYMBOL",
       "name": "_type_assertion_context"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_adjacent_type_angles"
     },
     {
       "type": "SYMBOL",
