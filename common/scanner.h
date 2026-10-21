@@ -827,14 +827,19 @@ static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols)
 
 static bool scan_type_parameter_prefix(TSLexer *lexer) {
     if (!scan_default_trivia(lexer, true, true) || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
-    char word[2];
-    scan_identifier(lexer, word, sizeof(word), false);
+    char word[8] = {0};
+    bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     if (!scan_default_trivia(lexer, true, false)) return false;
+    if (is_identifier_part(lexer->lookahead)) {
+        if (ascii_word && (strcmp(word, "const") == 0 || strcmp(word, "in") == 0 || strcmp(word, "out") == 0)) return true;
+        char next[8] = {0};
+        return scan_identifier(lexer, next, sizeof(next), false) && strcmp(next, "extends") == 0;
+    }
     if (lexer->lookahead == '<') {
         advance(lexer);
         return lexer->lookahead == '!';
     }
-    return lexer->lookahead == '>' || lexer->lookahead == ',' || lexer->lookahead == '=' || lexer->lookahead == ':' || is_identifier_part(lexer->lookahead);
+    return lexer->lookahead == '>' || lexer->lookahead == ',' || lexer->lookahead == '=' || lexer->lookahead == ':';
 }
 
 static inline bool is_hex_digit(int32_t c) { return is_ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
