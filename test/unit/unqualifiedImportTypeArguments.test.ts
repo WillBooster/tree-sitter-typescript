@@ -67,6 +67,8 @@ for (const dialect of ['typescript', 'tsx']) {
         'import("m")< <T>() => T>',
         'import("m")<string> | number',
         'import("m")/* inline */<string>',
+        'import("m" /*\n*/ )<string>',
+        'import("m") \t/* inline */ <string>',
         'import("m", { with: { type: "json" } })<string>',
         'import("m").A<string>',
         'import("m")',
@@ -100,6 +102,43 @@ for (const dialect of ['typescript', 'tsx']) {
       tree.delete();
       query.delete();
       for (const compiled of queries) compiled.delete();
+      parser.delete();
+    }
+  });
+
+  test(`preserves existing ${dialect} import argument expressions without type arguments`, async () => {
+    await Parser.init();
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const [argument, kind] of [
+        ['x ? "a" : "b"', 'ternary_expression'],
+        ['async () => {}', 'arrow_function'],
+        ['await x', 'await_expression'],
+        ['"m" ? "a" : "b"', 'ternary_expression'],
+      ]) {
+        for (const gap of ['', ' ', '\n', '/*inline*/', '/*\n*/', '//line\n']) {
+          const source = `type A = typeof import(${gap}${argument});\nconst following = 1;`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+            const argumentsNode = tree.rootNode.descendantsOfType('arguments')[0]!;
+            const expression = argumentsNode.namedChildren.find((node) => !node.isExtra)!;
+            expect([expression.type, expression.text, expression.startIndex, expression.endIndex], source).toEqual([
+              kind,
+              argument,
+              source.indexOf(argument!, 'type A = typeof import('.length),
+              source.indexOf(argument!, 'type A = typeof import('.length) + argument!.length,
+            ]);
+            expect(
+              argumentsNode.namedChildren.filter((node) => node.type === 'comment').map((node) => node.text)
+            ).toEqual(gap!.startsWith('/') ? [gap!.trimEnd()] : []);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
       parser.delete();
     }
   });

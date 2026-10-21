@@ -3150,7 +3150,10 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
-    if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) return scan_import_type_arguments_start(lexer);
+    if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
+        while (is_whitespace(lexer->lookahead)) skip(lexer);
+        if (lexer->lookahead == ')') return scan_import_type_arguments_start(lexer);
+    }
 
     if (!(valid_symbols[TEMPLATE_CHARS] && valid_symbols[AUTOMATIC_SEMICOLON])) {
         if (valid_symbols[FUNCTION_SIGNATURE_END]) return scan_function_signature_end(scanner, lexer, valid_symbols);
@@ -3410,7 +3413,6 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
 static bool scan_import_type_arguments_start(TSLexer *lexer) {
     lexer->mark_end(lexer);
-    if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != ')') return false;
     advance(lexer);
     if (!scan_default_trivia(lexer, false, false) || lexer->lookahead != '<') return false;
     advance(lexer);
