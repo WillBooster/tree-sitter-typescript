@@ -81,7 +81,6 @@ enum TokenType {
     BARE_ASSERTION_CONTEXT,
     ANNOTATED_SIGNATURE_CONTEXT,
     TYPE_ASSERTION_CONTEXT,
-    GENERIC_FUNCTION_ARGUMENTS_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -787,16 +786,30 @@ static bool scan_question_mark(TSLexer *lexer, const bool *valid_symbols) {
     return valid_symbols[TERNARY_QMARK];
 }
 
-static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
+static bool scan_html_comment(TSLexer *lexer) {
     while (is_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
 
-    if (!opening_advanced && lexer->lookahead != '<' && lexer->lookahead != '-') return false;
-    const char *prefix = opening_advanced ? "!--" : lexer->lookahead == '<' ? "<!--" : "-->";
-    for (; *prefix; prefix++) {
-        if (lexer->lookahead != *prefix) return false;
-        advance(lexer);
+    const char *comment_start = "<!--";
+    const char *comment_end = "-->";
+
+    if (lexer->lookahead == '<') {
+        for (unsigned i = 0; i < 4; i++) {
+            if (lexer->lookahead != comment_start[i]) {
+                return false;
+            }
+            advance(lexer);
+        }
+    } else if (lexer->lookahead == '-') {
+        for (unsigned i = 0; i < 3; i++) {
+            if (lexer->lookahead != comment_end[i]) {
+                return false;
+            }
+            advance(lexer);
+        }
+    } else {
+        return false;
     }
 
     while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
@@ -1355,7 +1368,7 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
     return true;
 }
 
-static bool scan_generic_function_type(TSLexer *lexer, bool check_parameter_prefix);
+static bool scan_generic_function_type(TSLexer *lexer);
 static bool scan_type_parameter_prefix(TSLexer *lexer);
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter);
 enum TypeGroupEnd {
@@ -1618,16 +1631,15 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (!allow_type_arguments || (line_break && !heritage) || lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
-    if (lexer->lookahead == '<' && !scan_generic_function_type(lexer, false)) return false;
+    if (lexer->lookahead == '<' && !scan_generic_function_type(lexer)) return false;
     lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
 }
 
-static bool scan_generic_function_type(TSLexer *lexer, bool check_parameter_prefix) {
+static bool scan_generic_function_type(TSLexer *lexer) {
     bool comment = false;
     advance(lexer);
-    if (check_parameter_prefix && !scan_type_parameter_prefix(lexer)) return false;
-    if (!scan_type_group(lexer, '>', false, false, NULL, false, NULL) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
+    if (!scan_type_group(lexer, TYPE_PARAMETER_GROUP_END, false, false, NULL, false, NULL) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
     advance(lexer);
     if (!scan_type_group(lexer, ')', false, false, NULL, false, NULL) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
     advance(lexer);
@@ -1644,22 +1656,12 @@ static bool scan_type_parameter_prefix(TSLexer *lexer) {
         bool identifier = is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead);
         if (modifier && identifier) continue;
         switch (lexer->lookahead) {
-            case '>': case ',': case '=': case ':': return true;
+            case '>': case ',': case '=': return true;
         }
         char continuation[8] = {0};
         return identifier && scan_identifier(lexer, continuation, sizeof(continuation), false) && strcmp(continuation, "extends") == 0;
     }
     return false;
-}
-
-static bool scan_generic_function_arguments_start(TSLexer *lexer, const bool *valid_symbols) {
-    advance(lexer);
-    lexer->mark_end(lexer);
-    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
-        !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
-    if (lexer->lookahead != '<' || !scan_generic_function_type(lexer, true)) return false;
-    lexer->result_symbol = GENERIC_FUNCTION_ARGUMENTS_START;
-    return true;
 }
 
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, unsigned *completion, bool complete_conditionals, bool *unsafe_conditional) {
@@ -1690,6 +1692,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             context = stack[size - 1].context;
         }
         int32_t frame = context & TYPE_EXPRESSION_TYPE ? context & TYPE_GROUP_ROLE_MASK : context & ~(TYPE_GROUP_PARAMETER | TYPE_QUERY_ARGUMENT_GROUP | TYPE_GROUP_FORMAL_BINDING);
+        if (!type_operands && frame == TYPE_PARAMETER_GROUP_END && parameter_position) {
+            if (!scan_default_trivia(lexer, true, false)) break;
+            if (lexer->lookahead != '>' && !scan_type_parameter_prefix(lexer)) break;
+            parameter_position = false;
+            c = lexer->lookahead;
+        }
         int32_t end = frame & TYPE_GROUP_END_MASK, push = 0;
         bool exact_object = false, optional_chain_dot = false;
         bool constructor_header = group->nonreference_type && (group->prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) && c == '=';
@@ -3184,6 +3192,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         }
     }
 
+
     if (valid_symbols[ARROW_PREDEFINED_RETURN_START] && !valid_symbols[ERROR_RECOVERY]) {
         while (is_whitespace(lexer->lookahead)) skip(lexer);
         if (lexer->lookahead == '(') return scan_arrow_predefined_return_start(lexer);
@@ -3302,9 +3311,6 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (!ret && !scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
             return scan_question_mark(lexer, valid_symbols);
         }
-        if (!ret && !scanned_content && valid_symbols[GENERIC_FUNCTION_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
-            return scan_generic_function_arguments_start(lexer, valid_symbols);
-        }
         return ret;
     }
 
@@ -3351,13 +3357,10 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             return scan_global_declaration_start(lexer);
         }
         if (!ret && !scanned_content && (lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
-        if (!ret && !scanned_content && valid_symbols[GENERIC_FUNCTION_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
-            return scan_generic_function_arguments_start(lexer, valid_symbols);
-        }
         if (!ret && !scanned_content && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
             !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN] &&
             (lexer->lookahead == '<' || lexer->lookahead == '-')) {
-            return scan_html_comment(lexer, false);
+            return scan_html_comment(lexer);
         }
         if (!ret && !scanned_content && valid_symbols[AWAIT_YIELD_IDENTIFIER] && valid_symbols[LINE_BREAK_AFTER_AWAIT] && lexer->lookahead == 'y') {
             return scan_yield(scanner, lexer, valid_symbols, true);
@@ -3403,9 +3406,6 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_contextual_keyword(scanner, lexer, valid_symbols);
     }
     if ((lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
-    if (valid_symbols[GENERIC_FUNCTION_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
-        return scan_generic_function_arguments_start(lexer, valid_symbols);
-    }
     if ((valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
         return scan_question_mark(lexer, valid_symbols);
     }
@@ -3417,7 +3417,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if (valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] && !valid_symbols[ESCAPE_SEQUENCE] &&
         !valid_symbols[REGEX_PATTERN] && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
-        return scan_html_comment(lexer, false);
+        return scan_html_comment(lexer);
     }
     if (valid_symbols[JSX_CLOSING_RECOVERY_IDENTIFIER] && !valid_symbols[ERROR_RECOVERY]) {
         return scan_jsx_closing_recovery_identifier(lexer);

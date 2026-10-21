@@ -1,6 +1,10 @@
+import fs from 'node:fs';
+
 import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
+
+import treeSitterJson from '../../tree-sitter.json';
 
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
@@ -15,6 +19,12 @@ const constructed = new Box<<T>() => T>();
 const bare = new Box<<T>() => T>;
 const tagged = f<<T>() => T>\`text\`;
 const member = holder.f<<T>() => T>();
+const arrow = () => f<<T>() => T>();
+const asyncArrow = async () => f<<T>() => T>();
+const bareArrow = () => f<<T>() => T>;
+async function awaited() { return await f<<T>() => T>(); }
+class Scope { field = f<<T>() => T>; after = 1; }
+type GenericBox = Box<<T, U = Box<string>>(value: T) => U>;
 const shifted = (1 << 2) >> 1;
 let bits = 1;
 bits <<= 2;
@@ -30,6 +40,7 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
+    let highlights: Query | undefined;
     let tree: Tree | undefined;
     let source = Prefix + InitialArgument + Suffix;
     let argument = InitialArgument;
@@ -37,8 +48,10 @@ for (const dialect of ['typescript', 'tsx']) {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(type_arguments) @arguments (function_type) @function');
+      const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
+      highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
       tree = parser.parse(source)!;
-      checkArguments(tree, source, dialect, query);
+      checkArguments(tree, source, dialect, query, highlights);
       for (const nextArgument of [
         ' <T>() => T',
         '/* gap */<T>() => T',
@@ -67,8 +80,8 @@ for (const dialect of ['typescript', 'tsx']) {
             newEndPosition: position(next, Prefix.length + nextArgument.length),
           }),
           (incremental, fresh) => {
-            checkArguments(incremental, next, dialect, query!);
-            checkArguments(fresh, next, dialect, query!);
+            checkArguments(incremental, next, dialect, query!, highlights!);
+            checkArguments(fresh, next, dialect, query!, highlights!);
           }
         );
         previous.delete();
@@ -78,6 +91,7 @@ for (const dialect of ['typescript', 'tsx']) {
     } finally {
       tree?.delete();
       query?.delete();
+      highlights?.delete();
       parser.delete();
     }
   });
@@ -92,21 +106,36 @@ for (const dialect of ['typescript', 'tsx']) {
           const small = `value ${operator}\n`.repeat(1000) + suffix;
           const large = `value ${operator}\n`.repeat(10_000) + suffix;
           const hasError = suffix === '';
-          parseShiftCpu(parser, large, hasError);
-          parseShiftCpu(parser, large, hasError);
-          let smallFastest = Infinity;
-          let largeFastest = Infinity;
-          for (let run = 0; run < 5; run++) {
-            smallFastest = Math.min(smallFastest, parseShiftCpu(parser, small, hasError));
-            largeFastest = Math.min(largeFastest, parseShiftCpu(parser, large, hasError));
-          }
-          expect(largeFastest / smallFastest, `${operator} ${suffix}`).toBeLessThan(18);
+          checkShiftGrowth(parser, small, large, hasError, `${operator} ${suffix}`);
         }
+      }
+      for (const [name, source] of Object.entries({
+        sequence: (count: number) => 'value << other,\n'.repeat(count) + '1;',
+        array: (count: number) => 'const values = [' + 'value << other,'.repeat(count) + '1];',
+        call: (count: number) => 'f(' + 'value << other,'.repeat(count) + '1);',
+        object: (count: number) =>
+          'const object = {' +
+          Array.from({ length: count }, (_, index) => `p${index}: value << other,`).join('') +
+          '};',
+      })) {
+        checkShiftGrowth(parser, source(1000), source(10_000), false, name);
       }
     } finally {
       parser.delete();
     }
   });
+}
+
+function checkShiftGrowth(parser: Parser, small: string, large: string, hasError: boolean, name: string): void {
+  parseShiftCpu(parser, large, hasError);
+  parseShiftCpu(parser, large, hasError);
+  let smallFastest = Infinity;
+  let largeFastest = Infinity;
+  for (let run = 0; run < 5; run++) {
+    smallFastest = Math.min(smallFastest, parseShiftCpu(parser, small, hasError));
+    largeFastest = Math.min(largeFastest, parseShiftCpu(parser, large, hasError));
+  }
+  expect(largeFastest / smallFastest, name).toBeLessThan(18);
 }
 
 function parseShiftCpu(parser: Parser, source: string, hasError: boolean): number {
@@ -121,7 +150,7 @@ function parseShiftCpu(parser: Parser, source: string, hasError: boolean): numbe
   }
 }
 
-function checkArguments(tree: Tree, source: string, dialect: string, query: Query): void {
+function checkArguments(tree: Tree, source: string, dialect: string, query: Query, highlights: Query): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile(
     `arguments.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
@@ -132,7 +161,7 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
   );
   const argumentsRanges: [string, number, number][] = [];
   const functionRanges: [string, number, number][] = [];
-  const operators: string[] = [];
+  const operators: [string, number, number][] = [];
   const visit = (node: ts.Node): void => {
     if (
       (ts.isCallExpression(node) ||
@@ -147,7 +176,13 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
       argumentsRanges.push([source.slice(start, close.end), start, close.end]);
     }
     if (ts.isFunctionTypeNode(node)) functionRanges.push([node.getText(reference), node.getStart(reference), node.end]);
-    if (ts.isBinaryExpression(node)) operators.push(node.operatorToken.getText(reference));
+    if (ts.isBinaryExpression(node)) {
+      operators.push([
+        node.operatorToken.getText(reference),
+        node.operatorToken.getStart(reference),
+        node.operatorToken.end,
+      ]);
+    }
     ts.forEachChild(node, visit);
   };
   visit(reference);
@@ -160,11 +195,20 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
       captures.filter((capture) => capture.name === name).map(({ node }) => [node.text, node.startIndex, node.endIndex])
     ).toEqual(expected);
   }
-  expect(
-    tree.rootNode
-      .descendantsOfType(['binary_expression', 'augmented_assignment_expression'])
-      .map((node) => node.childForFieldName('operator')!.text)
-  ).toEqual(operators);
+  const parsedOperators = tree.rootNode
+    .descendantsOfType(['binary_expression', 'augmented_assignment_expression'])
+    .map((node) => node.childForFieldName('operator')!);
+  expect(parsedOperators.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(operators);
+  const operatorHighlights = highlights.captures(tree.rootNode).filter((capture) => capture.name === 'operator');
+  for (const node of parsedOperators) {
+    expect(node.isNamed).toBe(false);
+    expect(node.children).toHaveLength(0);
+    expect(
+      operatorHighlights
+        .filter((capture) => capture.node.startIndex >= node.startIndex && capture.node.endIndex <= node.endIndex)
+        .map((capture) => [capture.node.text, capture.node.startIndex, capture.node.endIndex])
+    ).toEqual([[node.text, node.startIndex, node.endIndex]]);
+  }
   for (const { node } of captures.filter((capture) => capture.name === 'arguments')) {
     expect(node.parent!.childForFieldName('type_arguments')?.id).toBe(node.id);
   }

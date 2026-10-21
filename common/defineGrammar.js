@@ -89,7 +89,6 @@ module.exports = function defineGrammar(dialect) {
       $._bare_assertion_context,
       $._annotated_signature_context,
       $._type_assertion_context,
-      $._generic_function_arguments_start,
     ],
 
     supertypes: ($, previous) => [
@@ -455,6 +454,14 @@ module.exports = function defineGrammar(dialect) {
       _lhs_expression: ($, previous) =>
         choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
 
+      binary_expression: splitLeftShift,
+
+      _left_shift_operator: ($) => seq($._left_angle, $._adjacent_left_angle),
+
+      _left_angle: () => token(/</),
+
+      _adjacent_left_angle: () => token.immediate(/</),
+
       await_expression: (_, previous) => {
         const members = previous.content.content.members;
         const guardIndex = members.findIndex(
@@ -553,7 +560,7 @@ module.exports = function defineGrammar(dialect) {
 
       _jsx_start_opening_element: ($) =>
         seq(
-          '<',
+          alias($._left_angle, '<'),
           optional(
             seq(
               choice(
@@ -961,7 +968,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _implements_keyword_arguments: ($) => seq('<', commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
+      _implements_keyword_arguments: ($) =>
+        seq(alias($._left_angle, '<'), commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(
@@ -1520,8 +1528,7 @@ module.exports = function defineGrammar(dialect) {
           'object'
         ),
 
-      type_arguments: ($) =>
-        seq(choice('<', alias($._generic_function_arguments_start, '<')), commaSep1($.type), optional(','), '>'),
+      type_arguments: ($) => seq(alias($._left_angle, '<'), commaSep1($.type), optional(','), '>'),
 
       object_type: ($) =>
         seq(
@@ -1596,7 +1603,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      type_parameters: ($) => seq('<', commaSep1($.type_parameter), optional(','), '>'),
+      type_parameters: ($) => seq(alias($._left_angle, '<'), commaSep1($.type_parameter), optional(','), '>'),
 
       type_parameter: ($) =>
         seq(
@@ -1683,6 +1690,14 @@ module.exports = function defineGrammar(dialect) {
     },
   });
 };
+
+function splitLeftShift($, rule) {
+  return mapRule(rule, (part) => {
+    if (part.type === 'STRING' && part.value === '<') return alias($._left_angle, '<');
+    if (part.type === 'STRING' && part.value === '<<') return alias($._left_shift_operator, '<<');
+    return part;
+  });
+}
 
 function variableDeclarator($, name) {
   return choice(
@@ -1793,12 +1808,15 @@ function typeQueryMember($, generic) {
 }
 
 function replaceSymbol(rule, name, replacement) {
-  if (rule.type === 'SYMBOL' && rule.name === name) return replacement;
-  return {
+  return mapRule(rule, (part) => (part.type === 'SYMBOL' && part.name === name ? replacement : part));
+}
+
+function mapRule(rule, transform) {
+  return transform({
     ...rule,
-    ...(rule.members ? { members: rule.members.map((member) => replaceSymbol(member, name, replacement)) } : {}),
-    ...(rule.content ? { content: replaceSymbol(rule.content, name, replacement) } : {}),
-  };
+    ...(rule.members ? { members: rule.members.map((member) => mapRule(member, transform)) } : {}),
+    ...(rule.content ? { content: mapRule(rule.content, transform) } : {}),
+  });
 }
 
 function methodSignature($) {
