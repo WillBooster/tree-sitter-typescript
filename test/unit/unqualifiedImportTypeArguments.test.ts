@@ -1,11 +1,8 @@
-import fs from 'node:fs';
-
 import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import treeSitterJson from '../../tree-sitter.json';
-
+import { configuredQueries } from '../helpers/configuredQueries.js';
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -38,17 +35,7 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       '(call_expression function: (import) arguments: (arguments (string) @module) type_arguments: (_) @arguments) @import (variable_declarator value: (instantiation_expression) @instantiation)'
     );
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
-      (kind) =>
-        new Query(
-          language,
-          [grammar[kind]]
-            .flat()
-            .map((file) => fs.readFileSync(file, 'utf8'))
-            .join('\n')
-        )
-    );
+    const queries: Query[] = [];
     const captures = (tree: Tree): unknown =>
       queries.map((compiled) =>
         compiled
@@ -57,8 +44,10 @@ for (const dialect of ['typescript', 'tsx']) {
       );
     let annotation = InitialType;
     let source = Prefix + annotation + Suffix;
-    let tree = parser.parse(source)!;
+    let tree: Tree | undefined;
     try {
+      queries.push(...configuredQueries(language, dialect));
+      tree = parser.parse(source)!;
       checkImports(tree, source, dialect, query);
       for (const nextType of [
         'import("m")<number, string>',
@@ -99,7 +88,7 @@ for (const dialect of ['typescript', 'tsx']) {
         annotation = nextType;
       }
     } finally {
-      tree.delete();
+      tree?.delete();
       query.delete();
       for (const compiled of queries) compiled.delete();
       parser.delete();
