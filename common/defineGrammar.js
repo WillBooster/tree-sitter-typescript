@@ -1153,12 +1153,12 @@ module.exports = function defineGrammar(dialect) {
       _type_query_member_expression_in_type_annotation: ($) => typeQueryMember($, false),
 
       _type_query_call_expression_in_type_annotation: ($) =>
-        choice(
-          importType($),
-          seq(
-            field('function', alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
-            field('arguments', $.arguments)
-          )
+        seq(
+          field(
+            'function',
+            choice($.import, alias($._type_query_member_expression_in_type_annotation, $.member_expression))
+          ),
+          field('arguments', $.arguments)
         ),
 
       asserts: ($) =>
@@ -1288,6 +1288,7 @@ module.exports = function defineGrammar(dialect) {
           $.index_type_query,
           prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
           prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression)),
+          prec(-1, alias($._typed_import_type, $.call_expression)),
           alias($.this, $.this_type),
           $.existential_type,
           $.literal_type,
@@ -1446,26 +1447,30 @@ module.exports = function defineGrammar(dialect) {
           ']'
         ),
       _type_query_call_expression: ($) =>
-        choice(
-          importType($),
-          seq(
-            field(
-              'function',
-              choice(
-                $._type_query_identifier,
-                alias($._type_query_member_expression, $.member_expression),
-                alias($._type_query_subscript_expression, $.subscript_expression)
-              )
-            ),
-            field('arguments', $.arguments)
-          )
+        seq(
+          field(
+            'function',
+            choice(
+              $.import,
+              $._type_query_identifier,
+              alias($._type_query_member_expression, $.member_expression),
+              alias($._type_query_subscript_expression, $.subscript_expression)
+            )
+          ),
+          field('arguments', $.arguments)
         ),
-
       _typed_import_arguments: ($) => {
         const rule = JavaScript.grammar.rules.arguments;
         const members = rule.members;
         return { ...rule, members: [...members.slice(0, -1), $._import_type_arguments_start, members.at(-1)] };
       },
+
+      _typed_import_type: ($) =>
+        seq(
+          field('function', $.import),
+          field('arguments', alias($._typed_import_arguments, $.arguments)),
+          field('type_arguments', $.type_arguments)
+        ),
 
       _type_query_instantiation_expression: ($) =>
         seq(
@@ -1488,6 +1493,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_subscript_expression, $.subscript_expression),
               alias($._type_query_member_expression, $.member_expression),
               alias($._type_query_call_expression, $.call_expression),
+              alias($._typed_import_type, $.call_expression),
               alias($._type_query_instantiation_expression, $.instantiation_expression),
               $._type_query_identifier,
               $.this
@@ -1808,16 +1814,6 @@ function nestedTypeIdentifier($, generic) {
       '.',
       ...(generic ? [$._type_reference_arguments_start] : []),
       field('name', $._type_reference_identifier)
-    )
-  );
-}
-
-function importType($) {
-  return seq(
-    field('function', $.import),
-    choice(
-      field('arguments', $.arguments),
-      seq(field('arguments', alias($._typed_import_arguments, $.arguments)), field('type_arguments', $.type_arguments))
     )
   );
 }

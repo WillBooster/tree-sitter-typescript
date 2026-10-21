@@ -12,6 +12,8 @@ type Nested = Base<import("m")<string>>;
 const consumed = consume<import("m")<string>>();
 type Qualified = import("m").A<string>;
 type QualifiedQuery = typeof import("m").A<string>;
+type Indexed = import("m")<string>[number];
+type IndexedQuery = typeof import("m")<string>[number];
 type Options = import("m", { with: { type: "json" } })<string>;
 type InnerComment = import("m"/*\n*/)<string>;
 type OuterComment = import("m")/*inline*/<string>;
@@ -91,6 +93,39 @@ for (const dialect of ['typescript', 'tsx']) {
       tree?.delete();
       query.delete();
       for (const compiled of queries) compiled.delete();
+      parser.delete();
+    }
+  });
+
+  test(`rejects ${dialect} import members after type arguments`, async () => {
+    await Parser.init();
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const type of [
+        'import("m")<string>.B',
+        'import("m")<string>.B<number>',
+        'typeof import("m")<string>.x',
+        'typeof import("m")<string>.x<number>',
+      ]) {
+        const source = `type A = ${type};\nconst following = 1;`;
+        expect(
+          ts
+            .transpileModule(source, {
+              fileName: dialect === 'tsx' ? 'fixture.tsx' : 'fixture.ts',
+              reportDiagnostics: true,
+            })
+            .diagnostics?.map((diagnostic) => diagnostic.code),
+          source
+        ).toContain(1005);
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+          expect(tree.rootNode.lastNamedChild!.text, source).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
       parser.delete();
     }
   });
