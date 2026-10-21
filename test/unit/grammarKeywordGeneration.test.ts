@@ -7,8 +7,8 @@ const root = path.resolve(import.meta.dirname, '../..');
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`generates ${dialect} keywords without the other dialect's generated grammar`, () => {
-    fs.mkdirSync(path.join(root, '.tmp'), { recursive: true });
-    const fixture = fs.mkdtempSync(path.join(root, '.tmp/keyword-generation-'));
+    // Cargo can inspect ignored directories when package.include is set; fixture cleanup must stay outside its walk.
+    const fixture = fs.mkdtempSync('/tmp/typescript-keyword-generation-');
     try {
       for (const file of [
         'scripts/generateGlobalKeywords.ts',
