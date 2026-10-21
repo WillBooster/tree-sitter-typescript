@@ -18640,6 +18640,10 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },

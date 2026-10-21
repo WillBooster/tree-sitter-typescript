@@ -12,6 +12,11 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 const Prefix = `type asserts<T = unknown> = T;
 namespace asserts { export interface X {} }
 let qualified: asserts.X;
+type PlainQuery = typeof asserts;
+type ConditionalQuery = T1 extends (typeof asserts) ? X : Y;
+type ObjectQuery = T1 extends { value: typeof asserts } ? X : Y;
+type UnparenthesizedQuery = T1 extends typeof asserts ? X : Y;
+const conditionalQuery = consume<T1 extends (typeof asserts) ? X : Y>();
 const computedObject = { [asserts]: true, [asserts.x]: false };
 class ComputedField { [asserts]: number }
 class ComputedMethod { [asserts]() {} }
@@ -62,7 +67,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
-      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding) (computed_property_name) @computed (index_signature name: (_) @indexName)'
+      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding) (computed_property_name) @computed (index_signature name: (_) @indexName) (type_query) @typeQuery (conditional_type) @conditional'
     );
     const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
     const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
@@ -153,6 +158,8 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   const expectedBindings: (string | number | boolean)[][] = [];
   const expectedComputed: (string | number)[][] = [];
   const expectedIndices: (string | number)[][] = [];
+  const expectedQueries: (string | number)[][] = [];
+  const expectedConditionals: (string | number)[][] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isFunctionLike(node) && !ts.isIndexSignatureDeclaration(node) && node.type) {
       expected.push([
@@ -181,6 +188,12 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
         !!node.questionToken,
         !!node.dotDotDotToken,
       ]);
+    }
+    if (ts.isTypeQueryNode(node)) {
+      expectedQueries.push([node.getText(reference), node.getStart(reference), node.end]);
+    }
+    if (ts.isConditionalTypeNode(node)) {
+      expectedConditionals.push([node.getText(reference), node.getStart(reference), node.end]);
     }
     if (ts.isComputedPropertyName(node)) {
       expectedComputed.push([node.getText(reference), node.getStart(reference), node.end]);
@@ -225,6 +238,12 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   expect(
     captures.filter(({ name }) => name === 'indexName').map(({ node }) => [node.text, node.startIndex, node.endIndex])
   ).toEqual(expectedIndices);
+  expect(
+    captures.filter(({ name }) => name === 'typeQuery').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(expectedQueries);
+  expect(
+    captures.filter(({ name }) => name === 'conditional').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(expectedConditionals);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
 

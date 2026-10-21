@@ -93,7 +93,6 @@ static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
     "abstract",
     "accessor",
     "any",
-    "asserts",
     "async",
     "await",
     "boolean",

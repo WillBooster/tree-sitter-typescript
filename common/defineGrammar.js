@@ -1482,7 +1482,7 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _type_query_identifier: ($) =>
-        choice(reserved('properties', $.identifier), alias(choice('as', 'satisfies'), $.identifier)),
+        choice(reserved('properties', $.identifier), alias(choice('as', 'satisfies', 'asserts'), $.identifier)),
 
       index_type_query: ($) => prec.right(seq('keyof', choice($.primary_type, $.readonly_type))),
 
