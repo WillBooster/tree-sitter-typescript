@@ -39,6 +39,99 @@ const following = 1;
 const InitialArgument = '<T>() => T';
 
 for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves relational grouping through ${dialect} edits`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(type_arguments) @arguments (function_type) @function');
+    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
+    const highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
+    const prefix = 'const result = ';
+    const suffix = ';\nconst following = 1;';
+    let expression = 'a > b < c';
+    let source = prefix + expression + suffix;
+    let tree = parser.parse(source)!;
+    const check = (parsed: Tree, text: string): void => {
+      const diagnostics =
+        ts.transpileModule(text, {
+          reportDiagnostics: true,
+          fileName: dialect === 'tsx' ? 'fixture.tsx' : 'fixture.ts',
+          compilerOptions: { target: ts.ScriptTarget.Latest, jsx: ts.JsxEmit.Preserve },
+        }).diagnostics ?? [];
+      if (diagnostics.some((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)) {
+        expect(parsed.rootNode.hasError, text).toBe(true);
+      } else {
+        checkArguments(parsed, text, dialect, query, highlights);
+      }
+    };
+    try {
+      checkArguments(tree, source, dialect, query, highlights);
+      for (const nextExpression of [
+        'a < b < c',
+        'a >= b < c',
+        'a <= b < c',
+        'a < b > c',
+        'a > b << c',
+        'a << b < c',
+        'a > b < c > d',
+        'a < B<C>> d',
+        'a < B<C>> [0]',
+        'a < B<C>> `t`',
+        'a < B<C>> !d',
+        'a >= b < c instanceof d',
+        'a < b ** c',
+        'a * b < c << d',
+        'foo as typeof ns.Foo << 1',
+        'foo as typeof ns.Foo.Bar << 1',
+        'foo satisfies typeof ns.Foo << 1',
+        'foo as typeof Foo << 1',
+        'foo as typeof ns.Foo<T> << 1',
+        'foo as typeof ns.Foo<<T>() => T> << 1',
+        'foo as typeof ns.Foo< <T>() => T> << 1',
+        'x => x\n<< import(1)',
+        'async () => await 1 << 2',
+        'async () => ({a: assert}) << -0x1',
+        'async ({a, b: c}: <T>() => null, z) => 1_0 << 0',
+        '({a = 1}, x: symbol) => constructor << c?.(y)',
+        'b => c <</*\n*/`t`',
+        'x => x /* before */ << 1',
+        'async () => await f! << 1',
+        'async () => await f! /*\n*/ << 1',
+        'async () => await instanceOfFoo << 1',
+        'a > b < c',
+      ]) {
+        const next = prefix + nextExpression + suffix;
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + expression.length,
+            newEndIndex: prefix.length + nextExpression.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + expression.length),
+            newEndPosition: position(next, prefix.length + nextExpression.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next);
+            check(fresh, next);
+          },
+          true
+        );
+        previous.delete();
+        expression = nextExpression;
+        source = next;
+      }
+    } finally {
+      tree.delete();
+      query.delete();
+      highlights.delete();
+      parser.delete();
+    }
+  });
+
   test(`validates escaped generic type names through ${dialect} edits`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
@@ -253,6 +346,8 @@ for (const dialect of ['typescript', 'tsx']) {
       for (const [name, source] of Object.entries({
         sequence: (count: number) => 'value << other,\n'.repeat(count) + '1;',
         array: (count: number) => 'const values = [' + 'value << other,'.repeat(count) + '1];',
+        relational: (count: number) => 'value > other << third,\n'.repeat(count) + '1;',
+        queryArray: (count: number) => 'const values = [' + 'foo as typeof ns.Foo << 1,'.repeat(count) + '1];',
         call: (count: number) => 'f(' + 'value << other,'.repeat(count) + '1);',
         object: (count: number) =>
           'const object = {' +
@@ -303,13 +398,15 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
   const argumentsRanges: [string, number, number][] = [];
   const functionRanges: [string, number, number][] = [];
   const operators: [string, number, number][] = [];
+  const binaryRanges: (string | number)[][] = [];
   const visit = (node: ts.Node): void => {
     if (
       (ts.isCallExpression(node) ||
         ts.isNewExpression(node) ||
         ts.isTaggedTemplateExpression(node) ||
         ts.isExpressionWithTypeArguments(node) ||
-        ts.isTypeReferenceNode(node)) &&
+        ts.isTypeReferenceNode(node) ||
+        ts.isTypeQueryNode(node)) &&
       node.typeArguments?.length
     ) {
       const start = node.typeArguments.pos - 1;
@@ -318,6 +415,15 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
     }
     if (ts.isFunctionTypeNode(node)) functionRanges.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isBinaryExpression(node)) {
+      binaryRanges.push([
+        node.getStart(reference),
+        node.end,
+        node.left.getStart(reference),
+        node.left.end,
+        node.operatorToken.getText(reference),
+        node.right.getStart(reference),
+        node.right.end,
+      ]);
       operators.push([
         node.operatorToken.getText(reference),
         node.operatorToken.getStart(reference),
@@ -336,11 +442,39 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
       captures.filter((capture) => capture.name === name).map(({ node }) => [node.text, node.startIndex, node.endIndex])
     ).toEqual(expected);
   }
-  const parsedOperators = tree.rootNode
-    .descendantsOfType(['binary_expression', 'augmented_assignment_expression'])
-    .map((node) => node.childForFieldName('operator')!);
+  const binaries = tree.rootNode.descendantsOfType(['binary_expression', 'augmented_assignment_expression']);
+  expect(
+    binaries.map((node) => {
+      const left = node.childForFieldName('left')!;
+      const right = node.childForFieldName('right')!;
+      return [
+        node.startIndex,
+        node.endIndex,
+        left.startIndex,
+        left.endIndex,
+        node.childForFieldName('operator')!.text,
+        right.startIndex,
+        right.endIndex,
+      ];
+    })
+  ).toEqual(binaryRanges);
+  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, source);
+  const comments: [string, number, number][] = [];
+  for (let token = scanner.scan(); token !== ts.SyntaxKind.EndOfFileToken; token = scanner.scan()) {
+    if (token === ts.SyntaxKind.SingleLineCommentTrivia || token === ts.SyntaxKind.MultiLineCommentTrivia) {
+      comments.push([
+        source.slice(scanner.getTokenPos(), scanner.getTextPos()),
+        scanner.getTokenPos(),
+        scanner.getTextPos(),
+      ]);
+    }
+  }
+  expect(tree.rootNode.descendantsOfType('comment').map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(
+    comments
+  );
+  const parsedOperators = binaries.map((node) => node.childForFieldName('operator')!);
   expect(parsedOperators.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(operators);
-  const operatorHighlights = highlights.captures(tree.rootNode).filter((capture) => capture.name === 'operator');
+  const operatorHighlights = highlights.captures(tree.rootNode);
   for (const node of parsedOperators) {
     expect(node.isNamed).toBe(false);
     expect(node.children).toHaveLength(0);

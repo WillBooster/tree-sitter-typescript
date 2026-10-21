@@ -81,6 +81,7 @@ enum TokenType {
     BARE_ASSERTION_CONTEXT,
     ANNOTATED_SIGNATURE_CONTEXT,
     TYPE_ASSERTION_CONTEXT,
+    ADJACENT_TYPE_ANGLES,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -786,30 +787,16 @@ static bool scan_question_mark(TSLexer *lexer, const bool *valid_symbols) {
     return valid_symbols[TERNARY_QMARK];
 }
 
-static bool scan_html_comment(TSLexer *lexer) {
+static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
     while (is_whitespace(lexer->lookahead)) {
         skip(lexer);
     }
 
-    const char *comment_start = "<!--";
-    const char *comment_end = "-->";
-
-    if (lexer->lookahead == '<') {
-        for (unsigned i = 0; i < 4; i++) {
-            if (lexer->lookahead != comment_start[i]) {
-                return false;
-            }
-            advance(lexer);
-        }
-    } else if (lexer->lookahead == '-') {
-        for (unsigned i = 0; i < 3; i++) {
-            if (lexer->lookahead != comment_end[i]) {
-                return false;
-            }
-            advance(lexer);
-        }
-    } else {
-        return false;
+    if (!opening_advanced && lexer->lookahead != '<' && lexer->lookahead != '-') return false;
+    const char *prefix = opening_advanced ? "!--" : lexer->lookahead == '<' ? "<!--" : "-->";
+    for (; *prefix; prefix++) {
+        if (lexer->lookahead != *prefix) return false;
+        advance(lexer);
     }
 
     while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
@@ -819,6 +806,18 @@ static bool scan_html_comment(TSLexer *lexer) {
     lexer->result_symbol = HTML_COMMENT;
     lexer->mark_end(lexer);
 
+    return true;
+}
+
+static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols) {
+    lexer->mark_end(lexer);
+    advance(lexer);
+    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
+        !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
+    if (lexer->lookahead != '<') return false;
+    advance(lexer);
+    if (lexer->lookahead == '=') return false;
+    lexer->result_symbol = ADJACENT_TYPE_ANGLES;
     return true;
 }
 
@@ -1166,48 +1165,19 @@ static bool scan_global_declaration_end(TSLexer *lexer) {
     return true;
 }
 
-static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statement_end, const bool *valid_symbols) {
+static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statement_end, const bool *valid_symbols, bool *scanned_content) {
     lexer->mark_end(lexer);
     lexer->result_symbol = after_postfix ? POSTFIX_UPDATE_END : AWAIT_OPERAND_END;
     bool saw_newline = false;
-    bool scanned_comment = false;
-    for (;;) {
-        while (is_whitespace(lexer->lookahead)) {
-            saw_newline |= is_line_terminator(lexer->lookahead);
-            skip(lexer);
-        }
-        if (lexer->lookahead != '/') {
-            break;
-        }
-        skip(lexer);
-        if (lexer->lookahead == '/') {
-            scanned_comment = true;
-            while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
-                skip(lexer);
-            }
-        } else if (lexer->lookahead == '*') {
-            scanned_comment = true;
-            skip(lexer);
-            while (!lexer->eof(lexer)) {
-                saw_newline |= is_line_terminator(lexer->lookahead);
-                if (lexer->lookahead == '*') {
-                    skip(lexer);
-                    if (lexer->lookahead == '/') {
-                        skip(lexer);
-                        break;
-                    }
-                } else {
-                    skip(lexer);
-                }
-            }
-        } else {
-            return valid_symbols[AWAIT_OPERAND_END] || after_postfix;
-        }
+    *scanned_content = false;
+    if (!scan_expression_trivia(lexer, &saw_newline, scanned_content)) {
+        return valid_symbols[AWAIT_OPERAND_END] || after_postfix;
     }
     if (valid_symbols[RESOURCE_BINDING_START] || valid_symbols[RESOURCE_BINDING_CONTINUATION] ||
         valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT]) {
         bool first_binding = valid_symbols[RESOURCE_BINDING_START] || valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT];
         if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+            *scanned_content = true;
             bool infix_operator = false;
             bool binding = scan_resource_binding(lexer, valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT], saw_newline && first_binding, &infix_operator);
             if (binding) {
@@ -1217,11 +1187,12 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             return (infix_operator || (saw_newline && first_binding)) && valid_symbols[AWAIT_OPERAND_END];
         }
         if (!valid_symbols[AWAIT_OPERAND_END]) {
-            return !scanned_comment && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?' && scan_question_mark(lexer, valid_symbols);
+            return !*scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?' && scan_question_mark(lexer, valid_symbols);
         }
     }
     if (after_postfix && lexer->lookahead != '(' && lexer->lookahead != '[' && lexer->lookahead != '`') {
         if (lexer->lookahead == '.') {
+            *scanned_content = true;
             skip(lexer);
             return saw_newline && is_ascii_digit(lexer->lookahead);
         }
@@ -1234,14 +1205,17 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             *statement_end = after_postfix && saw_newline;
             return *statement_end;
         case '?':
+            *scanned_content = true;
             skip(lexer);
             return lexer->lookahead != '.';
         case 'i': {
+            *scanned_content = true;
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
             return saw_newline || (ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0));
         }
         case '!':
+            *scanned_content = true;
             skip(lexer);
             return after_postfix || saw_newline || lexer->lookahead == '=';
         case '<':
@@ -1255,10 +1229,12 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
         case '&':
             return true;
         case '.':
+            *scanned_content = true;
             skip(lexer);
             return is_ascii_digit(lexer->lookahead);
         case '+':
         case '-': {
+            *scanned_content = true;
             int32_t sign = lexer->lookahead;
             skip(lexer);
             return lexer->lookahead != sign || saw_newline;
@@ -3034,26 +3010,28 @@ static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool
     return false;
 }
 
-static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end) {
+static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end, bool *scanned_content) {
     lexer->mark_end(lexer);
     bool saw_newline = false;
-    bool scanned_comment = false;
-    if (!scan_expression_trivia(lexer, &saw_newline, &scanned_comment)) return false;
-    *can_scan_ternary = !scanned_comment && lexer->lookahead == '?';
+    *scanned_content = false;
+    if (!scan_expression_trivia(lexer, &saw_newline, scanned_content)) return false;
+    *can_scan_ternary = !*scanned_content && lexer->lookahead == '?';
     switch (lexer->lookahead) {
         case '(': case '[': case '`':
             *statement_end = saw_newline && after_type_assertion;
             return *statement_end;
         case '?': case '=': case '*': case '%':
         case '<': case '>': case '^': case '|': case '&': return false;
-        case '!': advance(lexer); return saw_newline && lexer->lookahead != '=';
-        case '.': advance(lexer); return saw_newline && is_ascii_digit(lexer->lookahead);
+        case '!': *scanned_content = true; advance(lexer); return saw_newline && lexer->lookahead != '=';
+        case '.': *scanned_content = true; advance(lexer); return saw_newline && is_ascii_digit(lexer->lookahead);
         case '+': case '-': {
+            *scanned_content = true;
             int32_t sign = lexer->lookahead;
             advance(lexer);
             return saw_newline && lexer->lookahead == sign;
         }
         case 'i':
+            *scanned_content = true;
             return !scan_infix_word(lexer, false);
         case ';': case ',': case ':': case ')': case ']': case '}': return true;
         default: return lexer->eof(lexer) || saw_newline;
@@ -3198,7 +3176,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             lexer->mark_end(lexer);
             bool can_scan_ternary = false;
             bool statement_end = false;
-            if (!scanner->automatic_semicolon_pending && !scan_arrow_context_end(lexer, &can_scan_ternary, valid_symbols[TYPE_ASSERTION_CONTEXT], &statement_end)) {
+            bool scanned_content = false;
+            if (!scanner->automatic_semicolon_pending && !scan_arrow_context_end(lexer, &can_scan_ternary, valid_symbols[TYPE_ASSERTION_CONTEXT], &statement_end, &scanned_content)) {
+                if (!scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+                    return scan_adjacent_type_angles(lexer, valid_symbols);
+                }
                 return valid_symbols[TERNARY_QMARK] && can_scan_ternary && scan_question_mark(lexer, valid_symbols);
             }
             scanner->automatic_semicolon_pending |= statement_end;
@@ -3277,7 +3259,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if (valid_symbols[POSTFIX_UPDATE_END]) {
         bool statement_end = false;
-        bool ret = scan_expression_end(lexer, true, &statement_end, valid_symbols);
+        bool scanned_content = false;
+        bool ret = scan_expression_end(lexer, true, &statement_end, valid_symbols, &scanned_content);
         scanner->automatic_semicolon_pending |= statement_end;
         return ret;
     }
@@ -3327,6 +3310,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (!ret && !scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
             return scan_question_mark(lexer, valid_symbols);
         }
+        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+            return scan_adjacent_type_angles(lexer, valid_symbols);
+        }
         return ret;
     }
 
@@ -3334,11 +3320,19 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         valid_symbols[RESOURCE_BINDING_START] || valid_symbols[RESOURCE_BINDING_CONTINUATION] ||
         valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT]) {
         if (valid_symbols[COMPLETED_ARROW_FUNCTION]) {
+            while (is_whitespace(lexer->lookahead)) skip(lexer);
+            if (valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+                return scan_adjacent_type_angles(lexer, valid_symbols);
+            }
             return (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && scan_question_mark(lexer, valid_symbols);
         }
         bool statement_end = false;
-        bool ret = scan_expression_end(lexer, false, &statement_end, valid_symbols);
+        bool scanned_content = false;
+        bool ret = scan_expression_end(lexer, false, &statement_end, valid_symbols, &scanned_content);
         scanner->automatic_semicolon_pending |= statement_end;
+        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+            return scan_adjacent_type_angles(lexer, valid_symbols);
+        }
         return ret;
     }
 
@@ -3373,10 +3367,13 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             return scan_global_declaration_start(lexer);
         }
         if (!ret && !scanned_content && (lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
+        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+            return scan_adjacent_type_angles(lexer, valid_symbols);
+        }
         if (!ret && !scanned_content && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
             !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN] &&
             (lexer->lookahead == '<' || lexer->lookahead == '-')) {
-            return scan_html_comment(lexer);
+            return scan_html_comment(lexer, false);
         }
         if (!ret && !scanned_content && valid_symbols[AWAIT_YIELD_IDENTIFIER] && valid_symbols[LINE_BREAK_AFTER_AWAIT] && lexer->lookahead == 'y') {
             return scan_yield(scanner, lexer, valid_symbols, true);
@@ -3422,6 +3419,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_contextual_keyword(scanner, lexer, valid_symbols);
     }
     if ((lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
+    if (valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+        return scan_adjacent_type_angles(lexer, valid_symbols);
+    }
     if ((valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
         return scan_question_mark(lexer, valid_symbols);
     }
@@ -3433,7 +3433,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if (valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] && !valid_symbols[ESCAPE_SEQUENCE] &&
         !valid_symbols[REGEX_PATTERN] && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
-        return scan_html_comment(lexer);
+        return scan_html_comment(lexer, false);
     }
     if (valid_symbols[JSX_CLOSING_RECOVERY_IDENTIFIER] && !valid_symbols[ERROR_RECOVERY]) {
         return scan_jsx_closing_recovery_identifier(lexer);

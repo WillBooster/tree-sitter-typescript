@@ -482,11 +482,6 @@
     ]
   },
   {
-    "type": "<<",
-    "named": false,
-    "fields": {}
-  },
-  {
     "type": "abstract_class_declaration",
     "named": true,
     "fields": {
@@ -5716,6 +5711,10 @@
   },
   {
     "type": "<",
+    "named": false
+  },
+  {
+    "type": "<<",
     "named": false
   },
   {

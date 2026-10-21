@@ -90,6 +90,7 @@ module.exports = function defineGrammar(dialect) {
       $._bare_assertion_context,
       $._annotated_signature_context,
       $._type_assertion_context,
+      $._adjacent_type_angles,
     ],
 
     supertypes: ($, previous) => [
@@ -458,13 +459,7 @@ module.exports = function defineGrammar(dialect) {
       _lhs_expression: ($, previous) =>
         choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
 
-      binary_expression: splitLeftShift,
-
-      _left_shift_operator: ($) => seq($._left_angle, $._adjacent_left_angle),
-
-      _left_angle: () => token(/</),
-
-      _adjacent_left_angle: () => token.immediate(/</),
+      binary_expression: withShiftPrefix,
 
       await_expression: (_, previous) => {
         const members = previous.content.content.members;
@@ -564,7 +559,7 @@ module.exports = function defineGrammar(dialect) {
 
       _jsx_start_opening_element: ($) =>
         seq(
-          alias($._left_angle, '<'),
+          '<',
           optional(
             seq(
               choice(
@@ -972,8 +967,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _implements_keyword_arguments: ($) =>
-        seq(alias($._left_angle, '<'), commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
+      _implements_keyword_arguments: ($) => seq('<', commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(
@@ -1478,7 +1472,7 @@ module.exports = function defineGrammar(dialect) {
               alias($._type_query_subscript_expression, $.subscript_expression)
             )
           ),
-          field('type_arguments', $.type_arguments)
+          field('type_arguments', alias($._type_query_arguments, $.type_arguments))
         ),
       type_query: ($) =>
         prec.right(
@@ -1536,7 +1530,9 @@ module.exports = function defineGrammar(dialect) {
           'object'
         ),
 
-      type_arguments: ($) => seq(alias($._left_angle, '<'), commaSep1($.type), optional(','), '>'),
+      type_arguments: ($) => typeArguments($, choice('<', seq($._adjacent_type_angles, '<'))),
+
+      _type_query_arguments: ($) => typeArguments($, '<'),
 
       object_type: ($) =>
         seq(
@@ -1611,7 +1607,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      type_parameters: ($) => seq(alias($._left_angle, '<'), commaSep1($.type_parameter), optional(','), '>'),
+      type_parameters: ($) => seq('<', commaSep1($.type_parameter), optional(','), '>'),
 
       type_parameter: ($) =>
         seq(
@@ -1699,12 +1695,25 @@ module.exports = function defineGrammar(dialect) {
   });
 };
 
-function splitLeftShift($, rule) {
+function withShiftPrefix($, rule) {
   return mapRule(rule, (part) => {
-    if (part.type === 'STRING' && part.value === '<') return alias($._left_angle, '<');
-    if (part.type === 'STRING' && part.value === '<<') return alias($._left_shift_operator, '<<');
-    return part;
+    if (part.type !== 'SEQ') return part;
+    return {
+      ...part,
+      members: part.members.flatMap((member) =>
+        member.type === 'FIELD' &&
+        member.name === 'operator' &&
+        member.content.type === 'STRING' &&
+        member.content.value === '<<'
+          ? [$._adjacent_type_angles, member]
+          : [member]
+      ),
+    };
   });
+}
+
+function typeArguments($, opening) {
+  return seq(opening, commaSep1($.type), optional(','), '>');
 }
 
 function variableDeclarator($, name) {
