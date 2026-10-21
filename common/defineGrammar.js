@@ -1613,12 +1613,23 @@ module.exports = function defineGrammar(dialect) {
       constraint: ($) => seq(choice('extends', ':'), $.type),
 
       construct_signature: ($) =>
-        seq(
-          optional('abstract'),
-          'new',
-          field('type_parameters', optional($.type_parameters)),
-          field('parameters', $.formal_parameters),
-          field('type', optional($.type_annotation))
+        prec.dynamic(
+          1,
+          seq(
+            optional('abstract'),
+            'new',
+            functionScope(
+              $,
+              false,
+              seq(
+                field('type_parameters', optional($.type_parameters)),
+                field('parameters', $.formal_parameters),
+                optional(seq(field('type', $.type_annotation), optional($._annotated_signature_context)))
+              ),
+              'function_signature',
+              $._method_signature_end
+            )
+          )
         ),
 
       index_signature: ($) =>

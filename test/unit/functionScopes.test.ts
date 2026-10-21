@@ -158,6 +158,90 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`${dialect} retains construct signatures and methods named new in their own roles`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const declaration of [
+        'interface I { new (): I; after():void }',
+        'type I = { new <T>(value:T): T; after():void }',
+        'interface I { new <T>(): I; new?(): I; "new"(): I; after():void }',
+        'interface I { new (value:T): I\n [key:string]: T; after():void }',
+      ]) {
+        const source = `${declaration}\nconst following = 1;`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          const signatures = tree.rootNode.descendantsOfType('construct_signature');
+          expect(signatures, source).toHaveLength(1);
+          expect(signatures[0]?.childForFieldName('parameters')?.type).toBe('formal_parameters');
+          expect(signatures[0]?.childForFieldName('type')?.type).toBe('type_annotation');
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+      const tree = parser.parse('class C { new(): C; new() { return this; } after() {} }')!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.descendantsOfType('construct_signature')).toHaveLength(0);
+        expect(tree.rootNode.descendantsOfType('method_signature')[0]?.childForFieldName('name')?.text).toBe('new');
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} reparses construct-to-method signature edits with fresh metadata and captures`, () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(
+      language,
+      '(construct_signature) @construct (method_signature name: (_) @method) @signature'
+    );
+    const prefix = 'interface I { ';
+    const suffix = ' (): I; after():void }\nconst following = 1;';
+    let name = 'new';
+    let source = prefix + name + suffix;
+    let tree = parser.parse(source)!;
+    const captures = (current: typeof tree): unknown =>
+      query.captures(current.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex]);
+    try {
+      for (const replacement of ['new?', '"new"', 'new<T>', 'new']) {
+        const next = prefix + replacement + suffix;
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + name.length,
+            newEndIndex: prefix.length + replacement.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + name.length),
+            newEndPosition: position(next, prefix.length + replacement.length),
+          }),
+          (incremental, fresh) => {
+            expect(captures(incremental)).toEqual(captures(fresh));
+            expect(incremental.rootNode.hasError).toBe(false);
+            expect(incremental.rootNode.descendantsOfType('construct_signature')).toHaveLength(
+              replacement === 'new' || replacement === 'new<T>' ? 1 : 0
+            );
+            expect(incremental.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+          }
+        );
+        previous.delete();
+        source = next;
+        name = replacement;
+      }
+    } finally {
+      tree.delete();
+      query.delete();
+      parser.delete();
+    }
+  });
+
   test(`${dialect} retains generator method signatures before their implementations`, () => {
     const parser = new Parser().setLanguage(language);
     try {

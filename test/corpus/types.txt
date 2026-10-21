@@ -3543,3 +3543,14 @@ interface Registry { make: UnionFactory; merge: IntersectionFactory; conditional
         name: (property_identifier)
         type: (type_annotation
           (type_identifier))))))
+
+================================================================================
+Construct signatures retain ordinary and generic constructor roles
+================================================================================
+
+interface Factory { new(): Value; after():void }
+type GenericFactory = { new<T>(value:T): T; after():void };
+
+--------------------------------------------------------------------------------
+
+(program (interface_declaration (type_identifier) (interface_body (construct_signature (formal_parameters) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))) (type_alias_declaration (type_identifier) (object_type (construct_signature (type_parameters (type_parameter (type_identifier))) (formal_parameters (required_parameter (identifier) (type_annotation (type_identifier)))) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))))
