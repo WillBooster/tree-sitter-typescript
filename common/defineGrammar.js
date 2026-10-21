@@ -163,7 +163,6 @@ module.exports = function defineGrammar(dialect) {
       [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
       [$.as_expression, $.satisfies_expression, $.primary_type],
       [$._type_query_member_expression, $.member_expression],
-      [$.member_expression, $._type_query_member_expression_in_type_annotation],
       [$._type_query_member_expression, $._type_arguments_target],
       [$._type_query_subscript_expression, $.subscript_expression],
       [$._type_query_subscript_expression, $._type_arguments_target],
@@ -175,13 +174,14 @@ module.exports = function defineGrammar(dialect) {
       [$.literal_type, $.pattern],
       [$.predefined_type, $.pattern],
       [$.call_expression, $._type_query_call_expression],
-      [$.call_expression, $._type_query_call_expression_in_type_annotation],
       [$.new_expression, $._type_arguments_target],
       [$.meta_property, $._type_arguments_target],
       [$.construct_signature, $._property_name],
     ],
 
     conflicts: ($, previous) => [
+      [$.member_expression, $._type_query_member_expression_in_type_annotation],
+      [$.call_expression, $._type_query_call_expression_in_type_annotation],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
       [$.primary_type, $.type_parameter],

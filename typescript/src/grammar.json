@@ -17245,6 +17245,14 @@
   ],
   "conflicts": [
     [
+      "member_expression",
+      "_type_query_member_expression_in_type_annotation"
+    ],
+    [
+      "call_expression",
+      "_type_query_call_expression_in_type_annotation"
+    ],
+    [
       "_arrow_predefined_parent_start",
       "_arrow_predefined_function_start"
     ],
@@ -18127,16 +18135,6 @@
     [
       {
         "type": "SYMBOL",
-        "name": "member_expression"
-      },
-      {
-        "type": "SYMBOL",
-        "name": "_type_query_member_expression_in_type_annotation"
-      }
-    ],
-    [
-      {
-        "type": "SYMBOL",
         "name": "_type_query_member_expression"
       },
       {
@@ -18242,16 +18240,6 @@
       {
         "type": "SYMBOL",
         "name": "_type_query_call_expression"
-      }
-    ],
-    [
-      {
-        "type": "SYMBOL",
-        "name": "call_expression"
-      },
-      {
-        "type": "SYMBOL",
-        "name": "_type_query_call_expression_in_type_annotation"
       }
     ],
     [
