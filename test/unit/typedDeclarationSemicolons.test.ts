@@ -1,11 +1,8 @@
-import fs from 'node:fs';
-
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import treeSitterJson from '../../tree-sitter.json';
-
+import { configuredQueries } from '../helpers/configuredQueries.js';
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -67,17 +64,7 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
-      (kind) =>
-        new Query(
-          language,
-          [grammar[kind]]
-            .flat()
-            .map((file) => fs.readFileSync(file, 'utf8'))
-            .join('\n')
-        )
-    );
+    const queries: ReturnType<typeof configuredQueries> = [];
     const captures = (tree: Tree): unknown =>
       queries.map((query) =>
         query
@@ -85,8 +72,10 @@ for (const dialect of ['typescript', 'tsx']) {
           .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
       );
     let source = 'let value: T\n+ value;\nconst following = 1;';
-    let tree = parser.parse(source)!;
+    let tree: Tree | undefined;
     try {
+      queries.push(...configuredQueries(language, dialect));
+      tree = parser.parse(source)!;
       checkStatements(tree, source, dialect);
       for (const next of [
         'let value: T = initial\n+ value;\nconst following = 1;',
@@ -131,7 +120,7 @@ for (const dialect of ['typescript', 'tsx']) {
         source = next;
       }
     } finally {
-      tree.delete();
+      tree?.delete();
       for (const query of queries) query.delete();
       parser.delete();
     }
