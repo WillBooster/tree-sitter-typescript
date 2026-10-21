@@ -1355,7 +1355,8 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
     return true;
 }
 
-static bool scan_generic_function_type(TSLexer *lexer);
+static bool scan_generic_function_type(TSLexer *lexer, bool check_parameter_prefix);
+static bool scan_type_parameter_prefix(TSLexer *lexer);
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter);
 enum TypeGroupEnd {
     TYPE_GROUP_END_MASK = 0xff,
@@ -1617,14 +1618,15 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (!allow_type_arguments || (line_break && !heritage) || lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
-    if (lexer->lookahead == '<' && !scan_generic_function_type(lexer)) return false;
+    if (lexer->lookahead == '<' && !scan_generic_function_type(lexer, false)) return false;
     lexer->result_symbol = unqualified ? UNQUALIFIED_TYPE_REFERENCE_ARGUMENTS_START : TYPE_REFERENCE_ARGUMENTS_START;
     return true;
 }
 
-static bool scan_generic_function_type(TSLexer *lexer) {
+static bool scan_generic_function_type(TSLexer *lexer, bool check_parameter_prefix) {
     bool comment = false;
     advance(lexer);
+    if (check_parameter_prefix && !scan_type_parameter_prefix(lexer)) return false;
     if (!scan_type_group(lexer, '>', false, false, NULL, false, NULL) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '(') return false;
     advance(lexer);
     if (!scan_type_group(lexer, ')', false, false, NULL, false, NULL) || !scan_type_whitespace_and_comments(lexer, &comment, false) || lexer->lookahead != '=') return false;
@@ -1632,12 +1634,30 @@ static bool scan_generic_function_type(TSLexer *lexer) {
     return lexer->lookahead == '>';
 }
 
+static bool scan_type_parameter_prefix(TSLexer *lexer) {
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    while (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+        char word[8] = {0};
+        bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+        if (!scan_default_trivia(lexer, true, false)) return false;
+        bool modifier = ascii_word && (strcmp(word, "const") == 0 || strcmp(word, "in") == 0 || strcmp(word, "out") == 0);
+        bool identifier = is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead);
+        if (modifier && identifier) continue;
+        switch (lexer->lookahead) {
+            case '>': case ',': case '=': case ':': return true;
+        }
+        char continuation[8] = {0};
+        return identifier && scan_identifier(lexer, continuation, sizeof(continuation), false) && strcmp(continuation, "extends") == 0;
+    }
+    return false;
+}
+
 static bool scan_generic_function_arguments_start(TSLexer *lexer, const bool *valid_symbols) {
     advance(lexer);
     lexer->mark_end(lexer);
     if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
         !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
-    if (lexer->lookahead != '<' || !scan_generic_function_type(lexer)) return false;
+    if (lexer->lookahead != '<' || !scan_generic_function_type(lexer, true)) return false;
     lexer->result_symbol = GENERIC_FUNCTION_ARGUMENTS_START;
     return true;
 }

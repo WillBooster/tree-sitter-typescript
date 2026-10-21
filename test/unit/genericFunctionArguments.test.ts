@@ -45,6 +45,11 @@ for (const dialect of ['typescript', 'tsx']) {
         '\n<T>() => T',
         '<T extends { nested: Box<string> }>(value: T) => T',
         '<T = string>(value?: T) => T',
+        '<const T>() => T',
+        '<T, U = Box<string>>(value: T) => U',
+        String.raw`<\u0054>() => T`,
+        '<Ｔ>() => Ｔ',
+        '<LongTypeParameterName>() => LongTypeParameterName',
         InitialArgument,
       ]) {
         const next = Prefix + nextArgument + Suffix;
@@ -76,6 +81,44 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
+
+  test(`keeps complete and incomplete shift chains linear in ${dialect}`, { timeout: 60_000 }, async () => {
+    await Parser.init();
+    const parser = new Parser();
+    try {
+      parser.setLanguage(await loadCurrentWasmBuild(dialect));
+      for (const operator of ['<<', '<<=']) {
+        for (const suffix of ['', '1;']) {
+          const small = `value ${operator}\n`.repeat(1000) + suffix;
+          const large = `value ${operator}\n`.repeat(10_000) + suffix;
+          const hasError = suffix === '';
+          parseShiftCpu(parser, large, hasError);
+          parseShiftCpu(parser, large, hasError);
+          let smallFastest = Infinity;
+          let largeFastest = Infinity;
+          for (let run = 0; run < 5; run++) {
+            smallFastest = Math.min(smallFastest, parseShiftCpu(parser, small, hasError));
+            largeFastest = Math.min(largeFastest, parseShiftCpu(parser, large, hasError));
+          }
+          expect(largeFastest / smallFastest, `${operator} ${suffix}`).toBeLessThan(18);
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}
+
+function parseShiftCpu(parser: Parser, source: string, hasError: boolean): number {
+  const start = process.threadCpuUsage();
+  const tree = parser.parse(source)!;
+  const elapsed = process.threadCpuUsage(start);
+  try {
+    expect(tree.rootNode.hasError).toBe(hasError);
+    return elapsed.user + elapsed.system;
+  } finally {
+    tree.delete();
+  }
 }
 
 function checkArguments(tree: Tree, source: string, dialect: string, query: Query): void {
