@@ -812,7 +812,7 @@ static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
 static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     advance(lexer);
-    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
+    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[ERROR_RECOVERY] &&
         !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
     if (lexer->lookahead != '<') return false;
     advance(lexer);

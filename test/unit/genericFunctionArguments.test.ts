@@ -145,6 +145,47 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
+  test(`preserves HTML comments after assertion type names through ${dialect} edits`, async () => {
+    await Parser.init();
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    const prefix = 'const result = x as ';
+    const suffix = ' <!-- c\n<1>;\nconst following = 1;';
+    let name = 'A';
+    let source = prefix + name + suffix;
+    let tree = parser.parse(source)!;
+    try {
+      checkHtmlComments(tree, source);
+      for (const nextName of ['ns.A', 'ns.deep.A', 'A']) {
+        const next = prefix + nextName + suffix;
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + name.length,
+            newEndIndex: prefix.length + nextName.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + name.length),
+            newEndPosition: position(next, prefix.length + nextName.length),
+          }),
+          (incremental, fresh) => {
+            checkHtmlComments(incremental, next);
+            checkHtmlComments(fresh, next);
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+        name = nextName;
+      }
+    } finally {
+      tree.delete();
+      parser.delete();
+    }
+  });
+
   test(`validates escaped generic type names through ${dialect} edits`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
@@ -533,4 +574,14 @@ function checkFlowConstraint(tree: Tree, source: string, clause: string): void {
     source.indexOf(clause) + clause.length,
   ]);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+}
+
+function checkHtmlComments(parsed: Tree, text: string): void {
+  expect(parsed.rootNode.hasError, text).toBe(false);
+  const start = text.indexOf('<!--');
+  expect(
+    parsed.rootNode.descendantsOfType('html_comment').map((node) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual([['<!-- c', start, start + 6]]);
+  expect(parsed.rootNode.descendantsOfType('binary_expression')).toHaveLength(0);
+  expect(parsed.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
