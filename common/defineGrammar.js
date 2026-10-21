@@ -88,6 +88,7 @@ module.exports = function defineGrammar(dialect) {
       $._function_signature_end,
       $._bare_assertion_context,
       $._annotated_signature_context,
+      $._type_assertion_context,
     ],
 
     supertypes: ($, previous) => [
@@ -754,22 +755,7 @@ module.exports = function defineGrammar(dialect) {
 
       _lexical_variable_declarator: ($) => variableDeclarator($, $._lexical_binding_identifier),
 
-      method_signature: ($) =>
-        functionContext((async) =>
-          seq(
-            optional($.accessibility_modifier),
-            optional('static'),
-            optional($.override_modifier),
-            optional('readonly'),
-            ...(async ? [alias($._async_keyword, 'async')] : []),
-            optional(choice('get', 'set', '*')),
-            field('name', $._property_name),
-            optional('?'),
-            $[async ? '_async_function_signature_start' : '_function_signature_start'],
-            $._call_signature,
-            $._method_signature_end
-          )
-        ),
+      method_signature: ($) => methodSignature($),
 
       abstract_method_signature: ($) =>
         seq(
@@ -886,9 +872,11 @@ module.exports = function defineGrammar(dialect) {
 
       type_assertion: ($) => prec.left('unary', seq($.type_arguments, $.expression)),
 
-      as_expression: ($) => prec.left('binary', seq($.expression, 'as', choice('const', $.type))),
+      as_expression: ($) =>
+        prec.left('binary', seq($.expression, 'as', choice('const', $.type), optional($._type_assertion_context))),
 
-      satisfies_expression: ($) => prec.left('binary', seq($.expression, 'satisfies', $.type)),
+      satisfies_expression: ($) =>
+        prec.left('binary', seq($.expression, 'satisfies', $.type, optional($._type_assertion_context))),
 
       instantiation_expression: ($) => {
         const instantiation = (end) =>
@@ -1804,21 +1792,32 @@ function replaceSymbol(rule, name, replacement) {
   };
 }
 
+function methodSignature($) {
+  return functionContext((async) =>
+    choice(
+      ...[false, true].map((generator) =>
+        seq(
+          ...methodHeader($, async, generator),
+          functionScope(
+            $,
+            async,
+            $._call_signature,
+            generator ? 'generator_function' : 'function_signature',
+            $._method_signature_end
+          )
+        )
+      )
+    )
+  );
+}
+
 function methodDefinition($, decorators) {
   return prec.left(
     functionContext((async) =>
       choice(
         ...[false, true].map((generator) =>
           seq(
-            ...(decorators ? [decorators] : []),
-            optional($.accessibility_modifier),
-            optional('static'),
-            optional($.override_modifier),
-            optional('readonly'),
-            ...(async ? [alias($._async_keyword, 'async')] : []),
-            ...(generator ? ['*'] : [optional(choice('get', 'set'))]),
-            field('name', $._property_name),
-            optional('?'),
+            ...methodHeader($, async, generator, decorators),
             choice(
               functionScope(
                 $,
@@ -1842,13 +1841,27 @@ function methodDefinition($, decorators) {
   );
 }
 
+function methodHeader($, async, generator, decorators) {
+  return [
+    ...(decorators ? [decorators] : []),
+    optional($.accessibility_modifier),
+    optional('static'),
+    optional($.override_modifier),
+    optional('readonly'),
+    ...(async ? [alias($._async_keyword, 'async')] : []),
+    ...(generator ? ['*'] : [optional(choice('get', 'set'))]),
+    field('name', $._property_name),
+    optional('?'),
+  ];
+}
+
 function functionContext(makeRule) {
   return choice(makeRule(false), makeRule(true));
 }
 
-function functionScope($, async, content, kind = 'function_signature') {
+function functionScope($, async, content, kind = 'function_signature', end = $._function_context_end) {
   const name = kind === 'function' && !async ? 'sync_function' : `${async ? 'async_' : ''}${kind}`;
-  return seq($[`_${name}_start`], content, $._function_context_end);
+  return seq($[`_${name}_start`], content, end);
 }
 
 function decoratedExportClass($, abstract, ambient = false) {

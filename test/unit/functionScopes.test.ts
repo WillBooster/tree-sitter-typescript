@@ -140,7 +140,7 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
       for (const returnType of ['T', 'asserts x is T']) {
-        for (const member of ['[k: string]: T', '<U>(x: U): U', 'extends(): void']) {
+        for (const member of ['[k: string]: T', '<U>(x: U): U', 'extends(): void', '.5(): T']) {
           const source = `interface I { foo(x: T): ${returnType}\n${member}; after(): void }`;
           const tree = parser.parse(source)!;
           try {
@@ -154,6 +154,126 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} retains generator method signatures before their implementations`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const source of [
+        'class C { *foo(): void; after(): void {} }',
+        'class C { async *foo(): Promise<void>; after(): void {} }',
+        'declare class C { *foo(): void; after(): void; }',
+        'class C { async *foo<T>(x:T): AsyncGenerator<T>; async *foo(x) { yield x } }',
+      ]) {
+        const tree = parser.parse(`${source}\nconst following = 1;`)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(
+            tree.rootNode
+              .descendantsOfType('method_signature')
+              .filter((node) => node.childForFieldName('name')?.text === 'foo')
+          ).toHaveLength(1);
+          expect(tree.rootNode.descendantsOfType('yield_expression')).toHaveLength(source.includes('yield') ? 1 : 0);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} separates completed typed arrow assertions from next-line postfix-looking statements`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const next of ['`x`', '[1]', '(x)']) {
+        for (const body of ['a as T', 'a satisfies T', 'a as const']) {
+          const source = `const f = () => ${body}\n${next};\nconst following = 1;`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(tree.rootNode.descendantsOfType('arrow_function')[0]?.text).toBe(`() => ${body}`);
+            expect(tree.rootNode.descendantsOfType('expression_statement').map((node) => node.text)).toEqual([
+              `${next};`,
+            ]);
+            expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+          } finally {
+            tree.delete();
+          }
+        }
+        for (const body of ['a', '(a as T)']) {
+          const source = `const f = () => ${body}\n${next};\nconst following = 1;`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            expect(tree.rootNode.descendantsOfType('arrow_function')[0]?.text).toBe(`() => ${body}\n${next}`);
+            expect(tree.rootNode.descendantsOfType('expression_statement')).toHaveLength(0);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} restores typed arrow statement boundaries through assertion and parenthesis edits`, () => {
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(
+      language,
+      '(expression_statement) @statement (await_expression) @await (as_expression) @assertion (satisfies_expression) @constraint'
+    );
+    try {
+      for (const async of [false, true]) {
+        const prefix = `const f = ${async ? 'async ' : ''}() => `;
+        const operand = async ? 'await a' : 'a';
+        const suffix = '\n`x`;\nconst following = 1;';
+        let body = `${operand} as T`;
+        let source = prefix + body + suffix;
+        let tree = parser.parse(source)!;
+        const captures = (current: typeof tree): unknown =>
+          query.captures(current.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex]);
+        try {
+          for (const replacement of [
+            `(${operand} as T)`,
+            `${operand} satisfies T`,
+            operand,
+            `${operand} as const`,
+            `${operand} as T`,
+          ]) {
+            const next = prefix + replacement + suffix;
+            const previous = tree;
+            tree = compareEditedTree(
+              parser,
+              previous,
+              next,
+              new Edit({
+                startIndex: prefix.length,
+                oldEndIndex: prefix.length + body.length,
+                newEndIndex: prefix.length + replacement.length,
+                startPosition: position(source, prefix.length),
+                oldEndPosition: position(source, prefix.length + body.length),
+                newEndPosition: position(next, prefix.length + replacement.length),
+              }),
+              (incremental, fresh) => {
+                expect(captures(incremental)).toEqual(captures(fresh));
+                expect(incremental.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+              }
+            );
+            previous.delete();
+            source = next;
+            body = replacement;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      query.delete();
       parser.delete();
     }
   });

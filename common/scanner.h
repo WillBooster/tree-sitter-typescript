@@ -80,6 +80,7 @@ enum TokenType {
     FUNCTION_SIGNATURE_END,
     BARE_ASSERTION_CONTEXT,
     ANNOTATED_SIGNATURE_CONTEXT,
+    TYPE_ASSERTION_CONTEXT,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -2993,14 +2994,17 @@ static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool
     return false;
 }
 
-static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary) {
+static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end) {
     lexer->mark_end(lexer);
     bool saw_newline = false;
     bool scanned_comment = false;
     if (!scan_expression_trivia(lexer, &saw_newline, &scanned_comment)) return false;
     *can_scan_ternary = !scanned_comment && lexer->lookahead == '?';
     switch (lexer->lookahead) {
-        case '(': case '[': case '`': case '?': case '=': case '*': case '%':
+        case '(': case '[': case '`':
+            *statement_end = saw_newline && after_type_assertion;
+            return *statement_end;
+        case '?': case '=': case '*': case '%':
         case '<': case '>': case '^': case '|': case '&': return false;
         case '!': advance(lexer); return saw_newline && lexer->lookahead != '=';
         case '.': advance(lexer); return saw_newline && is_ascii_digit(lexer->lookahead);
@@ -3077,7 +3081,10 @@ static bool scan_method_signature_end(Scanner *scanner, TSLexer *lexer, const bo
     bool annotated = valid_symbols[ANNOTATED_SIGNATURE_CONTEXT];
     if (annotated) {
         switch (lexer->lookahead) {
-            case '&': case '.': case '?': case '=': return false;
+            case '&': case '?': case '=': return false;
+            case '.':
+                advance(lexer);
+                return is_ascii_digit(lexer->lookahead) && finish_function_context(scanner, lexer, METHOD_SIGNATURE_END);
         }
     }
     return finish_function_context(scanner, lexer, METHOD_SIGNATURE_END);
@@ -3150,9 +3157,11 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             !(valid_symbols[LINE_BREAK_AFTER_AWAIT] && scanner->functions.depth && function_context_async(&scanner->functions))) {
             lexer->mark_end(lexer);
             bool can_scan_ternary = false;
-            if (!scanner->automatic_semicolon_pending && !scan_arrow_context_end(lexer, &can_scan_ternary)) {
+            bool statement_end = false;
+            if (!scanner->automatic_semicolon_pending && !scan_arrow_context_end(lexer, &can_scan_ternary, valid_symbols[TYPE_ASSERTION_CONTEXT], &statement_end)) {
                 return valid_symbols[TERNARY_QMARK] && can_scan_ternary && scan_question_mark(lexer, valid_symbols);
             }
+            scanner->automatic_semicolon_pending |= statement_end;
             function_context_leave(&scanner->functions);
             lexer->result_symbol = ARROW_CONTEXT_END;
             return true;
