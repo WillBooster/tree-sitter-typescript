@@ -12726,7 +12726,7 @@
               "type": "ALIAS",
               "content": {
                 "type": "SYMBOL",
-                "name": "_reserved_identifier"
+                "name": "_expression_reserved_identifier"
               },
               "named": true,
               "value": "identifier"
@@ -12825,6 +12825,153 @@
         {
           "type": "SYMBOL",
           "name": "non_null_expression"
+        }
+      ]
+    },
+    "_expression_reserved_identifier": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "as"
+        },
+        {
+          "type": "STRING",
+          "value": "satisfies"
+        },
+        {
+          "type": "STRING",
+          "value": "is"
+        },
+        {
+          "type": "STRING",
+          "value": "accessor"
+        },
+        {
+          "type": "STRING",
+          "value": "declare"
+        },
+        {
+          "type": "STRING",
+          "value": "global"
+        },
+        {
+          "type": "STRING",
+          "value": "namespace"
+        },
+        {
+          "type": "STRING",
+          "value": "type"
+        },
+        {
+          "type": "STRING",
+          "value": "public"
+        },
+        {
+          "type": "STRING",
+          "value": "private"
+        },
+        {
+          "type": "STRING",
+          "value": "protected"
+        },
+        {
+          "type": "STRING",
+          "value": "override"
+        },
+        {
+          "type": "STRING",
+          "value": "readonly"
+        },
+        {
+          "type": "STRING",
+          "value": "module"
+        },
+        {
+          "type": "STRING",
+          "value": "any"
+        },
+        {
+          "type": "STRING",
+          "value": "number"
+        },
+        {
+          "type": "STRING",
+          "value": "boolean"
+        },
+        {
+          "type": "STRING",
+          "value": "string"
+        },
+        {
+          "type": "STRING",
+          "value": "symbol"
+        },
+        {
+          "type": "STRING",
+          "value": "object"
+        },
+        {
+          "type": "STRING",
+          "value": "out"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_yield_identifier"
+            },
+            {
+              "type": "STRING",
+              "value": "get"
+            },
+            {
+              "type": "STRING",
+              "value": "set"
+            },
+            {
+              "type": "STRING",
+              "value": "static"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_escaped_let"
+            },
+            {
+              "type": "STRING",
+              "value": "async"
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_await_keyword"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_await_identifier"
+                }
+              ]
+            },
+            {
+              "type": "STRING",
+              "value": "let"
+            },
+            {
+              "type": "STRING",
+              "value": "of"
+            },
+            {
+              "type": "STRING",
+              "value": "using"
+            }
+          ]
         }
       ]
     },
@@ -19946,6 +20093,11 @@
     [
       "expression",
       "call_expression"
+    ],
+    [
+      "new_expression",
+      "_argumentless_new_expression",
+      "_property_name"
     ]
   ],
   "precedences": [
@@ -20991,6 +21143,7 @@
     }
   ],
   "inline": [
+    "_expression_reserved_identifier",
     "_expressions",
     "_semicolon",
     "_identifier",

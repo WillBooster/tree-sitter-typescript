@@ -2974,7 +2974,7 @@ static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, c
     bool constructor = valid_symbols[CONSTRUCTOR_ASYNC_FUNCTION_START];
     if (!constructor) lexer->mark_end(lexer);
     lexer->result_symbol = constructor ? CONSTRUCTOR_ASYNC_FUNCTION_START : ASYNC_KEYWORD;
-    return scan_default_trivia(lexer, false, true) &&
+    return scan_default_trivia(lexer, false, false) &&
         (constructor ? scan_identifier(lexer, keyword, capacity, false) && strcmp(keyword, "function") == 0
                      : valid_symbols[ASYNC_KEYWORD]);
 }
@@ -3002,7 +3002,7 @@ static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary) {
     switch (lexer->lookahead) {
         case '(': case '[': case '`': case '?': case '=': case '*': case '%':
         case '<': case '>': case '^': case '|': case '&': return false;
-        case '!': return false;
+        case '!': advance(lexer); return saw_newline && lexer->lookahead != '=';
         case '.': advance(lexer); return saw_newline && is_ascii_digit(lexer->lookahead);
         case '+': case '-': {
             int32_t sign = lexer->lookahead;
@@ -3077,13 +3077,8 @@ static bool scan_method_signature_end(Scanner *scanner, TSLexer *lexer, const bo
     bool annotated = valid_symbols[ANNOTATED_SIGNATURE_CONTEXT];
     if (annotated) {
         switch (lexer->lookahead) {
-            case '&': case '[': case '.': case '?': case '<': case '=': return false;
+            case '&': case '.': case '?': case '=': return false;
         }
-    }
-    if (annotated && is_identifier_part(lexer->lookahead)) {
-        char word[16] = {0};
-        scan_identifier(lexer, word, sizeof(word), false);
-        if (strcmp(word, "extends") == 0) return false;
     }
     return finish_function_context(scanner, lexer, METHOD_SIGNATURE_END);
 }
@@ -3131,7 +3126,8 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
     bool annotated = valid_symbols[ANNOTATED_SIGNATURE_CONTEXT];
     if (annotated && !valid_symbols[BARE_ASSERTION_CONTEXT]) {
         switch (lexer->lookahead) {
-            case '&': case '|': case '[': case '?': case '<': case '=': return false;
+            case '&': case '|': case '?': case '=': return false;
+            case '[': case '<': return saw_newline && finish_function_context(scanner, lexer, FUNCTION_SIGNATURE_END);
             case '.':
                 advance(lexer);
                 return saw_newline && is_ascii_digit(lexer->lookahead) && finish_function_context(scanner, lexer, FUNCTION_SIGNATURE_END);
@@ -3139,9 +3135,6 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
     }
     if (is_identifier_part(lexer->lookahead)) {
         if (!saw_newline) return false;
-        char word[16] = {0};
-        scan_identifier(lexer, word, sizeof(word), false);
-        if (annotated && strcmp(word, "extends") == 0) return false;
     }
     return finish_function_context(scanner, lexer, FUNCTION_SIGNATURE_END);
 }

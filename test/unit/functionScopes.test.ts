@@ -95,6 +95,7 @@ for (const dialect of ['typescript', 'tsx']) {
         ['declare function f()', '[1].map(g);'],
         ['declare function f()', '.5;'],
         ['declare function f(): T', 'is();'],
+        ['declare function f(): T', '[1].map(g);'],
         ['declare function f(): T', '.5;'],
       ]) {
         const source = `${signature}\n${expression}\nconst following = 1;`;
@@ -120,6 +121,172 @@ for (const dialect of ['typescript', 'tsx']) {
           ).toEqual(['foo', 'is', 'after']);
         } finally {
           tree.delete();
+        }
+      }
+      for (const returnType of ['T', 'T[K]', 'T[]']) {
+        const source = `interface I { foo(): ${returnType}\n/* member */ [Symbol.observable](): T; after(): void }`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          const signatures = tree.rootNode.descendantsOfType('method_signature');
+          expect(signatures.map((node) => node.childForFieldName('name')?.text)).toEqual([
+            'foo',
+            '[Symbol.observable]',
+            'after',
+          ]);
+          expect(signatures[0]!.childForFieldName('return_type')?.text).toBe(`: ${returnType}`);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const returnType of ['T', 'asserts x is T']) {
+        for (const member of ['[k: string]: T', '<U>(x: U): U', 'extends(): void']) {
+          const source = `interface I { foo(x: T): ${returnType}\n${member}; after(): void }`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(false);
+            const first = tree.rootNode.descendantsOfType('method_signature')[0]!;
+            expect(first.childForFieldName('return_type')?.text).toBe(`: ${returnType}`);
+            expect(tree.rootNode.descendantsOfType('interface_body')[0]!.namedChildren).toHaveLength(3);
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} retains generic async arrow signatures and their await scopes`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const expression of [
+        'async <T,>(x: T) => x',
+        'async <T,>(x: T) => await x',
+        'async/* same line */<T,>(x:T): Promise<T> => { return await x }',
+      ]) {
+        const source = `const f = ${expression};\nconst following = 1;`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          const arrow = tree.rootNode.descendantsOfType('arrow_function');
+          expect(arrow).toHaveLength(1);
+          expect(arrow[0]!.childForFieldName('type_parameters')?.text).toBe('<T,>');
+          expect(tree.rootNode.descendantsOfType('binary_expression')).toHaveLength(0);
+          expect(tree.rootNode.descendantsOfType('await_expression').map((node) => node.text)).toEqual(
+            expression.includes('await') ? ['await x'] : []
+          );
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} completes constructors in fields and arrows before ending their scopes`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const name of ['i', 'ingestUtils', 'instanceofCtor']) {
+        for (const trivia of [' ', '\n']) {
+          for (const expression of [
+            `class C { private readonly field = new${trivia}${name}.Ctor(); }`,
+            `const f = () => new${trivia}${name}.Ctor();`,
+          ]) {
+            const source = `${expression}\nconst following = 1;`;
+            const tree = parser.parse(source)!;
+            try {
+              expect(tree.rootNode.hasError, source).toBe(false);
+              const constructors = tree.rootNode.descendantsOfType('new_expression');
+              expect(constructors).toHaveLength(1);
+              expect(constructors[0]!.childForFieldName('constructor')?.text).toBe(`${name}.Ctor`);
+              expect(constructors[0]!.childForFieldName('arguments')?.text).toBe('()');
+              expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+            } finally {
+              tree.delete();
+            }
+          }
+        }
+      }
+      const query = parser.parse('type X = typeof new.foo;')!;
+      try {
+        expect(query.rootNode.hasError).toBe(false);
+        expect(query.rootNode.descendantsOfType('type_query')[0]?.text).toBe('typeof new.foo');
+      } finally {
+        query.delete();
+      }
+      for (const source of ['new;', 'class C { field = new; }']) {
+        const tree = parser.parse(`${source}\nconst following = 1;`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(true);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} separates next-line logical negation from arrow bodies and retains inequality and non-null calls`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const expression of ['() => a', 'async () => await a']) {
+        const tree = parser.parse(`x = ${expression}\n!b;\nconst following = 1;`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.descendantsOfType('arrow_function')[0]!.text).toBe(expression);
+          expect(tree.rootNode.descendantsOfType('unary_expression').map((node) => node.text)).toEqual(['!b']);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const operator of ['!=', '!==']) {
+        const tree = parser.parse(`const f = () => a\n${operator} b;`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(tree.rootNode.descendantsOfType('arrow_function')[0]!.childForFieldName('body')?.text).toBe(
+            `a\n${operator} b`
+          );
+        } finally {
+          tree.delete();
+        }
+      }
+      const tree = parser.parse('const f = () => a!();')!;
+      try {
+        expect(tree.rootNode.hasError).toBe(false);
+        expect(tree.rootNode.descendantsOfType('arrow_function')[0]!.childForFieldName('body')?.type).toBe(
+          'call_expression'
+        );
+        expect(tree.rootNode.descendantsOfType('non_null_expression')[0]?.text).toBe('a!');
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
+  test(`${dialect} keeps conditional return types on their original line`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const prefix of ['interface I { f(): ', 'declare function f(): ']) {
+        const close = prefix.startsWith('interface') ? '; after(): void }' : ';\nconst following = 1;';
+        const valid = parser.parse(`${prefix}T extends U ? X : Y${close}`)!;
+        const invalid = parser.parse(`${prefix}T\nextends U ? X : Y${close}`)!;
+        try {
+          expect(valid.rootNode.hasError).toBe(false);
+          expect(valid.rootNode.descendantsOfType('conditional_type')).toHaveLength(1);
+          expect(invalid.rootNode.hasError).toBe(true);
+          expect(invalid.rootNode.descendantsOfType('conditional_type')).toHaveLength(0);
+        } finally {
+          valid.delete();
+          invalid.delete();
         }
       }
     } finally {

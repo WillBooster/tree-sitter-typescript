@@ -253,9 +253,11 @@ module.exports = function defineGrammar(dialect) {
       ],
       [$.primary_expression, $.call_expression, $.instantiation_expression],
       [$.expression, $.call_expression],
+      [$.new_expression, $._argumentless_new_expression, $._property_name],
     ],
 
     inline: ($, previous) => [
+      $._expression_reserved_identifier,
       ...previous.filter((rule) => !['_formal_parameter', '_call_signature'].includes(rule.name)),
       $._type_identifier,
       $._type_reference_identifier,
@@ -483,8 +485,17 @@ module.exports = function defineGrammar(dialect) {
             (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
             (dialect !== 'typescript' || member.name !== '_jsx_element')
         );
-        return choice(...members, $.non_null_expression);
+        return choice(
+          ...members.map((member) => replaceSymbol(member, '_reserved_identifier', $._expression_reserved_identifier)),
+          $.non_null_expression
+        );
       },
+
+      _expression_reserved_identifier: () =>
+        choice(
+          ...TYPESCRIPT_CONTEXTUAL_KEYWORDS.filter((word) => word !== 'new'),
+          JavaScript.grammar.rules._reserved_identifier
+        ),
 
       expression: ($, previous) => {
         const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
@@ -1562,7 +1573,8 @@ module.exports = function defineGrammar(dialect) {
           choice(optional($._line_break_after_field), field('type', $.type_annotation))
         ),
 
-      arrow_function: ($, previous) => choice(previous, replaceArrowCallSignature(previous, $._arrow_call_signature)),
+      arrow_function: ($, previous) =>
+        choice(previous, replaceSymbol(previous, '_call_signature', $._arrow_call_signature)),
 
       _arrow_call_signature: ($) =>
         seq(
@@ -1783,12 +1795,12 @@ function typeQueryMember($, generic) {
   );
 }
 
-function replaceArrowCallSignature(rule, replacement) {
-  if (rule.type === 'SYMBOL' && rule.name === '_call_signature') return replacement;
+function replaceSymbol(rule, name, replacement) {
+  if (rule.type === 'SYMBOL' && rule.name === name) return replacement;
   return {
     ...rule,
-    ...(rule.members ? { members: rule.members.map((member) => replaceArrowCallSignature(member, replacement)) } : {}),
-    ...(rule.content ? { content: replaceArrowCallSignature(rule.content, replacement) } : {}),
+    ...(rule.members ? { members: rule.members.map((member) => replaceSymbol(member, name, replacement)) } : {}),
+    ...(rule.content ? { content: replaceSymbol(rule.content, name, replacement) } : {}),
   };
 }
 
