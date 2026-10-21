@@ -203,6 +203,7 @@ for (const dialect of ['typescript', 'tsx']) {
         ).toEqual([]);
         const jsxTree = parser.parse(jsxSource)!;
         try {
+          expect(jsxTree.rootNode.hasError).toBe(false);
           expect(jsxTree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
           expect(jsxTree.rootNode.descendantsOfType('jsx_self_closing_element').map((node) => node.text)).toEqual([
             '<string />',
