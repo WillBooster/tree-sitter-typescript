@@ -5,7 +5,7 @@ import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
+import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/functionTypeParameterNames.ts'), 'utf8');
@@ -1119,7 +1119,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
-    'keeps %s binding ownership through incomplete return property edits',
+    'restores %s binding ownership after incomplete return property edits',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -1160,28 +1160,25 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                     newEndPosition: position(next, start + replacement.length),
                   }),
                   (incremental, fresh) => {
+                    for (const q of [aliasQuery, namesQuery]) expectQueryAgreement(q, incremental, fresh);
                     for (const current of [incremental, fresh]) {
                       expect(current.rootNode.hasError).toBe(replacement === '');
+                      expectNodeRanges(current.rootNode, next);
+                      if (replacement === '') continue;
                       expect(
                         aliasQuery
                           .captures(current.rootNode)
                           .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
                       ).toEqual([
                         ['name', 'type_identifier', 'F', 5, 6],
-                        [
-                          'value',
-                          replacement === '' ? 'parenthesized_type' : 'function_type',
-                          next.slice(7, replacement === '' ? next.lastIndexOf(')=>number') + 1 : -1),
-                          7,
-                          replacement === '' ? next.lastIndexOf(')=>number') + 1 : next.length - 1,
-                        ],
+                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
                       ]);
                       expect(
                         namesQuery
                           .captures(current.rootNode)
                           .filter(({ node }) => node.text === name)
                           .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === '' ? [] : [[name, 8, 8 + name.length]]);
+                      ).toEqual([[name, 8, 8 + name.length]]);
                     }
                   },
                   true
@@ -2111,7 +2108,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'retains %s operator recovery at union and conditional operand positions',
+    'reports incomplete %s operator operands and restores parameter roles',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const parameterQuery = new Query(
@@ -2158,6 +2155,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                       newEndPosition: position(next, start + replacement.length),
                     }),
                     (incremental, fresh) => {
+                      expectQueryAgreement(parameterQuery, incremental, fresh);
                       check(incremental, next, replacement !== 'value');
                       check(fresh, next, replacement !== 'value');
                     },
@@ -2168,6 +2166,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 }
                 function check(current: Tree, text: string, missing: boolean): void {
                   expect(current.rootNode.hasError).toBe(missing);
+                  expectNodeRanges(current.rootNode, text);
+                  if (missing) return;
                   const start = text.indexOf(name),
                     annotation = text.indexOf(':'),
                     end = text.indexOf(') =>');
@@ -2175,14 +2175,10 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                     parameterQuery
                       .captures(current.rootNode)
                       .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-                  ).toEqual(
-                    missing
-                      ? []
-                      : [
-                          ['name', name, start, start + name.length],
-                          ['annotation', text.slice(annotation, end), annotation, end],
-                        ]
-                  );
+                  ).toEqual([
+                    ['name', name, start, start + name.length],
+                    ['annotation', text.slice(annotation, end), annotation, end],
+                  ]);
                 }
               } finally {
                 tree?.delete();
