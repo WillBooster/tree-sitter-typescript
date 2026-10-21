@@ -4459,6 +4459,10 @@
               {
                 "type": "STRING",
                 "value": "is"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -4511,6 +4515,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -4580,6 +4588,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -8233,8 +8245,7 @@
                     "name": "_adjacent_type_angles"
                   },
                   {
-                    "type": "SYMBOL",
-                    "name": "_shift_type_angles"
+                    "type": "BLANK"
                   }
                 ]
               },
@@ -11631,6 +11642,10 @@
               },
               {
                 "type": "STRING",
+                "value": "asserts"
+              },
+              {
+                "type": "STRING",
                 "value": "as"
               },
               {
@@ -11804,6 +11819,10 @@
         {
           "type": "STRING",
           "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
         },
         {
           "type": "STRING",
@@ -12850,6 +12869,10 @@
         },
         {
           "type": "STRING",
+          "value": "asserts"
+        },
+        {
+          "type": "STRING",
           "value": "as"
         },
         {
@@ -13072,6 +13095,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -15964,6 +15991,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -16042,6 +16073,10 @@
                   {
                     "type": "STRING",
                     "value": "is"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "asserts"
                   }
                 ]
               },
@@ -16104,6 +16139,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -17134,6 +17173,10 @@
               },
               {
                 "type": "STRING",
+                "value": "asserts"
+              },
+              {
+                "type": "STRING",
                 "value": "any"
               },
               {
@@ -17986,6 +18029,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -18611,6 +18658,10 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -20090,6 +20141,10 @@
           {
             "type": "STRING",
             "value": "is"
+          },
+          {
+            "type": "STRING",
+            "value": "asserts"
           }
         ]
       },
@@ -20178,6 +20233,10 @@
     [
       "asserts",
       "type_predicate"
+    ],
+    [
+      "asserts",
+      "primary_type"
     ],
     [
       "arrow_function",
@@ -21495,10 +21554,6 @@
     {
       "type": "SYMBOL",
       "name": "_adjacent_type_angles"
-    },
-    {
-      "type": "SYMBOL",
-      "name": "_shift_type_angles"
     }
   ],
   "inline": [

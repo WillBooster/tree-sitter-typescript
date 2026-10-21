@@ -455,13 +455,16 @@ for (const dialect of ['typescript', 'tsx']) {
 function checkShiftGrowth(parser: Parser, small: string, large: string, hasError: boolean, name: string): void {
   parseShiftCpu(parser, large, hasError);
   parseShiftCpu(parser, large, hasError);
-  let smallFastest = Infinity;
-  let largeFastest = Infinity;
-  for (let run = 0; run < 5; run++) {
-    smallFastest = Math.min(smallFastest, parseShiftCpu(parser, small, hasError));
-    largeFastest = Math.min(largeFastest, parseShiftCpu(parser, large, hasError));
-  }
-  expect(largeFastest / smallFastest, name).toBeLessThan(18);
+  const samples = Array.from({ length: 5 }, () => [
+    parseShiftCpu(parser, small, hasError),
+    parseShiftCpu(parser, large, hasError),
+  ]);
+  const smallFastest = Math.min(...samples.map(([smallCpu]) => smallCpu!));
+  const largeFastest = Math.min(...samples.map(([, largeCpu]) => largeCpu!));
+  expect(
+    largeFastest / smallFastest,
+    `${name}: small/large thread CPU microseconds ${JSON.stringify(samples)}`
+  ).toBeLessThan(18);
 }
 
 function parseShiftCpu(parser: Parser, source: string, hasError: boolean): number {
