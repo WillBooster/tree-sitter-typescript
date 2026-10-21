@@ -38,6 +38,41 @@ const following = 1;
 `;
 const InitialArgument = '<T>() => T';
 
+interface ShiftCase {
+  name: string;
+  source: (count: number) => string;
+  hasError: boolean;
+}
+const ShiftCases: ShiftCase[] = [
+  ...['<<', '<<='].flatMap((operator) =>
+    ['', '1;'].map((suffix) => ({
+      name: `${operator} ${suffix}`,
+      source: (count: number) => `value ${operator}\n`.repeat(count) + suffix,
+      hasError: suffix === '',
+    }))
+  ),
+  ...Object.entries({
+    genericCallChain: (count: number) => 'x = ' + 'f<T>(x) <<\n'.repeat(count) + '1;',
+    genericCallArray: (count: number) => 'const values = [' + 'f<T>(x) << g<U>(y),'.repeat(count) + '1];',
+    callOperandChain: (count: number) => 'x = ' + 'f<T>(x) << g(x) <<\n'.repeat(count) + '1;',
+    subtractionOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a - 1 <<\n'.repeat(count) + '1;',
+    additionOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a + 1 <<\n'.repeat(count) + '1;',
+    productOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a * 1 <<\n'.repeat(count) + '1;',
+    divisionOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a / 1 <<\n'.repeat(count) + '1;',
+    memberOperandChain: (count: number) => 'x = ' + 'f<T>(x) << ns.g(x) <<\n'.repeat(count) + '1;',
+    indexedOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a[0] <<\n'.repeat(count) + '1;',
+    optionalOperandChain: (count: number) => 'x = ' + 'f<T>(x) << a?.b <<\n'.repeat(count) + '1;',
+    optionalCallOperandChain: (count: number) => 'x = ' + 'f<T>(x) << g?.(x) <<\n'.repeat(count) + '1;',
+    sequence: (count: number) => 'value << other,\n'.repeat(count) + '1;',
+    array: (count: number) => 'const values = [' + 'value << other,'.repeat(count) + '1];',
+    relational: (count: number) => 'value > other << third,\n'.repeat(count) + '1;',
+    queryArray: (count: number) => 'const values = [' + 'foo as typeof ns.Foo << 1,'.repeat(count) + '1];',
+    call: (count: number) => 'f(' + 'value << other,'.repeat(count) + '1);',
+    object: (count: number) =>
+      'const object = {' + Array.from({ length: count }, (_, index) => `p${index}: value << other,`).join('') + '};',
+  }).map(([name, source]) => ({ name, source, hasError: false })),
+];
+
 for (const dialect of ['typescript', 'tsx']) {
   test(`preserves relational grouping through ${dialect} edits`, async () => {
     await Parser.init();
@@ -66,15 +101,14 @@ for (const dialect of ['typescript', 'tsx']) {
     };
     try {
       checkArguments(tree, source, dialect, query, highlights);
-      if (dialect === 'typescript') {
-        for (const assertion of ['< <T>() => T>x', '<Box<<T>() => T>>x']) {
-          const text = prefix + assertion + suffix;
-          const control = parser.parse(text)!;
-          try {
-            checkArguments(control, text, dialect, query, highlights);
-          } finally {
-            control.delete();
-          }
+      const controls = dialect === 'typescript' ? ['< <T>() => T>x', '<Box<<T>() => T>>x'] : ['<div>{a <!-- b}</div>'];
+      for (const expression of controls) {
+        const text = prefix + expression + suffix;
+        const control = parser.parse(text)!;
+        try {
+          checkArguments(control, text, dialect, query, highlights);
+        } finally {
+          control.delete();
         }
       }
       for (const nextExpression of [
@@ -109,6 +143,13 @@ for (const dialect of ['typescript', 'tsx']) {
         'async () => await f! << 1',
         'async () => await f! /*\n*/ << 1',
         'async () => await instanceOfFoo << 1',
+        'a as B < c',
+        'a satisfies B < c > d',
+        'a as ns.B < c',
+        'a satisfies ns.B < c > d',
+        'a as B\n< c',
+        'a as ns.B\n< c',
+        '(a <!-- b)',
         'yield << 1',
         'yield /* gap */ << 1',
         'a > b < c',
@@ -386,38 +427,19 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`keeps complete and incomplete shift chains linear in ${dialect}`, { timeout: 60_000 }, async () => {
-    await Parser.init();
-    const parser = new Parser();
-    try {
-      parser.setLanguage(await loadCurrentWasmBuild(dialect));
-      for (const operator of ['<<', '<<=']) {
-        for (const suffix of ['', '1;']) {
-          const small = `value ${operator}\n`.repeat(1000) + suffix;
-          const large = `value ${operator}\n`.repeat(10_000) + suffix;
-          const hasError = suffix === '';
-          checkShiftGrowth(parser, small, large, hasError, `${operator} ${suffix}`);
-        }
+  test.each(ShiftCases)(
+    `keeps $name growth linear in ${dialect}`,
+    { timeout: 60_000 },
+    async ({ name, source, hasError }) => {
+      await Parser.init();
+      const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+      try {
+        checkShiftGrowth(parser, source(1000), source(10_000), hasError, name);
+      } finally {
+        parser.delete();
       }
-      for (const [name, source] of Object.entries({
-        genericCallChain: (count: number) => 'x = ' + 'f<T>(x) <<\n'.repeat(count) + '1;',
-        genericCallArray: (count: number) => 'const values = [' + 'f<T>(x) << g<U>(y),'.repeat(count) + '1];',
-        sequence: (count: number) => 'value << other,\n'.repeat(count) + '1;',
-        array: (count: number) => 'const values = [' + 'value << other,'.repeat(count) + '1];',
-        relational: (count: number) => 'value > other << third,\n'.repeat(count) + '1;',
-        queryArray: (count: number) => 'const values = [' + 'foo as typeof ns.Foo << 1,'.repeat(count) + '1];',
-        call: (count: number) => 'f(' + 'value << other,'.repeat(count) + '1);',
-        object: (count: number) =>
-          'const object = {' +
-          Array.from({ length: count }, (_, index) => `p${index}: value << other,`).join('') +
-          '};',
-      })) {
-        checkShiftGrowth(parser, source(1000), source(10_000), false, name);
-      }
-    } finally {
-      parser.delete();
     }
-  });
+  );
 }
 
 function checkShiftGrowth(parser: Parser, small: string, large: string, hasError: boolean, name: string): void {

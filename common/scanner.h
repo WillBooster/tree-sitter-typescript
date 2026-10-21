@@ -106,6 +106,7 @@ static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
 static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break);
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
+static bool scan_type_parameter_prefix(TSLexer *lexer);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
 
@@ -813,25 +814,27 @@ static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
 static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     advance(lexer);
-    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[ERROR_RECOVERY] &&
+    if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] && !valid_symbols[ERROR_RECOVERY] &&
         !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
     if (lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
-    enum TokenType token = ADJACENT_TYPE_ANGLES;
-    if (!scan_default_trivia(lexer, true, true) || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) {
-        token = SHIFT_TYPE_ANGLES;
-    } else {
-        char word[2];
-        scan_identifier(lexer, word, sizeof(word), false);
-        if (scan_default_trivia(lexer, true, false) && lexer->lookahead == '<') {
-            advance(lexer);
-            if (lexer->lookahead != '!') token = SHIFT_TYPE_ANGLES;
-        }
-    }
+    enum TokenType token = scan_type_parameter_prefix(lexer) ? ADJACENT_TYPE_ANGLES : SHIFT_TYPE_ANGLES;
     if (!valid_symbols[token]) return false;
     lexer->result_symbol = token;
     return true;
+}
+
+static bool scan_type_parameter_prefix(TSLexer *lexer) {
+    if (!scan_default_trivia(lexer, true, true) || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
+    char word[2];
+    scan_identifier(lexer, word, sizeof(word), false);
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    if (lexer->lookahead == '<') {
+        advance(lexer);
+        return lexer->lookahead == '!';
+    }
+    return lexer->lookahead == '>' || lexer->lookahead == ',' || lexer->lookahead == '=' || lexer->lookahead == ':' || is_identifier_part(lexer->lookahead);
 }
 
 static inline bool is_hex_digit(int32_t c) { return is_ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }

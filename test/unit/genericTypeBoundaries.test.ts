@@ -83,6 +83,19 @@ for (const dialect of ['typescript', 'tsx']) {
       ]) {
         const tree = parser.parse(source)!;
         try {
+          expect(tree.rootNode.hasError, source).toBe(true);
+        } finally {
+          tree.delete();
+        }
+      }
+      for (const source of [
+        'f((a as T) << b, c);',
+        'const s = (a as T) << b > c;',
+        'const s = (a satisfies T) << b === c;',
+        'let v = (x as Y) << z, w = 1;',
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
           expect(tree.rootNode.hasError, source).toBe(false);
           expect(tree.rootNode.descendantsOfType('generic_type')).toHaveLength(0);
           expect(

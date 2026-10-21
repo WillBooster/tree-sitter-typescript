@@ -39,7 +39,6 @@ function withTypeArgumentsTarget($, lists) {
 // arguments first and keeps them only before what may follow them (see `scan_type_arguments_end` in scanner.h), reads
 // one way. Comparisons have 0.
 const DYNAMIC_PRECEDENCE = {
-  GENERIC_TYPE_REFERENCE: 1,
   // The type arguments of a call, a tagged template, or a `new`: they also outweigh comparisons that contain
   // instantiation expressions (`f<A<B> | C>(x)`) and an extends clause's type arguments in a misreading
   // (`class C extends f<A<B>, D>(x) {}`).
@@ -180,9 +179,6 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
-      [$.primary_type, $._generic_type_guarded_name],
-      [$.nested_type_identifier, $._generic_nested_type_identifier],
-      [$._type_query_member_expression_in_type_annotation, $._generic_type_query_member_expression],
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
       [$.call_expression, $._type_query_call_expression_in_type_annotation],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
@@ -1278,7 +1274,7 @@ module.exports = function defineGrammar(dialect) {
         choice(
           $.parenthesized_type,
           $.predefined_type,
-          choice($._type_reference_identifier, alias($._type_identifier_before_angle, $.type_identifier)),
+          $._type_reference_identifier,
           $.nested_type_identifier,
           $.generic_type,
           $.object_type,
@@ -1357,11 +1353,7 @@ module.exports = function defineGrammar(dialect) {
 
       _conditional_parameter_pattern: ($) => alias($._conditional_predefined_parameter_name, $.identifier),
 
-      generic_type: ($) =>
-        prec.dynamic(
-          DYNAMIC_PRECEDENCE.GENERIC_TYPE_REFERENCE,
-          prec('call', seq($._generic_type_guarded_name, field('type_arguments', $.type_arguments)))
-        ),
+      generic_type: ($) => prec('call', seq($._generic_type_guarded_name, field('type_arguments', $.type_arguments))),
 
       _heritage_generic_type: ($) =>
         prec('call', seq(field('name', $._generic_type_name), field('type_arguments', $.type_arguments))),
@@ -1801,7 +1793,7 @@ function nestedTypeIdentifier($, generic) {
         )
       ),
       '.',
-      generic ? $._type_reference_arguments_start : optional($._type_reference_arguments_start),
+      ...(generic ? [$._type_reference_arguments_start] : []),
       field('name', $._type_reference_identifier)
     )
   );
@@ -1818,7 +1810,7 @@ function typeQueryMember($, generic) {
       )
     ),
     '.',
-    generic ? $._type_reference_arguments_start : optional($._type_reference_arguments_start),
+    ...(generic ? [$._type_reference_arguments_start] : []),
     field(
       'property',
       choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
