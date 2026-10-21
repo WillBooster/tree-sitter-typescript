@@ -14,9 +14,9 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The supported [willbooster-tree-sitter] runtime is version 7.0.10 or later within 7.x.
+//! The supported [willbooster-tree-sitter] runtime is version 10.0.2 or later within 10.x.
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/7/tree_sitter/struct.Parser.html
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/10.0.2/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 //! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 
@@ -61,8 +61,7 @@ mod tests {
             .expect("Error loading TSX parser");
     }
 
-    // JSX text that is only whitespace around line breaks forms no node, also with CRLF and lone CR line breaks, which
-    // the test corpus cannot hold.
+    // Git and editors may rewrite lone CR line breaks in corpus files.
     #[test]
     fn test_drops_whitespace_jsx_text_at_every_line_break() {
         let mut parser = tree_sitter::Parser::new();
@@ -79,9 +78,6 @@ mod tests {
         }
     }
 
-    // A lone CR, U+2028, and U+2029 end a line in ECMAScript, so a statement ends before them, the arrow function ends
-    // before the next line's `(` instead of being called by it, and a line or HTML comment ends before them. The test corpus cannot hold a lone CR, which
-    // Git and editors may rewrite.
     #[test]
     fn test_ends_lines_at_every_line_terminator() {
         for language in [super::LANGUAGE_TYPESCRIPT, super::LANGUAGE_TSX] {

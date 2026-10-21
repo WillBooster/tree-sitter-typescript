@@ -455,28 +455,35 @@ for (const dialect of ['typescript', 'tsx']) {
 function checkShiftGrowth(parser: Parser, small: string, large: string, hasError: boolean, name: string): void {
   parseShiftCpu(parser, large, hasError);
   parseShiftCpu(parser, large, hasError);
+  // Linux thread CPU accounting can quantize a short parse; equal parse/dispose batches keep that error small.
+  let repetitions = 1;
+  while (repetitions < 32 && parseShiftCpu(parser, small, hasError, repetitions) < 16_000) repetitions *= 2;
   const samples = Array.from({ length: 5 }, () => [
-    parseShiftCpu(parser, small, hasError),
-    parseShiftCpu(parser, large, hasError),
+    parseShiftCpu(parser, small, hasError, repetitions),
+    parseShiftCpu(parser, large, hasError, repetitions),
   ]);
   const smallFastest = Math.min(...samples.map(([smallCpu]) => smallCpu!));
   const largeFastest = Math.min(...samples.map(([, largeCpu]) => largeCpu!));
   expect(
     largeFastest / smallFastest,
-    `${name}: small/large thread CPU microseconds ${JSON.stringify(samples)}`
+    `${name}: ${repetitions} parses per small/large thread CPU sample ${JSON.stringify(samples)}`
   ).toBeLessThan(18);
 }
 
-function parseShiftCpu(parser: Parser, source: string, hasError: boolean): number {
+function parseShiftCpu(parser: Parser, source: string, hasError: boolean, repetitions = 1): number {
   const start = process.threadCpuUsage();
-  const tree = parser.parse(source)!;
-  const elapsed = process.threadCpuUsage(start);
-  try {
-    expect(tree.rootNode.hasError).toBe(hasError);
-    return elapsed.user + elapsed.system;
-  } finally {
-    tree.delete();
+  let errorCount = 0;
+  for (let run = 0; run < repetitions; run++) {
+    const tree = parser.parse(source)!;
+    try {
+      errorCount += Number(tree.rootNode.hasError);
+    } finally {
+      tree.delete();
+    }
   }
+  const elapsed = process.threadCpuUsage(start);
+  expect(errorCount).toBe(Number(hasError) * repetitions);
+  return elapsed.user + elapsed.system;
 }
 
 function checkArguments(tree: Tree, source: string, dialect: string, query: Query, highlights: Query): void {

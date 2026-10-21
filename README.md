@@ -25,14 +25,15 @@ annotations.
 An error-free tree does not guarantee TypeScript validity. These grammars accept adjacent opening angles in
 heritage references such as `class C implements Foo<<T>() => T> {}` and `number<<T>() => T>`, which TypeScript
 rejects. Separated angles (`number< <T>() => T>`) and a parenthesized argument (`number<(<T>() => T)>`) are valid.
-Use the TypeScript compiler when syntax validation is required.
+Use the TypeScript compiler when syntax validation is required. Malformed input may group following declarations
+inside error nodes; consumers must not depend on a particular recovery-tree shape.
 
 ## Usage
 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 7.0.10 or later within 7.x. Its CLI
+for `.tsx` files. The supported runtime is WillBooster version 10.0.2 or later within 10.x. Its CLI
 generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
@@ -79,10 +80,10 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 7.0.10 or later within 7.x:
+fuzzed with. Use version 10.0.2 or later within 10.x:
 
 ```sh
-cargo add willbooster-tree-sitter@7.0.10 --rename tree-sitter
+cargo add willbooster-tree-sitter@10.0.2 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 

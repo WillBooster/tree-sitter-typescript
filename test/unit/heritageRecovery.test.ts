@@ -1,7 +1,7 @@
 import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit';
+import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const MalformedHeaders = [
@@ -15,7 +15,7 @@ const FollowingConstant = 'const sentinel = 1;';
 const Following = `${FollowingFunction}\n${FollowingConstant}\n`;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves following declarations while repairing malformed ${dialect} heritage headers`, async () => {
+  test(`reports malformed ${dialect} heritage and restores following declarations after repair`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
@@ -61,6 +61,8 @@ for (const dialect of ['typescript', 'tsx']) {
 
 function checkFollowing(tree: Tree, source: string, hasError: boolean): void {
   expect(tree.rootNode.hasError, source).toBe(hasError);
+  expectNodeRanges(tree.rootNode, source);
+  if (hasError) return;
   const declarations = tree.rootNode.namedChildren.filter((node) =>
     ['export_statement', 'lexical_declaration'].includes(node.type)
   );

@@ -7,7 +7,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
+import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/plainPredicateNames.ts'), 'utf8');
@@ -101,7 +101,7 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     'interface I { (infer: unknown): infer.value is string; }\nconst sentinel = 1;\n',
     'interface I { (readonly: unknown): readonly.value is string; }\nconst sentinel = 1;\n',
     'interface I { (abstract: unknown): abstract is; }\nconst sentinel = 1;\n',
-  ])('retains editor recovery and sentinel through trivia edits: %s', (original) => {
+  ])('retains error ranges and query agreement through trivia edits: %s', (original) => {
     const parser = new Parser().setLanguage(language);
     let tree: Tree | undefined;
     let source = original;
@@ -129,11 +129,8 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
           }),
           (incremental, fresh) => {
             for (const current of [incremental, fresh]) {
-              const sentinel = current.rootNode
-                .descendantsOfType('lexical_declaration')
-                .find((node) => node.text === 'const sentinel = 1;');
-              expect(sentinel?.startIndex).toBe(next.indexOf('const sentinel = 1;'));
-              expect(sentinel?.endIndex).toBe(next.indexOf('const sentinel = 1;') + 'const sentinel = 1;'.length);
+              expect(current.rootNode.hasError).toBe(true);
+              expectNodeRanges(current.rootNode, next);
             }
             for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
           },
