@@ -185,6 +185,7 @@ module.exports = function defineGrammar(dialect) {
       [$.infer_type],
       [$.infer_type, $.type_predicate],
       [$.asserts, $.type_predicate],
+      [$.asserts, $.primary_type],
       [$.arrow_function, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $._type_query_identifier],
       [$._type_arguments_target, $.internal_module],
@@ -1675,7 +1676,7 @@ module.exports = function defineGrammar(dialect) {
       _type_identifier: ($) => alias(choice(reserved('properties', $.identifier), 'out', 'is'), $.type_identifier),
 
       _type_reference_identifier: ($) =>
-        choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies'), $.type_identifier)),
+        choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies', 'asserts'), $.type_identifier)),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },

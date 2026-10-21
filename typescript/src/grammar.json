@@ -20036,6 +20036,10 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -20091,6 +20095,10 @@
     [
       "asserts",
       "type_predicate"
+    ],
+    [
+      "asserts",
+      "primary_type"
     ],
     [
       "arrow_function",
