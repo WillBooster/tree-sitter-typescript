@@ -104,7 +104,7 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`keeps line breaks and HTML comments outside ${dialect} import-type arguments`, async () => {
+  test(`keeps line breaks and legacy comparison prefixes outside ${dialect} import-type arguments`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {

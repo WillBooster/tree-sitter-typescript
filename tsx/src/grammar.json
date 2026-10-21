@@ -4459,6 +4459,10 @@
               {
                 "type": "STRING",
                 "value": "is"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -4511,6 +4515,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -4580,6 +4588,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -11618,6 +11630,10 @@
               },
               {
                 "type": "STRING",
+                "value": "asserts"
+              },
+              {
+                "type": "STRING",
                 "value": "as"
               },
               {
@@ -11791,6 +11807,10 @@
         {
           "type": "STRING",
           "value": "abstract"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
         },
         {
           "type": "STRING",
@@ -12837,6 +12857,10 @@
         },
         {
           "type": "STRING",
+          "value": "asserts"
+        },
+        {
+          "type": "STRING",
           "value": "as"
         },
         {
@@ -13059,6 +13083,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -15946,6 +15974,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -16024,6 +16056,10 @@
                   {
                     "type": "STRING",
                     "value": "is"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "asserts"
                   }
                 ]
               },
@@ -16086,6 +16122,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -17164,6 +17204,10 @@
               },
               {
                 "type": "STRING",
+                "value": "asserts"
+              },
+              {
+                "type": "STRING",
                 "value": "any"
               },
               {
@@ -18020,6 +18064,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -18786,6 +18834,10 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -20197,6 +20249,10 @@
           {
             "type": "STRING",
             "value": "is"
+          },
+          {
+            "type": "STRING",
+            "value": "asserts"
           }
         ]
       },
@@ -20285,6 +20341,10 @@
     [
       "asserts",
       "type_predicate"
+    ],
+    [
+      "asserts",
+      "primary_type"
     ],
     [
       "arrow_function",
