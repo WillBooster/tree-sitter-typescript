@@ -36,6 +36,8 @@ function withTypeArgumentsTarget($, lists) {
   );
 }
 
+const IMPLEMENTS_TYPE_OPERATOR_NAMES = ['keyof', 'readonly', 'unique', 'infer'];
+
 // Dynamic precedences for the readings of `<` and `>` that GLR keeps where TypeScript's parser, which tries type
 // arguments first and keeps them only before what may follow them (see `scan_type_arguments_end` in scanner.h), reads
 // one way. Comparisons have 0.
@@ -106,6 +108,8 @@ module.exports = function defineGrammar(dialect) {
       $._conditional_parameter_pattern,
       $._implements_keyword_type,
       $._implements_keyword_primary_type,
+      $._implements_keyword_qualified_type,
+      $._implements_keyword_qualified_primary_type,
     ],
 
     precedences: ($, previous) => [
@@ -922,7 +926,11 @@ module.exports = function defineGrammar(dialect) {
           commaSep1(
             seq(
               $._heritage_type_start,
-              choice(seq($.type, $._heritage_type_end), alias($._implements_keyword_type, $.type))
+              choice(
+                seq($.type, $._heritage_type_end),
+                seq(alias($._implements_keyword_qualified_type, $.type), $._heritage_type_end),
+                alias($._implements_keyword_type, $.type)
+              )
             )
           )
         ),
@@ -930,6 +938,54 @@ module.exports = function defineGrammar(dialect) {
       _implements_keyword_type: ($) => alias($._implements_keyword_primary_type, $.primary_type),
 
       _implements_keyword_primary_type: ($) => alias($._implements_keyword_generic_type, $.generic_type),
+
+      _implements_keyword_qualified_type: ($) => alias($._implements_keyword_qualified_primary_type, $.primary_type),
+
+      _implements_keyword_qualified_primary_type: ($) =>
+        choice(
+          alias($._implements_keyword_qualified_name, $.nested_type_identifier),
+          alias($._implements_keyword_qualified_generic_type, $.generic_type)
+        ),
+
+      _implements_keyword_qualified_name: ($) =>
+        prec(
+          'member',
+          seq(
+            field(
+              'module',
+              choice(
+                alias(choice(...IMPLEMENTS_TYPE_OPERATOR_NAMES), $.identifier),
+                alias($._implements_keyword_qualified_module, $.nested_identifier)
+              )
+            ),
+            '.',
+            field('name', $._type_reference_identifier)
+          )
+        ),
+
+      _implements_keyword_qualified_module: ($) =>
+        prec(
+          'member',
+          seq(
+            field(
+              'object',
+              choice(
+                alias(choice(...IMPLEMENTS_TYPE_OPERATOR_NAMES), $.identifier),
+                alias($._implements_keyword_qualified_module, $.member_expression)
+              )
+            ),
+            ...nestedIdentifierTail($)
+          )
+        ),
+
+      _implements_keyword_qualified_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field('name', alias($._implements_keyword_qualified_name, $.nested_type_identifier)),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
 
       _implements_keyword_generic_type: ($) =>
         prec(

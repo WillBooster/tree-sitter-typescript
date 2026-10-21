@@ -3554,3 +3554,52 @@ type GenericFactory = { new<T>(value:T): T; after():void };
 --------------------------------------------------------------------------------
 
 (program (interface_declaration (type_identifier) (interface_body (construct_signature (formal_parameters) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))) (type_alias_declaration (type_identifier) (object_type (construct_signature (type_parameters (type_parameter (type_identifier))) (formal_parameters (required_parameter (identifier) (type_annotation (type_identifier)))) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))))
+
+===============================================
+Qualified contextual names in implements clauses
+===============================================
+
+class C implements readonly.Foo {}
+class Generic implements keyof.Foo<number> {}
+class Deep implements unique.Inner.Deep<string> {}
+class Nested implements infer.Inner.Deeper.Leaf {}
+const following = 1;
+
+----
+
+(program
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (nested_type_identifier module: (identifier) name: (type_identifier))))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (generic_type
+          name: (nested_type_identifier module: (identifier) name: (type_identifier))
+          type_arguments: (type_arguments (predefined_type)))))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (generic_type
+          name: (nested_type_identifier
+            module: (nested_identifier object: (identifier) property: (property_identifier))
+            name: (type_identifier))
+          type_arguments: (type_arguments (predefined_type)))))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (nested_type_identifier
+          module: (nested_identifier
+            object: (member_expression object: (identifier) property: (property_identifier))
+            property: (property_identifier))
+          name: (type_identifier))))
+    body: (class_body))
+  (lexical_declaration (variable_declarator name: (identifier) value: (number))))
