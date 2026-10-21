@@ -3554,3 +3554,43 @@ type GenericFactory = { new<T>(value:T): T; after():void };
 --------------------------------------------------------------------------------
 
 (program (interface_declaration (type_identifier) (interface_body (construct_signature (formal_parameters) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))) (type_alias_declaration (type_identifier) (object_type (construct_signature (type_parameters (type_parameter (type_identifier))) (formal_parameters (required_parameter (identifier) (type_annotation (type_identifier)))) (type_annotation (type_identifier))) (method_signature (property_identifier) (formal_parameters) (type_annotation (predefined_type))))))
+
+==================
+Contextual type names in implements clauses
+==================
+
+class A implements readonly {}
+class B implements unique {}
+class C implements infer {}
+class D implements keyof {}
+class Multiple implements readonly, unique<string> { field = 1; }
+const following = 1;
+
+---
+
+(program
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage (implements_clause (type_identifier)))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage (implements_clause (type_identifier)))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage (implements_clause (type_identifier)))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage (implements_clause (type_identifier)))
+    body: (class_body))
+  (class_declaration
+    name: (type_identifier)
+    (class_heritage
+      (implements_clause
+        (type_identifier)
+        (generic_type name: (type_identifier) type_arguments: (type_arguments (predefined_type)))))
+    body: (class_body (public_field_definition name: (property_identifier) value: (number))))
+  (lexical_declaration
+    (variable_declarator name: (identifier) value: (number))))
