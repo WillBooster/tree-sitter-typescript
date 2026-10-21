@@ -91,6 +91,7 @@ module.exports = function defineGrammar(dialect) {
       $._annotated_signature_context,
       $._type_assertion_context,
       $._adjacent_type_angles,
+      $._shift_type_angles,
     ],
 
     supertypes: ($, previous) => [
@@ -1706,7 +1707,7 @@ function withShiftPrefix($, rule) {
         member.name === 'operator' &&
         member.content.type === 'STRING' &&
         member.content.value === '<<'
-          ? [$._adjacent_type_angles, member]
+          ? [choice($._adjacent_type_angles, $._shift_type_angles), member]
           : [member]
       ),
     };

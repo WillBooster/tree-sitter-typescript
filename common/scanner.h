@@ -82,6 +82,7 @@ enum TokenType {
     ANNOTATED_SIGNATURE_CONTEXT,
     TYPE_ASSERTION_CONTEXT,
     ADJACENT_TYPE_ANGLES,
+    SHIFT_TYPE_ANGLES,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -817,7 +818,19 @@ static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols)
     if (lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
-    lexer->result_symbol = ADJACENT_TYPE_ANGLES;
+    enum TokenType token = ADJACENT_TYPE_ANGLES;
+    if (!scan_default_trivia(lexer, true, true) || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) {
+        token = SHIFT_TYPE_ANGLES;
+    } else {
+        char word[2];
+        scan_identifier(lexer, word, sizeof(word), false);
+        if (scan_default_trivia(lexer, true, false) && lexer->lookahead == '<') {
+            advance(lexer);
+            if (lexer->lookahead != '!') token = SHIFT_TYPE_ANGLES;
+        }
+    }
+    if (!valid_symbols[token]) return false;
+    lexer->result_symbol = token;
     return true;
 }
 
@@ -3178,7 +3191,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             bool statement_end = false;
             bool scanned_content = false;
             if (!scanner->automatic_semicolon_pending && !scan_arrow_context_end(lexer, &can_scan_ternary, valid_symbols[TYPE_ASSERTION_CONTEXT], &statement_end, &scanned_content)) {
-                if (!scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+                if (!scanned_content && (valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
                     return scan_adjacent_type_angles(lexer, valid_symbols);
                 }
                 return valid_symbols[TERNARY_QMARK] && can_scan_ternary && scan_question_mark(lexer, valid_symbols);
@@ -3310,7 +3323,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (!ret && !scanned_content && (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {
             return scan_question_mark(lexer, valid_symbols);
         }
-        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+        if (!ret && !scanned_content && (valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
             return scan_adjacent_type_angles(lexer, valid_symbols);
         }
         return ret;
@@ -3321,7 +3334,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         valid_symbols[PLAIN_RESOURCE_FOR_OF_CONTEXT]) {
         if (valid_symbols[COMPLETED_ARROW_FUNCTION]) {
             while (is_whitespace(lexer->lookahead)) skip(lexer);
-            if (valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+            if ((valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
                 return scan_adjacent_type_angles(lexer, valid_symbols);
             }
             return (valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && scan_question_mark(lexer, valid_symbols);
@@ -3330,7 +3343,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         bool scanned_content = false;
         bool ret = scan_expression_end(lexer, false, &statement_end, valid_symbols, &scanned_content);
         scanner->automatic_semicolon_pending |= statement_end;
-        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+        if (!ret && !scanned_content && (valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
             return scan_adjacent_type_angles(lexer, valid_symbols);
         }
         return ret;
@@ -3367,7 +3380,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             return scan_global_declaration_start(lexer);
         }
         if (!ret && !scanned_content && (lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
-        if (!ret && !scanned_content && valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+        if (!ret && !scanned_content && (valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
             return scan_adjacent_type_angles(lexer, valid_symbols);
         }
         if (!ret && !scanned_content && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] &&
@@ -3419,7 +3432,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_contextual_keyword(scanner, lexer, valid_symbols);
     }
     if ((lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;
-    if (valid_symbols[ADJACENT_TYPE_ANGLES] && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
+    if ((valid_symbols[ADJACENT_TYPE_ANGLES] || valid_symbols[SHIFT_TYPE_ANGLES]) && !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '<') {
         return scan_adjacent_type_angles(lexer, valid_symbols);
     }
     if ((valid_symbols[TERNARY_QMARK] || valid_symbols[COMMENT_OPTIONAL_PARAMETER_MARKER]) && lexer->lookahead == '?') {

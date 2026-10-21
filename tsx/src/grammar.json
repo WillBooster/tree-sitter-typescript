@@ -8226,8 +8226,17 @@
                 }
               },
               {
-                "type": "SYMBOL",
-                "name": "_adjacent_type_angles"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_adjacent_type_angles"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_shift_type_angles"
+                  }
+                ]
               },
               {
                 "type": "FIELD",
@@ -21540,6 +21549,10 @@
     {
       "type": "SYMBOL",
       "name": "_adjacent_type_angles"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_shift_type_angles"
     }
   ],
   "inline": [

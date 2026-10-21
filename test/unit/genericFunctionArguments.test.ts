@@ -300,6 +300,8 @@ for (const dialect of ['typescript', 'tsx']) {
         '<T extends { nested: Box<string> }>(value: T) => T',
         '<T = string>(value?: T) => T',
         '<const T>() => T',
+        '< /* header */ T>() => T',
+        '<T /* header */>() => T',
         '<T, U = Box<string>>(value: T) => U',
         String.raw`<\u0054>() => T`,
         '<Ｔ>() => Ｔ',
@@ -398,6 +400,8 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
       for (const [name, source] of Object.entries({
+        genericCallChain: (count: number) => 'x = ' + 'f<T>(x) <<\n'.repeat(count) + '1;',
+        genericCallArray: (count: number) => 'const values = [' + 'f<T>(x) << g<U>(y),'.repeat(count) + '1];',
         sequence: (count: number) => 'value << other,\n'.repeat(count) + '1;',
         array: (count: number) => 'const values = [' + 'value << other,'.repeat(count) + '1];',
         relational: (count: number) => 'value > other << third,\n'.repeat(count) + '1;',
