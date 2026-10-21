@@ -1489,6 +1489,8 @@ static bool is_type_predicate_name_word(int32_t first, const char *word, bool as
 static bool is_type_probe_word(const char *word, const char *const *words, unsigned count);
 static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size);
 static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const char *word, bool first, bool *unsafe_conditional);
+static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word);
+static bool scan_type_identifier_escape(TSLexer *lexer);
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
     bool conditional_parameter = valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME];
@@ -1503,7 +1505,12 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (private_name) advance(lexer);
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
-    bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+    bool ascii_word = true;
+    if (valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE]) {
+        if (private_name || !scan_type_identifier_name(lexer, word, sizeof(word), &ascii_word)) return false;
+    } else {
+        ascii_word = scan_identifier(lexer, word, sizeof(word), false);
+    }
     TSLexerPosition name_end;
     lexer->get_position(lexer, &name_end);
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME] || conditional_parameter) && !private_name && ascii_word &&
@@ -1638,6 +1645,43 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         lexer->mark_end_at(lexer, &name_end);
     }
     lexer->result_symbol = unqualified ? TYPE_IDENTIFIER_BEFORE_ANGLE : TYPE_REFERENCE_ARGUMENTS_START;
+    return true;
+}
+
+static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word) {
+    unsigned length = 0;
+    while (is_identifier_part(lexer->lookahead)) {
+        if (lexer->lookahead == '\\') {
+            *ascii_word = false;
+            if (!scan_type_identifier_escape(lexer)) return false;
+            continue;
+        }
+        if (lexer->lookahead > 0x7F || length == capacity - 1) {
+            *ascii_word = false;
+        } else {
+            word[length++] = (char)lexer->lookahead;
+        }
+        advance(lexer);
+    }
+    return true;
+}
+
+static bool scan_type_identifier_escape(TSLexer *lexer) {
+    advance(lexer);
+    if (lexer->lookahead != 'u') return false;
+    advance(lexer);
+    if (lexer->lookahead == '{') {
+        advance(lexer);
+        if (!is_hex_digit(lexer->lookahead)) return false;
+        do advance(lexer); while (is_hex_digit(lexer->lookahead));
+        if (lexer->lookahead != '}') return false;
+        advance(lexer);
+    } else {
+        for (unsigned digits = 0; digits < 4; digits++) {
+            if (!is_hex_digit(lexer->lookahead)) return false;
+            advance(lexer);
+        }
+    }
     return true;
 }
 

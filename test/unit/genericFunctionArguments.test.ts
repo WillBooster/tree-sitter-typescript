@@ -39,6 +39,97 @@ const following = 1;
 const InitialArgument = '<T>() => T';
 
 for (const dialect of ['typescript', 'tsx']) {
+  test(`validates escaped generic type names through ${dialect} edits`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
+    const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
+      (kind) =>
+        new Query(
+          language,
+          [grammar[kind]]
+            .flat()
+            .map((file) => fs.readFileSync(file, 'utf8'))
+            .join('\n')
+        )
+    );
+    const prefix = 'type Result = ';
+    const suffix = '<number>;\nconst following = 1;';
+    let name = 'Foo';
+    let source = prefix + name + suffix;
+    let tree = parser.parse(source)!;
+    const check = (parsed: Tree, text: string, identifier: string, hasError: boolean): void => {
+      expect(parsed.rootNode.hasError, text).toBe(hasError);
+      if (!hasError) {
+        const generic = parsed.rootNode.descendantsOfType('generic_type')[0]!;
+        const typeName = generic.childForFieldName('name')!;
+        expect([typeName.text, typeName.startIndex, typeName.endIndex]).toEqual([
+          identifier,
+          prefix.length,
+          prefix.length + identifier.length,
+        ]);
+        expect(generic.childForFieldName('type_arguments')!.text).toBe('<number>');
+        expect(parsed.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+      }
+    };
+    const captures = (parsed: Tree): unknown =>
+      queries.map((query) =>
+        query
+          .captures(parsed.rootNode)
+          .map(({ name: capture, node }) => [capture, node.type, node.text, node.startIndex, node.endIndex])
+      );
+    try {
+      check(tree, source, name, false);
+      const validNames = [String.raw`\u0046oo`, String.raw`\u{46}oo`, 'Ｆｏｏ', '𐐀'];
+      const invalidNames = [
+        String.raw`\u`,
+        '\\',
+        String.raw`\u{}`,
+        String.raw`\u123`,
+        String.raw`\u{41`,
+        String.raw`\u00zz`,
+        String.raw`A\u`,
+        '#Foo',
+      ];
+      const edits = [
+        ...validNames.map((name) => ({ name, hasError: false })),
+        ...invalidNames.map((name) => ({ name, hasError: true })),
+        { name: 'Foo', hasError: false },
+      ];
+      for (const { name: nextName, hasError } of edits) {
+        const next = prefix + nextName + suffix;
+        const previous = tree;
+        tree = compareEditedTree(
+          parser,
+          previous,
+          next,
+          new Edit({
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + name.length,
+            newEndIndex: prefix.length + nextName.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + name.length),
+            newEndPosition: position(next, prefix.length + nextName.length),
+          }),
+          (incremental, fresh) => {
+            check(incremental, next, nextName, hasError);
+            check(fresh, next, nextName, hasError);
+            expect(captures(incremental)).toEqual(captures(fresh));
+          },
+          true
+        );
+        previous.delete();
+        source = next;
+        name = nextName;
+      }
+    } finally {
+      tree.delete();
+      for (const query of queries) query.delete();
+      parser.delete();
+    }
+  });
+
   test(`preserves adjacent generic function arguments and shift operators through ${dialect} edits`, async () => {
     await Parser.init();
     const parser = new Parser();
