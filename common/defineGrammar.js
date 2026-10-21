@@ -89,6 +89,7 @@ module.exports = function defineGrammar(dialect) {
       $._bare_assertion_context,
       $._annotated_signature_context,
       $._type_assertion_context,
+      $._import_type_arguments_start,
     ],
 
     supertypes: ($, previous) => [
@@ -1146,12 +1147,12 @@ module.exports = function defineGrammar(dialect) {
       _type_query_member_expression_in_type_annotation: ($) => typeQueryMember($, false),
 
       _type_query_call_expression_in_type_annotation: ($) =>
-        seq(
-          field(
-            'function',
-            choice($.import, alias($._type_query_member_expression_in_type_annotation, $.member_expression))
-          ),
-          field('arguments', $.arguments)
+        choice(
+          importType($),
+          seq(
+            field('function', alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
+            field('arguments', $.arguments)
+          )
         ),
 
       asserts: ($) =>
@@ -1438,18 +1439,27 @@ module.exports = function defineGrammar(dialect) {
           ']'
         ),
       _type_query_call_expression: ($) =>
-        seq(
-          field(
-            'function',
-            choice(
-              $.import,
-              $._type_query_identifier,
-              alias($._type_query_member_expression, $.member_expression),
-              alias($._type_query_subscript_expression, $.subscript_expression)
-            )
-          ),
-          field('arguments', $.arguments)
+        choice(
+          importType($),
+          seq(
+            field(
+              'function',
+              choice(
+                $._type_query_identifier,
+                alias($._type_query_member_expression, $.member_expression),
+                alias($._type_query_subscript_expression, $.subscript_expression)
+              )
+            ),
+            field('arguments', $.arguments)
+          )
         ),
+
+      _typed_import_arguments: ($) => {
+        const rule = JavaScript.grammar.rules.arguments;
+        const members = rule.members;
+        return { ...rule, members: [...members.slice(0, -1), $._import_type_arguments_start, members.at(-1)] };
+      },
+
       _type_query_instantiation_expression: ($) =>
         seq(
           field(
@@ -1767,6 +1777,16 @@ function nestedTypeIdentifier($, generic) {
       '.',
       ...(generic ? [$._type_reference_arguments_start] : []),
       field('name', $._type_reference_identifier)
+    )
+  );
+}
+
+function importType($) {
+  return seq(
+    field('function', $.import),
+    choice(
+      field('arguments', $.arguments),
+      seq(field('arguments', alias($._typed_import_arguments, $.arguments)), field('type_arguments', $.type_arguments))
     )
   );
 }

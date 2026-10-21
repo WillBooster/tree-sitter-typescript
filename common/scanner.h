@@ -81,6 +81,7 @@ enum TokenType {
     BARE_ASSERTION_CONTEXT,
     ANNOTATED_SIGNATURE_CONTEXT,
     TYPE_ASSERTION_CONTEXT,
+    IMPORT_TYPE_ARGUMENTS_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3147,6 +3148,17 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
+        lexer->mark_end(lexer);
+        if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != ')') return false;
+        advance(lexer);
+        if (!scan_default_trivia(lexer, false, false) || lexer->lookahead != '<') return false;
+        advance(lexer);
+        if (lexer->lookahead == '=' || lexer->lookahead == '!') return false;
+        lexer->result_symbol = IMPORT_TYPE_ARGUMENTS_START;
+        return true;
+    }
 
     if (!(valid_symbols[TEMPLATE_CHARS] && valid_symbols[AUTOMATIC_SEMICOLON])) {
         if (valid_symbols[FUNCTION_SIGNATURE_END]) return scan_function_signature_end(scanner, lexer, valid_symbols);
