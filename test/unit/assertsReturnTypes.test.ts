@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -12,6 +12,12 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 const Prefix = `type asserts<T = unknown> = T;
 namespace asserts { export interface X {} }
 let qualified: asserts.X;
+type RequiredLabel = [asserts: string];
+type OptionalLabel = [asserts?: string];
+type RestLabel = [...asserts: string[]];
+type Untyped = (asserts) => void;
+type OptionalUntyped = (asserts?) => void;
+type RestUntyped = (...asserts) => void;
 const genericArrow = <asserts,>(value: asserts) => value;
 interface ExtendsBare extends asserts {}
 interface ExtendsQualified extends asserts.X {}
@@ -50,7 +56,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
-      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters'
+      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding)'
     );
     const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
     const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
@@ -137,6 +143,8 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   expect(tree.rootNode.hasError, source).toBe(false);
   const expected: (string | number | boolean)[][] = [];
   const expectedParameters: (string | number)[][] = [];
+  const expectedLabels: (string | number | boolean)[][] = [];
+  const expectedBindings: (string | number | boolean)[][] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isFunctionLike(node) && node.type) {
       expected.push([
@@ -157,9 +165,28 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
       const end = node.getChildren(reference).find((child) => child.kind === ts.SyntaxKind.GreaterThanToken)!.end;
       expectedParameters.push([source.slice(start, end), start, end]);
     }
+    if (ts.isNamedTupleMember(node)) {
+      expectedLabels.push([
+        node.name.getText(reference),
+        node.name.getStart(reference),
+        node.name.end,
+        !!node.questionToken,
+        !!node.dotDotDotToken,
+      ]);
+    }
+    if (ts.isParameter(node)) {
+      expectedBindings.push([
+        node.name.getText(reference),
+        node.name.getStart(reference),
+        node.name.end,
+        !!node.questionToken,
+        !!node.dotDotDotToken,
+      ]);
+    }
     ts.forEachChild(node, visit);
   };
   visit(reference);
+
   const captures = query.captures(tree.rootNode);
   const actual = captures
     .filter(({ name }) => name === 'return')
@@ -168,8 +195,25 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
       return [returned.text, returned.startIndex, returned.endIndex, returned.type === 'asserts'];
     });
   expect(actual).toEqual(expected);
+  expect(captures.filter(({ name }) => name === 'tupleLabel').map(({ node }) => parameterRange(node))).toEqual(
+    expectedLabels
+  );
+  expect(captures.filter(({ name }) => name === 'binding').map(({ node }) => parameterRange(node))).toEqual(
+    expectedBindings
+  );
   expect(
     captures.filter(({ name }) => name === 'parameters').map(({ node }) => [node.text, node.startIndex, node.endIndex])
   ).toEqual(expectedParameters);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+}
+
+function parameterRange(node: Node): (string | number | boolean)[] {
+  const name = node.type === 'rest_pattern' ? node.namedChildren[0]! : node;
+  return [
+    name.text,
+    name.startIndex,
+    name.endIndex,
+    node.parent!.type === 'optional_parameter',
+    node.type === 'rest_pattern',
+  ];
 }

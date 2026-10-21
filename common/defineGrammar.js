@@ -1128,7 +1128,7 @@ module.exports = function defineGrammar(dialect) {
           optional($._initializer)
         ),
 
-      pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
+      pattern: ($, previous) => choice(previous, alias(choice($._predefined_parameter_name, 'asserts'), $.identifier)),
 
       _parameter_name: ($) =>
         seq(
@@ -1215,6 +1215,7 @@ module.exports = function defineGrammar(dialect) {
             choice(
               'as',
               'satisfies',
+              'asserts',
               'any',
               'number',
               'boolean',

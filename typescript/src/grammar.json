@@ -10808,8 +10808,17 @@
         {
           "type": "ALIAS",
           "content": {
-            "type": "SYMBOL",
-            "name": "_predefined_parameter_name"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_predefined_parameter_name"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
+              }
+            ]
           },
           "named": true,
           "value": "identifier"
@@ -17141,6 +17150,10 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               },
               {
                 "type": "STRING",
