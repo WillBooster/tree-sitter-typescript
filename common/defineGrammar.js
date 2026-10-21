@@ -89,6 +89,7 @@ module.exports = function defineGrammar(dialect) {
       $._bare_assertion_context,
       $._annotated_signature_context,
       $._type_assertion_context,
+      $._generic_function_arguments_start,
     ],
 
     supertypes: ($, previous) => [
@@ -1523,7 +1524,8 @@ module.exports = function defineGrammar(dialect) {
           'object'
         ),
 
-      type_arguments: ($) => seq('<', commaSep1($.type), optional(','), '>'),
+      type_arguments: ($) =>
+        seq(choice('<', alias($._generic_function_arguments_start, '<')), commaSep1($.type), optional(','), '>'),
 
       object_type: ($) =>
         seq(

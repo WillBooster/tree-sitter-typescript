@@ -18901,8 +18901,22 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_generic_function_arguments_start"
+              },
+              "named": false,
+              "value": "<"
+            }
+          ]
         },
         {
           "type": "SEQ",
@@ -21416,6 +21430,10 @@
     {
       "type": "SYMBOL",
       "name": "_type_assertion_context"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_generic_function_arguments_start"
     }
   ],
   "inline": [

@@ -1,0 +1,14 @@
+================================================================================
+Adjacent generic function arguments retain shifts and method contexts
+================================================================================
+
+declare function f<T>(): T;
+interface Maker { create <T>(): T; new <T>(): T; }
+const called = f<<T>() => T>();
+const instantiated = f<<T = string>(value?: T) => T>;
+const shifted = 8 << 1;
+function after<T>() { return f<<U>(value: U) => U>(); }
+
+--------------------------------------------------------------------------------
+
+(program (ambient_declaration (function_signature name: (identifier) type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters) return_type: (type_annotation (type_identifier)))) (interface_declaration name: (type_identifier) body: (interface_body (method_signature name: (property_identifier) type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters) return_type: (type_annotation (type_identifier))) (construct_signature type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters) type: (type_annotation (type_identifier))))) (lexical_declaration (variable_declarator name: (identifier) value: (call_expression function: (identifier) type_arguments: (type_arguments (function_type type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters) return_type: (type_identifier))) arguments: (arguments)))) (lexical_declaration (variable_declarator name: (identifier) value: (instantiation_expression (identifier) type_arguments: (type_arguments (function_type type_parameters: (type_parameters (type_parameter name: (type_identifier) value: (default_type (predefined_type)))) parameters: (formal_parameters (optional_parameter pattern: (identifier) type: (type_annotation (type_identifier)))) return_type: (type_identifier)))))) (lexical_declaration (variable_declarator name: (identifier) value: (binary_expression left: (number) right: (number)))) (function_declaration name: (identifier) type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters) body: (statement_block (return_statement (call_expression function: (identifier) type_arguments: (type_arguments (function_type type_parameters: (type_parameters (type_parameter name: (type_identifier))) parameters: (formal_parameters (required_parameter pattern: (identifier) type: (type_annotation (type_identifier)))) return_type: (type_identifier))) arguments: (arguments))))))
