@@ -4463,6 +4463,10 @@
               {
                 "type": "STRING",
                 "value": "is"
+              },
+              {
+                "type": "STRING",
+                "value": "asserts"
               }
             ]
           },
@@ -4515,6 +4519,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -4584,6 +4592,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -13059,6 +13071,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -15946,6 +15962,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -16024,6 +16044,10 @@
                   {
                     "type": "STRING",
                     "value": "is"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "asserts"
                   }
                 ]
               },
@@ -16086,6 +16110,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -17972,6 +18000,10 @@
                       {
                         "type": "STRING",
                         "value": "is"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "asserts"
                       }
                     ]
                   },
@@ -20003,6 +20035,10 @@
           {
             "type": "STRING",
             "value": "is"
+          },
+          {
+            "type": "STRING",
+            "value": "asserts"
           }
         ]
       },
@@ -20036,10 +20072,6 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
-              },
-              {
-                "type": "STRING",
-                "value": "asserts"
               }
             ]
           },

@@ -10,6 +10,13 @@ import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `type asserts<T = unknown> = T;
+namespace asserts { export interface X {} }
+let qualified: asserts.X;
+const genericArrow = <asserts,>(value: asserts) => value;
+interface ExtendsBare extends asserts {}
+interface ExtendsQualified extends asserts.X {}
+interface ExtendsGeneric extends asserts<string> {}
+declare function qualifiedReturn(): asserts.X;
 declare function standalone(value: unknown): asserts;
 interface I {
   method(value: unknown): asserts;
@@ -34,12 +41,16 @@ const InitialType = 'asserts';
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`preserves asserts type references and predicates through ${dialect} edits`, async () => {
+    const prefix =
+      (dialect === 'tsx'
+        ? 'const view = <asserts.View />; const flat = <asserts />; const paired = <asserts>text</asserts>;\n'
+        : '') + Prefix;
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
-      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return)'
+      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters'
     );
     const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
     const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
@@ -59,12 +70,14 @@ for (const dialect of ['typescript', 'tsx']) {
           .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
       );
     let annotation = InitialType;
-    let source = Prefix + annotation + Suffix;
+    let source = prefix + annotation + Suffix;
     let tree = parser.parse(source)!;
     try {
       checkReturns(tree, source, dialect, query);
       for (const nextType of [
         'asserts<string>',
+        'asserts.X',
+        'asserts.X<string>',
         'asserts value',
         'asserts value is string',
         'value is asserts',
@@ -73,19 +86,19 @@ for (const dialect of ['typescript', 'tsx']) {
         'asserts\n',
         InitialType,
       ]) {
-        const next = Prefix + nextType + Suffix;
+        const next = prefix + nextType + Suffix;
         const previous = tree;
         tree = compareEditedTree(
           parser,
           previous,
           next,
           new Edit({
-            startIndex: Prefix.length,
-            oldEndIndex: Prefix.length + annotation.length,
-            newEndIndex: Prefix.length + nextType.length,
-            startPosition: position(source, Prefix.length),
-            oldEndPosition: position(source, Prefix.length + annotation.length),
-            newEndPosition: position(next, Prefix.length + nextType.length),
+            startIndex: prefix.length,
+            oldEndIndex: prefix.length + annotation.length,
+            newEndIndex: prefix.length + nextType.length,
+            startPosition: position(source, prefix.length),
+            oldEndPosition: position(source, prefix.length + annotation.length),
+            newEndPosition: position(next, prefix.length + nextType.length),
           }),
           (incremental, fresh) => {
             checkReturns(incremental, next, dialect, query);
@@ -123,6 +136,7 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   ).toEqual([]);
   expect(tree.rootNode.hasError, source).toBe(false);
   const expected: (string | number | boolean)[][] = [];
+  const expectedParameters: (string | number)[][] = [];
   const visit = (node: ts.Node): void => {
     if (ts.isFunctionLike(node) && node.type) {
       expected.push([
@@ -132,13 +146,30 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
         ts.isTypePredicateNode(node.type) && !!node.type.assertsModifier,
       ]);
     }
+    if (
+      (ts.isFunctionLike(node) ||
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isClassDeclaration(node)) &&
+      node.typeParameters?.length
+    ) {
+      const start = node.typeParameters.pos - 1;
+      const end = node.getChildren(reference).find((child) => child.kind === ts.SyntaxKind.GreaterThanToken)!.end;
+      expectedParameters.push([source.slice(start, end), start, end]);
+    }
     ts.forEachChild(node, visit);
   };
   visit(reference);
-  const actual = query.captures(tree.rootNode).map(({ node }) => {
-    const returned = node.type.endsWith('_annotation') ? node.namedChildren[0]! : node;
-    return [returned.text, returned.startIndex, returned.endIndex, returned.type === 'asserts'];
-  });
+  const captures = query.captures(tree.rootNode);
+  const actual = captures
+    .filter(({ name }) => name === 'return')
+    .map(({ node }) => {
+      const returned = node.type.endsWith('_annotation') ? node.namedChildren[0]! : node;
+      return [returned.text, returned.startIndex, returned.endIndex, returned.type === 'asserts'];
+    });
   expect(actual).toEqual(expected);
+  expect(
+    captures.filter(({ name }) => name === 'parameters').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(expectedParameters);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
