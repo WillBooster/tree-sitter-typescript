@@ -20903,6 +20903,16 @@
     ],
     [
       {
+        "type": "SYMBOL",
+        "name": "update_expression"
+      },
+      {
+        "type": "STRING",
+        "value": "unary"
+      }
+    ],
+    [
+      {
         "type": "STRING",
         "value": "extends"
       },

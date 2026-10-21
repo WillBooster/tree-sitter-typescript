@@ -114,6 +114,7 @@ module.exports = function defineGrammar(dialect) {
       // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
       // expression (`<T>a<B>` before a line break and `[0]`).
       ['member', 'unary'],
+      [$.update_expression, 'unary'],
       ['extends', 'instantiation'],
       ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
       // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
