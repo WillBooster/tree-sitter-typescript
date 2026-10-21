@@ -12,6 +12,7 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 const Prefix = `type asserts<T = unknown> = T;
 namespace asserts { export interface X {} }
 let qualified: asserts.X;
+const computedObject = { [asserts]: true, [asserts.x]: false };
 class ComputedField { [asserts]: number }
 class ComputedMethod { [asserts]() {} }
 interface ComputedInterface { [asserts]: 1; [asserts.x]: 2 }
