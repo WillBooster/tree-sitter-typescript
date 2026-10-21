@@ -512,8 +512,9 @@ foo: for (;;) {
   (labeled_statement
     (statement_identifier)
     (for_statement
-      (empty_statement)
-      (empty_statement)
+      (for_clause
+        (empty_statement)
+        (empty_statement))
       (statement_block
         (break_statement)
         (expression_statement
@@ -573,8 +574,9 @@ foo: for (;;) {
   (labeled_statement
     (statement_identifier)
     (for_statement
-      (empty_statement)
-      (empty_statement)
+      (for_clause
+        (empty_statement)
+        (empty_statement))
       (statement_block
         (break_statement)
         (expression_statement

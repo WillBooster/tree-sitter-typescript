@@ -284,7 +284,12 @@ for (const dialect of ['typescript', 'tsx']) {
           expect(
             tree.rootNode.descendantsOfType('variable_declarator').map((node) => node.childForFieldName('name')?.text)
           ).toEqual([name, name]);
-          expect(tree.rootNode.descendantsOfType('for_in_statement')[0]?.childForFieldName('left')?.text).toBe(name);
+          expect(
+            tree.rootNode
+              .descendantsOfType('for_in_statement')[0]
+              ?.childForFieldName('header')
+              ?.childForFieldName('left')?.text
+          ).toBe(name);
         } finally {
           tree.delete();
         }

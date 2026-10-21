@@ -89,7 +89,9 @@ for (const dialect of ['typescript', 'tsx']) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
-          expect(tree.rootNode.firstNamedChild?.childForFieldName('initializer')?.type).toBe('using_declaration');
+          expect(
+            tree.rootNode.firstNamedChild?.childForFieldName('header')?.childForFieldName('initializer')?.type
+          ).toBe('using_declaration');
         } finally {
           tree.delete();
         }

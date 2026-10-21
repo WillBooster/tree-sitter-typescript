@@ -13,6 +13,8 @@ export async function loadCurrentWasmBuild(grammar: string): Promise<Language> {
   const sources = [
     'common/defineGrammar.js',
     'common/scanner.h',
+    'common/functionContext.h',
+    'common/typeScriptKeywords.h',
     `${grammar}/grammar.js`,
     `${grammar}/src/parser.c`,
     `${grammar}/src/scanner.c`,

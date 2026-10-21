@@ -5,7 +5,7 @@
     "": {
       "name": "@willbooster/tree-sitter-typescript",
       "dependencies": {
-        "@willbooster/tree-sitter-javascript": "5.0.3",
+        "@willbooster/tree-sitter-javascript": "8.0.5",
       },
       "devDependencies": {
         "@tsconfig/bun": "1.0.11",
@@ -437,7 +437,7 @@
 
     "@willbooster/shared-lib": ["@willbooster/shared-lib@10.18.0", "", {}, "sha512-R3wgsiueBaFvWU/uj8JXCvq3nkRQPfsb7j2ShZlkgAHYodiOBQt13kXuj/kDiEI9YJTdn9b0UvchuV3JBootOw=="],
 
-    "@willbooster/tree-sitter-javascript": ["@willbooster/tree-sitter-javascript@5.0.3", "", { "peerDependencies": { "@willbooster/web-tree-sitter": "^2.0.0" }, "optionalPeers": ["@willbooster/web-tree-sitter"] }, "sha512-h/8FPHqPttnm0XV9V2pZMZUCCHl/IFWMN4dGowLydWZaUg6PJKauurOSfARpn5dj+72+BNkJnrw2sp/K+7KY4A=="],
+    "@willbooster/tree-sitter-javascript": ["@willbooster/tree-sitter-javascript@8.0.5", "", { "peerDependencies": { "@willbooster/web-tree-sitter": "^7.0.5" }, "optionalPeers": ["@willbooster/web-tree-sitter"] }, "sha512-H/EvfwE0wBR5ekMziHosKFseZEE+lfmCds1fHURdcKMBzasKhGuPr4776gdE0nouReCbnlNksYUbUswoxJU9Hw=="],
 
     "@willbooster/wb": ["@willbooster/wb@22.26.1", "", { "dependencies": { "@textlint-rule/textlint-rule-no-invalid-control-character": "3.0.0", "@textlint/kernel": "15.8.0", "@textlint/module-interop": "15.8.0", "@textlint/textlint-plugin-markdown": "15.8.0", "chalk": "6.0.1", "code-gauge": "10.2.2", "dotenv": "18.0.7", "dotenv-expand": "13.0.0", "fast-glob": "3.3.3", "fastest-levenshtein": "1.0.16", "globby": "16.2.4", "jsonc-parser": "3.3.1", "minimal-promise-pool": "6.0.4", "semver": "7.8.5", "smol-toml": "1.9.1", "textlint-filter-rule-node-types": "1.1.0", "textlint-rule-ja-space-between-half-and-full-width": "3.0.3", "textlint-rule-no-zero-width-spaces": "1.0.1", "yargs": "18.2.0", "zod": "4.6.5" }, "bin": { "wb": "bin/index.js" } }, "sha512-Lt7YhUN+wbxKjG2nhpaaaqYkYRb2ian+HrsLGzI9WUZnXzbg5jRrWVvCs4+aOaYQgqd7N9td6I8TaLGhLrsscQ=="],
 

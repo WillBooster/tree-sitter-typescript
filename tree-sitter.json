@@ -6,7 +6,7 @@
       "camelcase": "TypeScript",
       "scope": "source.ts",
       "path": "typescript",
-      "external-files": ["common/scanner.h"],
+      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
       "file-types": ["ts"],
       "highlights": ["queries/highlights.scm", "javascript/queries/highlights.scm"],
       "injections": "javascript/queries/injections.scm",
@@ -19,7 +19,7 @@
       "camelcase": "TSX",
       "scope": "source.tsx",
       "path": "tsx",
-      "external-files": ["common/scanner.h"],
+      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
       "file-types": ["tsx"],
       "highlights": [
         "queries/highlights.scm",
@@ -36,7 +36,7 @@
       "camelcase": "Flow",
       "scope": "source.js.flow",
       "path": "tsx",
-      "external-files": ["common/scanner.h"],
+      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
       "file-types": ["js"],
       "highlights": [
         "queries/highlights.scm",

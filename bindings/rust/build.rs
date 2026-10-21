@@ -27,8 +27,9 @@ fn main() {
             println!("cargo:rerun-if-changed={}", path.to_str().unwrap());
         }
     }
-    // Both scanner.c files include the shared scanner.
-    println!("cargo:rerun-if-changed=common/scanner.h");
+    for header in ["scanner.h", "typeScriptKeywords.h", "functionContext.h"] {
+        println!("cargo:rerun-if-changed=common/{header}");
+    }
 
     c_config.compile("tree-sitter-typescript");
 }
