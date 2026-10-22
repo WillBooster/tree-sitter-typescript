@@ -55,12 +55,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         smaller.push(parseCpuTime(16_000, deadline));
         larger.push(parseCpuTime(32_000, deadline));
       }
-      // Thread CPU time includes foreground GC and allocation overhead. Compare the fastest warmed
-      // samples so transient work does not look like superlinear parser growth on a busy runner.
-      const smallerFastest = Math.min(...smaller);
-      const largerFastest = Math.min(...larger);
-      expect(largerFastest, `parse CPU samples (microseconds): ${JSON.stringify({ smaller, larger })}`).toBeLessThan(
-        3 * smallerFastest
+      // Thread CPU time includes foreground GC and allocation overhead. A median prevents a single
+      // unusually fast or slow sample from deciding whether parser growth is superlinear.
+      const smallerMedian = smaller.toSorted((a, b) => a - b)[2]!;
+      const largerMedian = larger.toSorted((a, b) => a - b)[2]!;
+      expect(largerMedian, `parse CPU samples (microseconds): ${JSON.stringify({ smaller, larger })}`).toBeLessThan(
+        3 * smallerMedian
       );
     },
     2 * parseHangCeilingMs
