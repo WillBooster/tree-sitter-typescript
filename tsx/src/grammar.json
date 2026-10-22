@@ -4463,6 +4463,10 @@
               {
                 "type": "STRING",
                 "value": "asserts"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_contextual_type_identifier"
               }
             ]
           },
@@ -4519,6 +4523,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -4592,6 +4600,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -13099,6 +13111,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -15763,6 +15779,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -16346,6 +16366,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -16428,6 +16452,10 @@
                   {
                     "type": "STRING",
                     "value": "asserts"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_contextual_type_identifier"
                   }
                 ]
               },
@@ -16494,6 +16522,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -16625,6 +16657,10 @@
                         {
                           "type": "STRING",
                           "value": "satisfies"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_contextual_type_identifier"
                         }
                       ]
                     },
@@ -16682,6 +16718,10 @@
                               {
                                 "type": "STRING",
                                 "value": "satisfies"
+                              },
+                              {
+                                "type": "SYMBOL",
+                                "name": "_contextual_type_identifier"
                               }
                             ]
                           },
@@ -17342,6 +17382,10 @@
                           {
                             "type": "STRING",
                             "value": "unique"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "_contextual_type_identifier"
                           }
                         ]
                       },
@@ -17609,6 +17653,10 @@
               {
                 "type": "STRING",
                 "value": "function"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_contextual_type_identifier"
               }
             ]
           },
@@ -18397,6 +18445,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "_contextual_type_identifier"
                       }
                     ]
                   },
@@ -18587,6 +18639,10 @@
                     {
                       "type": "STRING",
                       "value": "is"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_contextual_type_identifier"
                     }
                   ]
                 },

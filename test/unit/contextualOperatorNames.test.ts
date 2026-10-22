@@ -37,13 +37,27 @@ const inferred = as as (typeof as);
 const checkedClass = satisfies satisfies (typeof satisfies);
 const prototype = value as (typeof as.prototype);
 type Tuple = [as: string, satisfies?: number, ...as: boolean[]];
+type ContextualTuple = [get: string, type?: number, ...accessor: boolean[]];
 declare namespace as { namespace Types { class Value { value: number; } } }
 declare namespace satisfies { namespace Types { class Value { value: number; } } }
 type Qualified = as.Types.Value;
+declare namespace get { interface Value {} namespace Inner { interface Value {} interface Generic<T> {} } }
+declare namespace type { interface Value {} }
+declare namespace Outer { namespace get { interface Value {} } }
+import GetNamespace = get;
+import GetInner = get.Inner;
+type QualifiedGet = get.Value;
+type NestedGet = get.Inner.Value;
+type MiddleGet = Outer.get.Value;
+type GenericGet = get.Inner.Generic<string>;
+function qualifiedTypes(value: get.Value): type.Value { return value; }
 const qualified = value as as.Types.Value;
 const checkedQualified = value satisfies satisfies.Types.Value;
 function isString(as: unknown): as is string { return typeof as === 'string'; }
+function contextualPredicate(type: unknown): type is string { return typeof type === 'string'; }
+const contextualArrow = <T,>(accessor: T): accessor is T => true;
 function ensure(satisfies: unknown): asserts satisfies { if (!satisfies) throw Error(); }
+function contextualEnsure(type: unknown): asserts type { if (!type) throw Error(); }
 const identity = <as,>(item: as) => item;
 const defaulted = <satisfies = string,>(item: satisfies) => item;
 `;
@@ -56,6 +70,9 @@ const leftNamespacedJsx = <as:ns />;
 const nestedJsx = <as attr={1}><satisfies>text</satisfies><div x={<as />} /></as>;
 const memberJsx = <as.Types.Value />;
 const attributeJsx = <div as={1} satisfies={2} />;
+const contextualJsx = <get />;
+const contextualNamespacedJsx = <type:tag />;
+const contextualMemberJsx = <get.Inner.Value />;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -106,6 +123,12 @@ for (const dialect of ['typescript', 'tsx']) {
               ]
             : []),
         ].map((start): [number, string, string] => [start, 'as', 'satisfies']),
+        [
+          source.indexOf('contextualPredicate(type: unknown): type') + 'contextualPredicate(type: unknown): '.length,
+          'type',
+          'get',
+        ],
+        [source.indexOf('ContextualTuple = [get') + 'ContextualTuple = ['.length, 'get', 'set'],
         [source.indexOf('get: (get)') + 'get: ('.length, 'get', 'set'],
         [source.indexOf('accessor: (accessor)') + 'accessor: ('.length, 'accessor', 'type'],
       ];

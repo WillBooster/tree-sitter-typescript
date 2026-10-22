@@ -541,7 +541,13 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _jsx_identifier: ($, previous) =>
-        choice(previous, alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.identifier)),
+        choice(
+          previous,
+          alias(
+            choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+            $.identifier
+          )
+        ),
 
       nested_identifier: ($) =>
         prec(
@@ -551,7 +557,10 @@ module.exports = function defineGrammar(dialect) {
               'object',
               choice(
                 reserved('properties', $.identifier),
-                alias(choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.identifier),
+                alias(
+                  choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+                  $.identifier
+                ),
                 alias($.nested_identifier, $.member_expression)
               )
             ),
@@ -1121,7 +1130,10 @@ module.exports = function defineGrammar(dialect) {
               choice(
                 $.string,
                 reserved('properties', $.identifier),
-                alias(choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.identifier),
+                alias(
+                  choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+                  $.identifier
+                ),
                 $.nested_identifier
               )
             ),
@@ -1136,7 +1148,10 @@ module.exports = function defineGrammar(dialect) {
           '=',
           choice(
             $.identifier,
-            alias(choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.identifier),
+            alias(
+              choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+              $.identifier
+            ),
             $.nested_identifier
           ),
           $._semicolon
@@ -1161,7 +1176,7 @@ module.exports = function defineGrammar(dialect) {
               'type',
               choice(
                 $._type_identifier,
-                alias(choice('abstract', 'as', 'satisfies'), $.type_identifier),
+                alias(choice('abstract', 'as', 'satisfies', $._contextual_type_identifier), $.type_identifier),
                 $.nested_type_identifier,
                 alias($._heritage_generic_type, $.generic_type)
               )
@@ -1260,7 +1275,8 @@ module.exports = function defineGrammar(dialect) {
                     'unknown',
                     'never',
                     'object',
-                    'unique'
+                    'unique',
+                    $._contextual_type_identifier
                   ),
                   $.identifier
                 ),
@@ -1313,7 +1329,8 @@ module.exports = function defineGrammar(dialect) {
               'unique',
               'abstract',
               'import',
-              'function'
+              'function',
+              $._contextual_type_identifier
             ),
             $.identifier
           ),
@@ -1468,7 +1485,8 @@ module.exports = function defineGrammar(dialect) {
                   'readonly',
                   'abstract',
                   'asserts',
-                  'is'
+                  'is',
+                  $._contextual_type_identifier
                 ),
                 $.identifier
               ),
@@ -1832,7 +1850,10 @@ function nestedIdentifierTail($) {
       'property',
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
-        alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.property_identifier)
+        alias(
+          choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+          $.property_identifier
+        )
       )
     ),
   ];
@@ -1888,7 +1909,10 @@ function nestedTypeIdentifier($, generic) {
         'module',
         choice(
           $.identifier,
-          alias(choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts'), $.identifier),
+          alias(
+            choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+            $.identifier
+          ),
           $.nested_identifier,
           alias($._in_nested_identifier, $.nested_identifier)
         )
