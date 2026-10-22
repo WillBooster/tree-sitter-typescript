@@ -8,7 +8,7 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
 
-const Words = ['keyof', 'readonly', 'unique', 'infer'];
+const Words = ['keyof', 'readonly', 'unique', 'infer', 'get', 'set', 'accessor', 'type', 'namespace', 'module'];
 const Gaps = [' ', '\n', '\r\n', '\u2028', '\u2029', '/* comment */', '// comment\n'];
 const Header =
   'export {};\n' +
@@ -21,6 +21,9 @@ const Header =
       }
     }`
   ).join('\n') +
+  '\nnamespace Outer {\n' +
+  Words.map((word) => `export namespace ${word} { export interface Foo<T = unknown> {} }`).join('\n') +
+  '\n}\n' +
   '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
 const RoleQuery = `
@@ -45,6 +48,7 @@ for (const dialect of ['typescript', 'tsx']) {
             `class Generic implements ${word}${gap}.${gap}Foo${gap}<number> {}\n` +
             `class Deep implements ${word}.Inner${gap}.${gap}Deep<string> {}\n` +
             `class Nested implements ${word}.Inner.Deeper.Leaf<number> {}\n` +
+            `class Middle implements Outer.${word}.Foo<number> {}\n` +
             `class Multiple implements ${word}.Foo, readonly.Inner.Deep<string> {}\n` +
             `interface Extended extends ${word}.Inner.Deep<number> {}\nconst following = 1;`;
           const tree = parser.parse(source)!;
@@ -80,6 +84,10 @@ for (const dialect of ['typescript', 'tsx']) {
         'keyof.Inner.Deep<number>',
         'unique.Inner.Deeper.Leaf<string>',
         'infer.Foo',
+        'get.Foo',
+        'type.Inner.Deep<number>',
+        'namespace.Inner.Deeper.Leaf<string>',
+        'Outer.get.Foo<number>',
         'readonly.Foo',
       ]) {
         const next = prefix + nextName + Suffix;

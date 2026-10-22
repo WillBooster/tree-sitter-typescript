@@ -17,6 +17,16 @@ const make = () => new satisfies;
 const parenthesized = value as (as);
 const validated = value satisfies ((as));
 type Keys = { first: 1 };
+type get = number;
+type set = string;
+type accessor = boolean;
+type type = symbol;
+interface ParenthesizedNames {
+  get: (get);
+  set: ((set));
+  accessor: (accessor);
+  type: ((type));
+}
 type Mapped = { [as in keyof Keys as as]: Keys[as] };
 type Checked = { [satisfies in keyof Keys as satisfies]: Keys[satisfies] };
 class Base<T> {}
@@ -27,14 +37,30 @@ const inferred = as as (typeof as);
 const checkedClass = satisfies satisfies (typeof satisfies);
 const prototype = value as (typeof as.prototype);
 type Tuple = [as: string, satisfies?: number, ...as: boolean[]];
+type ContextualTuple = [get: string, type?: number, ...accessor: boolean[]];
 declare namespace as { namespace Types { class Value { value: number; } } }
 declare namespace satisfies { namespace Types { class Value { value: number; } } }
 type Qualified = as.Types.Value;
+declare namespace get { interface Value {} namespace Inner { interface Value {} interface Generic<T> {} } }
+declare namespace type { interface Value {} }
+declare namespace Outer { namespace get { interface Value {} } }
+import GetNamespace = get;
+import GetInner = get.Inner;
+type QualifiedGet = get.Value;
+type NestedGet = get.Inner.Value;
+type MiddleGet = Outer.get.Value;
+type GenericGet = get.Inner.Generic<string>;
+function qualifiedTypes(value: get.Value): type.Value { return value; }
 const qualified = value as as.Types.Value;
 const checkedQualified = value satisfies satisfies.Types.Value;
 function isString(as: unknown): as is string { return typeof as === 'string'; }
+function contextualPredicate(type: unknown): type is string { return typeof type === 'string'; }
+const contextualArrow = <T,>(accessor: T): accessor is T => true;
 function ensure(satisfies: unknown): asserts satisfies { if (!satisfies) throw Error(); }
+function contextualEnsure(type: unknown): asserts type { if (!type) throw Error(); }
 const identity = <as,>(item: as) => item;
+const contextualIdentity = <get,>(item: get): get => item;
+const contextualConstrained = <type extends unknown,>(item: type): type => item;
 const defaulted = <satisfies = string,>(item: satisfies) => item;
 `;
 
@@ -46,6 +72,9 @@ const leftNamespacedJsx = <as:ns />;
 const nestedJsx = <as attr={1}><satisfies>text</satisfies><div x={<as />} /></as>;
 const memberJsx = <as.Types.Value />;
 const attributeJsx = <div as={1} satisfies={2} />;
+const contextualJsx = <get />;
+const contextualNamespacedJsx = <type:tag />;
+const contextualMemberJsx = <get.Inner.Value />;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -79,25 +108,37 @@ for (const dialect of ['typescript', 'tsx']) {
     try {
       tree = parser.parse(source)!;
       check(tree);
-      for (const start of [
-        source.indexOf('new as') + 4,
-        source.indexOf('Base<as[]>') + 5,
-        source.indexOf('[as in') + 1,
-        source.indexOf('typeof as') + 7,
-        source.indexOf('[as: string') + 1,
-        source.indexOf('type Qualified = as') + 'type Qualified = '.length,
-        source.indexOf('const identity = <as') + 'const identity = <'.length,
-        ...(dialect === 'tsx'
-          ? [
-              source.indexOf('const directJsx = <as') + 'const directJsx = <'.length,
-              source.indexOf('const namespacedJsx = <x:as') + 'const namespacedJsx = <x:'.length,
-              source.indexOf('const leftNamespacedJsx = <as') + 'const leftNamespacedJsx = <'.length,
-            ]
-          : []),
-      ]) {
+      const edits: [number, string, string][] = [
+        ...[
+          source.indexOf('new as') + 4,
+          source.indexOf('Base<as[]>') + 5,
+          source.indexOf('[as in') + 1,
+          source.indexOf('typeof as') + 7,
+          source.indexOf('[as: string') + 1,
+          source.indexOf('type Qualified = as') + 'type Qualified = '.length,
+          source.indexOf('const identity = <as') + 'const identity = <'.length,
+          ...(dialect === 'tsx'
+            ? [
+                source.indexOf('const directJsx = <as') + 'const directJsx = <'.length,
+                source.indexOf('const namespacedJsx = <x:as') + 'const namespacedJsx = <x:'.length,
+                source.indexOf('const leftNamespacedJsx = <as') + 'const leftNamespacedJsx = <'.length,
+              ]
+            : []),
+        ].map((start): [number, string, string] => [start, 'as', 'satisfies']),
+        [
+          source.indexOf('contextualPredicate(type: unknown): type') + 'contextualPredicate(type: unknown): '.length,
+          'type',
+          'get',
+        ],
+        [source.indexOf('contextualIdentity = <get') + 'contextualIdentity = <'.length, 'get', 'set'],
+        [source.indexOf('ContextualTuple = [get') + 'ContextualTuple = ['.length, 'get', 'set'],
+        [source.indexOf('get: (get)') + 'get: ('.length, 'get', 'set'],
+        [source.indexOf('accessor: (accessor)') + 'accessor: ('.length, 'accessor', 'type'],
+      ];
+      for (const [start, from, to] of edits) {
         for (const [before, after] of [
-          ['as', 'satisfies'],
-          ['satisfies', 'as'],
+          [from, to],
+          [to, from],
         ] as const) {
           const next = source.slice(0, start) + after + source.slice(start + before.length);
           const previous = tree;

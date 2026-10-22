@@ -109,7 +109,7 @@ function classifyOperandKeywords(
       )
       .toSorted(),
     parameterHeader: [...starts.get('_reserved_identifier')!.words]
-      .filter((word) => expressionOnly.includes(word))
+      .filter((word) => expressionOnly.includes(word) || starts.get('_contextual_type_identifier')!.words.has(word))
       .toSorted(),
     assertionPredicate: [...assertionNames].filter((word) => !standaloneAssertion.has(word)).toSorted(),
     query: [...expression].filter((word) => !allowedQuery.has(word)).toSorted(),

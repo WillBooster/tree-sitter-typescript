@@ -8,7 +8,7 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
 
-const Words = ['keyof', 'readonly', 'unique', 'infer'];
+const Words = ['keyof', 'readonly', 'unique', 'infer', 'get', 'set', 'accessor', 'type', 'namespace', 'module'];
 const Gaps = [' ', '\n', '\r\n', '\u2028', '\u2029', '/* comment */', '// comment\n'];
 const Header = Words.map((word) => `interface ${word}<T = unknown> {}`).join('\n') + '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
