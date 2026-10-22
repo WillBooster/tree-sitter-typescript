@@ -27,6 +27,7 @@ Parenthesized types
 
 var x: (string);
 var x: ({a: any});
+interface Names { get: (get); set: ((set)); accessor: (accessor); type: ((type)); }
 
 ---
 
@@ -46,7 +47,32 @@ var x: ({a: any});
             (property_signature
               (property_identifier)
               (type_annotation
-                (predefined_type)))))))))
+                (predefined_type))))))))
+  (interface_declaration
+    (type_identifier)
+    (interface_body
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (parenthesized_type
+            (type_identifier))))
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (parenthesized_type
+            (parenthesized_type
+              (type_identifier)))))
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (parenthesized_type
+            (type_identifier))))
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (parenthesized_type
+            (parenthesized_type
+              (type_identifier))))))))
 
 =======================================
 Object types

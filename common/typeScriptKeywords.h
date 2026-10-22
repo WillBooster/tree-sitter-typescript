@@ -133,28 +133,12 @@ static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
 };
 
 static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
-    "accessor",
-    "async",
     "class",
-    "declare",
     "delete",
     "function",
-    "get",
-    "global",
     "instanceof",
     "let",
-    "module",
-    "namespace",
-    "of",
-    "override",
-    "private",
-    "protected",
-    "public",
-    "set",
-    "static",
     "super",
-    "type",
-    "using",
     "yield",
 };
 

@@ -11694,11 +11694,11 @@
               },
               {
                 "type": "STRING",
-                "value": "readonly"
+                "value": "module"
               },
               {
                 "type": "STRING",
-                "value": "module"
+                "value": "readonly"
               },
               {
                 "type": "STRING",
@@ -11874,11 +11874,11 @@
         },
         {
           "type": "STRING",
-          "value": "readonly"
+          "value": "module"
         },
         {
           "type": "STRING",
-          "value": "module"
+          "value": "readonly"
         },
         {
           "type": "STRING",
@@ -12921,11 +12921,11 @@
         },
         {
           "type": "STRING",
-          "value": "readonly"
+          "value": "module"
         },
         {
           "type": "STRING",
-          "value": "module"
+          "value": "readonly"
         },
         {
           "type": "STRING",
@@ -20678,11 +20678,84 @@
               {
                 "type": "STRING",
                 "value": "satisfies"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_contextual_type_identifier"
               }
             ]
           },
           "named": true,
           "value": "type_identifier"
+        }
+      ]
+    },
+    "_contextual_type_identifier": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "accessor"
+        },
+        {
+          "type": "STRING",
+          "value": "declare"
+        },
+        {
+          "type": "STRING",
+          "value": "global"
+        },
+        {
+          "type": "STRING",
+          "value": "namespace"
+        },
+        {
+          "type": "STRING",
+          "value": "type"
+        },
+        {
+          "type": "STRING",
+          "value": "public"
+        },
+        {
+          "type": "STRING",
+          "value": "private"
+        },
+        {
+          "type": "STRING",
+          "value": "protected"
+        },
+        {
+          "type": "STRING",
+          "value": "override"
+        },
+        {
+          "type": "STRING",
+          "value": "module"
+        },
+        {
+          "type": "STRING",
+          "value": "get"
+        },
+        {
+          "type": "STRING",
+          "value": "set"
+        },
+        {
+          "type": "STRING",
+          "value": "static"
+        },
+        {
+          "type": "STRING",
+          "value": "async"
+        },
+        {
+          "type": "STRING",
+          "value": "of"
+        },
+        {
+          "type": "STRING",
+          "value": "using"
         }
       ]
     }
@@ -20722,6 +20795,14 @@
     [
       "primary_type",
       "type_parameter"
+    ],
+    [
+      "accessibility_modifier",
+      "primary_type"
+    ],
+    [
+      "override_modifier",
+      "primary_type"
     ],
     [
       "infer_type"
@@ -22086,6 +22167,7 @@
     "_lhs_expression",
     "_type_identifier",
     "_type_reference_identifier",
+    "_contextual_type_identifier",
     "_jsx_start_opening_element"
   ],
   "supertypes": [

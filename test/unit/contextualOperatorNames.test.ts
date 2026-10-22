@@ -17,6 +17,16 @@ const make = () => new satisfies;
 const parenthesized = value as (as);
 const validated = value satisfies ((as));
 type Keys = { first: 1 };
+type get = number;
+type set = string;
+type accessor = boolean;
+type type = symbol;
+interface ParenthesizedNames {
+  get: (get);
+  set: ((set));
+  accessor: (accessor);
+  type: ((type));
+}
 type Mapped = { [as in keyof Keys as as]: Keys[as] };
 type Checked = { [satisfies in keyof Keys as satisfies]: Keys[satisfies] };
 class Base<T> {}
@@ -79,25 +89,30 @@ for (const dialect of ['typescript', 'tsx']) {
     try {
       tree = parser.parse(source)!;
       check(tree);
-      for (const start of [
-        source.indexOf('new as') + 4,
-        source.indexOf('Base<as[]>') + 5,
-        source.indexOf('[as in') + 1,
-        source.indexOf('typeof as') + 7,
-        source.indexOf('[as: string') + 1,
-        source.indexOf('type Qualified = as') + 'type Qualified = '.length,
-        source.indexOf('const identity = <as') + 'const identity = <'.length,
-        ...(dialect === 'tsx'
-          ? [
-              source.indexOf('const directJsx = <as') + 'const directJsx = <'.length,
-              source.indexOf('const namespacedJsx = <x:as') + 'const namespacedJsx = <x:'.length,
-              source.indexOf('const leftNamespacedJsx = <as') + 'const leftNamespacedJsx = <'.length,
-            ]
-          : []),
-      ]) {
+      const edits: [number, string, string][] = [
+        ...[
+          source.indexOf('new as') + 4,
+          source.indexOf('Base<as[]>') + 5,
+          source.indexOf('[as in') + 1,
+          source.indexOf('typeof as') + 7,
+          source.indexOf('[as: string') + 1,
+          source.indexOf('type Qualified = as') + 'type Qualified = '.length,
+          source.indexOf('const identity = <as') + 'const identity = <'.length,
+          ...(dialect === 'tsx'
+            ? [
+                source.indexOf('const directJsx = <as') + 'const directJsx = <'.length,
+                source.indexOf('const namespacedJsx = <x:as') + 'const namespacedJsx = <x:'.length,
+                source.indexOf('const leftNamespacedJsx = <as') + 'const leftNamespacedJsx = <'.length,
+              ]
+            : []),
+        ].map((start): [number, string, string] => [start, 'as', 'satisfies']),
+        [source.indexOf('get: (get)') + 'get: ('.length, 'get', 'set'],
+        [source.indexOf('accessor: (accessor)') + 'accessor: ('.length, 'accessor', 'type'],
+      ];
+      for (const [start, from, to] of edits) {
         for (const [before, after] of [
-          ['as', 'satisfies'],
-          ['satisfies', 'as'],
+          [from, to],
+          [to, from],
         ] as const) {
           const next = source.slice(0, start) + after + source.slice(start + before.length);
           const previous = tree;

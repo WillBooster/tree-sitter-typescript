@@ -1,12 +1,7 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
 const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
 
-const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
-  'abstract',
-  'asserts',
-  'as',
-  'satisfies',
-  'is',
+const TYPESCRIPT_CONTEXTUAL_TYPE_NAMES = [
   'accessor',
   'declare',
   'global',
@@ -16,8 +11,17 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'private',
   'protected',
   'override',
-  'readonly',
   'module',
+];
+
+const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
+  'abstract',
+  'asserts',
+  'as',
+  'satisfies',
+  'is',
+  ...TYPESCRIPT_CONTEXTUAL_TYPE_NAMES,
+  'readonly',
   'any',
   'number',
   'boolean',
@@ -192,6 +196,8 @@ module.exports = function defineGrammar(dialect) {
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
       [$.primary_type, $.type_predicate],
       [$.primary_type, $.type_parameter],
+      [$.accessibility_modifier, $.primary_type],
+      [$.override_modifier, $.primary_type],
       [$.infer_type],
       [$.infer_type, $.type_predicate],
       [$.asserts, $.type_predicate],
@@ -273,6 +279,7 @@ module.exports = function defineGrammar(dialect) {
       ...previous.filter((rule) => !['_formal_parameter', '_call_signature'].includes(rule.name)),
       $._type_identifier,
       $._type_reference_identifier,
+      $._contextual_type_identifier,
       $._jsx_start_opening_element,
     ],
 
@@ -1765,7 +1772,18 @@ module.exports = function defineGrammar(dialect) {
         alias(choice(reserved('properties', $.identifier), 'out', 'is', 'asserts'), $.type_identifier),
 
       _type_reference_identifier: ($) =>
-        choice($._type_identifier, alias(choice('in', 'abstract', 'as', 'satisfies'), $.type_identifier)),
+        choice(
+          $._type_identifier,
+          alias(choice('in', 'abstract', 'as', 'satisfies', $._contextual_type_identifier), $.type_identifier)
+        ),
+
+      _contextual_type_identifier: () =>
+        choice(
+          ...TYPESCRIPT_CONTEXTUAL_TYPE_NAMES,
+          ...JavaScript.grammar.rules._reserved_identifier.members.filter(
+            (rule) => rule.type === 'STRING' && rule.value !== 'let'
+          )
+        ),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
     },
