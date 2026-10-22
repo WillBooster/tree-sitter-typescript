@@ -20135,6 +20135,10 @@
                     {
                       "type": "STRING",
                       "value": "satisfies"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_contextual_type_identifier"
                     }
                   ]
                 },

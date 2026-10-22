@@ -59,6 +59,8 @@ const contextualArrow = <T,>(accessor: T): accessor is T => true;
 function ensure(satisfies: unknown): asserts satisfies { if (!satisfies) throw Error(); }
 function contextualEnsure(type: unknown): asserts type { if (!type) throw Error(); }
 const identity = <as,>(item: as) => item;
+const contextualIdentity = <get,>(item: get): get => item;
+const contextualConstrained = <type extends unknown,>(item: type): type => item;
 const defaulted = <satisfies = string,>(item: satisfies) => item;
 `;
 
@@ -128,6 +130,7 @@ for (const dialect of ['typescript', 'tsx']) {
           'type',
           'get',
         ],
+        [source.indexOf('contextualIdentity = <get') + 'contextualIdentity = <'.length, 'get', 'set'],
         [source.indexOf('ContextualTuple = [get') + 'ContextualTuple = ['.length, 'get', 'set'],
         [source.indexOf('get: (get)') + 'get: ('.length, 'get', 'set'],
         [source.indexOf('accessor: (accessor)') + 'accessor: ('.length, 'accessor', 'type'],

@@ -1713,7 +1713,13 @@ module.exports = function defineGrammar(dialect) {
       type_parameter: ($) =>
         seq(
           repeat(choice('const', 'in', 'out')),
-          field('name', choice($._type_identifier, alias(choice('abstract', 'as', 'satisfies'), $.type_identifier))),
+          field(
+            'name',
+            choice(
+              $._type_identifier,
+              alias(choice('abstract', 'as', 'satisfies', $._contextual_type_identifier), $.type_identifier)
+            )
+          ),
           field('constraint', optional($.constraint)),
           field('value', optional($.default_type))
         ),
