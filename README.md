@@ -33,7 +33,7 @@ inside error nodes; consumers must not depend on a particular recovery-tree shap
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 10.0.2 or later within 10.x. Its CLI
+for `.tsx` files. The supported runtime is WillBooster version 13.0.0 or later within 13.x. Its CLI
 generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
@@ -80,10 +80,10 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 10.0.2 or later within 10.x:
+fuzzed with. Use version 13.0.0 or later within 13.x:
 
 ```sh
-cargo add willbooster-tree-sitter@10.0.2 --rename tree-sitter
+cargo add willbooster-tree-sitter@13.0.0 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 
