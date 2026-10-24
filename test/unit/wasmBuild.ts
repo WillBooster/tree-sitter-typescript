@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { generationInputMtime } from '../helpers/generationInputs.js';
-
 import { Language } from '@willbooster/web-tree-sitter';
+
+import { generationInputMtime } from '../helpers/generationInputs.js';
 
 const Root = path.join(import.meta.dirname, '../..');
 

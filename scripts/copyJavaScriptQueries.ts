@@ -1,5 +1,6 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+
 import { Language, Parser, Query } from '@willbooster/web-tree-sitter';
 
 const root = path.join(import.meta.dirname, '..');

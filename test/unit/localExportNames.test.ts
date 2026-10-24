@@ -2,7 +2,6 @@ import { Edit, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
-
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('rejects string-named local exports while retaining string re-exports and aliases', async () => {

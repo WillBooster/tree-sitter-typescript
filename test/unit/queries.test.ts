@@ -2,12 +2,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { Parser, Query } from '@willbooster/web-tree-sitter';
-
 import treeSitterJson from '../../tree-sitter.json';
-
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Root = path.join(import.meta.dirname, '../..');

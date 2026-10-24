@@ -1,4 +1,4 @@
-import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+
 import ts from 'typescript-reference';
+
 import { grammarOperandKeywords } from './grammarKeywordStarts';
 
 const keywords: string[] = [];

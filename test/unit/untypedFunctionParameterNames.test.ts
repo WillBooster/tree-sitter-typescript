@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { threadCpuUsage } from 'node:process';
 
-import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import configuration from '../../tree-sitter.json';

@@ -5,7 +5,7 @@
 [![Test](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml)
 [![Test rust](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![wbfy](https://img.shields.io/badge/wbfy-20.46.3-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
+[![wbfy](https://img.shields.io/badge/wbfy-20.48.9-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
 [![crates.io](https://img.shields.io/crates/v/willbooster-tree-sitter-typescript.svg)](https://crates.io/crates/willbooster-tree-sitter-typescript)
 
 TypeScript and TSX grammars for [tree-sitter](https://github.com/tree-sitter/tree-sitter), forked from
@@ -40,6 +40,7 @@ In Node.js and Bun:
 
 ```js
 import { fileURLToPath } from 'node:url';
+
 import { Language, Parser } from '@willbooster/web-tree-sitter';
 
 await Parser.init();
@@ -52,9 +53,9 @@ const tree = parser.parse('const x: number = 1;\n');
 In browsers, load the `.wasm` files by URL. With Vite:
 
 ```js
+import tsxUrl from '@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url';
 import { Language, Parser } from '@willbooster/web-tree-sitter';
 import runtimeUrl from '@willbooster/web-tree-sitter/web-tree-sitter.wasm?url';
-import tsxUrl from '@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url';
 
 await Parser.init({ locateFile: () => runtimeUrl });
 const parser = new Parser();
@@ -65,9 +66,9 @@ In Cloudflare Workers, which do not allow compiling Wasm at run time, import the
 without Node.js compatibility):
 
 ```js
+import typescript from '@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm';
 import { Language, Parser } from '@willbooster/web-tree-sitter';
 import runtime from '@willbooster/web-tree-sitter/web-tree-sitter.wasm';
-import typescript from '@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm';
 
 await Parser.init({ wasmModule: runtime });
 const parser = new Parser();

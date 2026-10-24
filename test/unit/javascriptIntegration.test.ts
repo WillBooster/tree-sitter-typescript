@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 
+import { Edit, type Node, Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
-import { Edit, Parser, Query, type Node } from '@willbooster/web-tree-sitter';
 
 import { loadCurrentWasmBuild } from './wasmBuild';
 
