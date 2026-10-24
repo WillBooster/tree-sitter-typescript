@@ -2,7 +2,6 @@ import { Edit, Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
-
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('retains attributes on named, star and namespace type re-exports', async () => {

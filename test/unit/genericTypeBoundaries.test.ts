@@ -1,7 +1,6 @@
+import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
-
-import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
 
 import { compareEditedTree, position } from '../helpers/treeEdit';
 import { loadCurrentWasmBuild } from './wasmBuild';

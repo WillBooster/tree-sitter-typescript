@@ -6,7 +6,6 @@ import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
-
 import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 

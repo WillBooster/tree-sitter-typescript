@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
 import { Parser } from '@willbooster/web-tree-sitter';
+import { describe, expect, test } from 'vitest';
 
 import { loadCurrentWasmBuild } from './wasmBuild';
 

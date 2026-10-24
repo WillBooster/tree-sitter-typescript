@@ -1,11 +1,10 @@
 import fs from 'node:fs';
 
-import { Edit, Parser, Query, type Node, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
-
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
