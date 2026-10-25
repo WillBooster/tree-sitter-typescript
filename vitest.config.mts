@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 
 const growthTestFiles = [
   'test/unit/genericFunctionArguments.test.ts',
+  'test/unit/performance.test.ts',
   'test/unit/untypedFunctionParameterNames.test.ts',
 ];
 
