@@ -17,6 +17,7 @@ export default defineConfig({
           include: ['test/unit/**/*.test.ts'],
           exclude: ['test/unit/browser/**', ...growthTestFiles],
           globalSetup: ['test/unit/globalSetup.ts'],
+          sequence: { groupOrder: 1 },
         },
       },
       {
@@ -27,7 +28,7 @@ export default defineConfig({
           globalSetup: ['test/unit/globalSetup.ts'],
           fileParallelism: false,
           maxWorkers: 1,
-          sequence: { groupOrder: 1 },
+          sequence: { groupOrder: 2 },
         },
       },
       {
@@ -35,6 +36,7 @@ export default defineConfig({
           name: 'browser',
           globals: true,
           include: ['test/unit/browser/**/*.test.ts'],
+          sequence: { groupOrder: 1 },
           browser: {
             enabled: true,
             provider: playwright(),
