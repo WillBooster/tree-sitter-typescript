@@ -1568,6 +1568,10 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         advance(lexer);
         if (lexer->lookahead != '>') return false;
         advance(lexer);
+        if (strcmp(word, "bigint") == 0) {
+            if (untyped_parameter && valid_symbols[PREDEFINED_PARAMETER_NAME]) lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+            return true;
+        }
         if (optional_parameter || untyped_parameter) {
             if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
             if (untyped_parameter) {

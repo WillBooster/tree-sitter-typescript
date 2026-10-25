@@ -280,6 +280,97 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves bigint function parameters in nested conditional types in ${dialect}`, async () => {
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(function_type) @function (conditional_type) @conditional');
+    const contexts = [
+      'X extends Y ? FUNCTION : S',
+      'X extends Y ? S : FUNCTION',
+      'X extends Y ? (FUNCTION) : S',
+      'X extends Y ? S : (FUNCTION)',
+      'X extends Y ? A extends B ? FUNCTION : R : S',
+      'X extends Y ? S : A extends B ? R : FUNCTION',
+      'X extends FUNCTION ? R : S',
+    ];
+    try {
+      for (const context of contexts) {
+        for (const parameters of ['bigint', 'bigint?', 'bigint: B', 'bigint?: B']) {
+          for (const result of ['R', 'A extends B ? R : S', '(other) => R', 'typeof bigint']) {
+            const source = 'type T = ' + context.replace('FUNCTION', `(${parameters}) => ${result}`) + ';';
+            const tree = parser.parse(source)!;
+            try {
+              checkBranches(tree, source);
+            } finally {
+              tree.delete();
+            }
+          }
+        }
+      }
+      for (const source of ['type T = X extends Y ? (bigint) : R;', 'const f = (): ((bigint)) => 1n;']) {
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source);
+        } finally {
+          tree.delete();
+        }
+      }
+      const invalid = parser.parse('const f = (): (bigint) => value;')!;
+      try {
+        expect(invalid.rootNode.hasError).toBe(true);
+      } finally {
+        invalid.delete();
+      }
+      let source = 'type T = X extends Y ? (bigint) => R : S;';
+      let tree = parser.parse(source)!;
+      const start = source.indexOf('bigint');
+      try {
+        for (const replacement of ['Widget', 'bigint']) {
+          const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
+          const next = compareEditedTree(
+            parser,
+            tree,
+            nextSource,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + 6,
+              newEndIndex: start + 6,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + 6),
+              newEndPosition: position(nextSource, start + 6),
+            }),
+            (edited) => checkBranches(edited, nextSource)
+          );
+          tree.delete();
+          tree = next;
+          source = nextSource;
+        }
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+
+    function checkBranches(current: Tree, source: string): void {
+      check(current, source);
+      const reference = ts.createSourceFile('bigint.ts', source, ts.ScriptTarget.Latest, true);
+      const expected: [string, number, number][] = [];
+      function visit(node: ts.Node): void {
+        if (ts.isFunctionTypeNode(node)) expected.push(['function', node.getStart(reference), node.end]);
+        if (ts.isConditionalTypeNode(node)) expected.push(['conditional', node.getStart(reference), node.end]);
+        ts.forEachChild(node, visit);
+      }
+      visit(reference);
+      expect(query.captures(current.rootNode).map(({ name, node }) => [name, node.startIndex, node.endIndex])).toEqual(
+        expected
+      );
+    }
+  });
+}
+
 test('preserves bigint JSX names and query captures through edits', async () => {
   const language = await loadCurrentWasmBuild('tsx');
   const parser = new Parser().setLanguage(language);
