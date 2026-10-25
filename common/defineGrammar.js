@@ -222,7 +222,6 @@ module.exports = function defineGrammar(dialect) {
       [$.class, $._parameter_name],
 
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
-      [$.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
       [$._call_signature, $.constructor_type],
@@ -257,6 +256,9 @@ module.exports = function defineGrammar(dialect) {
       [$.array, $.tuple_type],
       [$.array, $.array_pattern, $.tuple_type],
       [$.array_pattern, $.tuple_type],
+      [$.array_pattern, $.pattern, $._type_arguments_target],
+      [$.array_pattern, $.pattern],
+      [$.array_pattern, $._type_arguments_target, $.predefined_type],
 
       [$.template_literal_type, $.template_string],
       ...(dialect === 'typescript'
@@ -562,7 +564,16 @@ module.exports = function defineGrammar(dialect) {
               choice(
                 reserved('properties', $.identifier),
                 alias(
-                  choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+                  choice(
+                    'out',
+                    'abstract',
+                    'as',
+                    'satisfies',
+                    'is',
+                    'asserts',
+                    'bigint',
+                    $._contextual_type_identifier
+                  ),
                   $.identifier
                 ),
                 alias($.nested_identifier, $.member_expression)
@@ -1136,7 +1147,16 @@ module.exports = function defineGrammar(dialect) {
                 $.string,
                 reserved('properties', $.identifier),
                 alias(
-                  choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+                  choice(
+                    'out',
+                    'abstract',
+                    'as',
+                    'satisfies',
+                    'is',
+                    'asserts',
+                    'bigint',
+                    $._contextual_type_identifier
+                  ),
                   $.identifier
                 ),
                 $.nested_identifier
@@ -1154,7 +1174,7 @@ module.exports = function defineGrammar(dialect) {
           choice(
             $.identifier,
             alias(
-              choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+              choice('out', 'abstract', 'as', 'satisfies', 'is', 'asserts', 'bigint', $._contextual_type_identifier),
               $.identifier
             ),
             $.nested_identifier
@@ -1226,6 +1246,11 @@ module.exports = function defineGrammar(dialect) {
           choice('?', alias($._comment_optional_parameter_marker, '?')),
           field('type', optional($.type_annotation)),
           optional($._initializer)
+        ),
+
+      array_pattern: ($, previous) =>
+        mapRule(previous, (part) =>
+          part.type === 'SYMBOL' && part.name === 'pattern' ? choice($.pattern, alias('bigint', $.identifier)) : part
         ),
 
       pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
@@ -1610,7 +1635,10 @@ module.exports = function defineGrammar(dialect) {
 
       mapped_type_clause: ($) =>
         seq(
-          field('name', choice($._type_identifier, alias(choice('abstract', 'as', 'satisfies'), $.type_identifier))),
+          field(
+            'name',
+            choice($._type_identifier, alias(choice('abstract', 'as', 'satisfies', 'bigint'), $.type_identifier))
+          ),
           'in',
           field('type', $.type),
           optional(seq('as', field('alias', $.type)))
@@ -1868,7 +1896,7 @@ function nestedIdentifierTail($) {
       choice(
         reserved('properties', alias($.identifier, $.property_identifier)),
         alias(
-          choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+          choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', 'bigint', $._contextual_type_identifier),
           $.property_identifier
         )
       )

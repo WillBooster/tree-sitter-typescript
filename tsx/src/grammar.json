@@ -4221,8 +4221,22 @@
                       "type": "CHOICE",
                       "members": [
                         {
-                          "type": "SYMBOL",
-                          "name": "pattern"
+                          "type": "CHOICE",
+                          "members": [
+                            {
+                              "type": "SYMBOL",
+                              "name": "pattern"
+                            },
+                            {
+                              "type": "ALIAS",
+                              "content": {
+                                "type": "STRING",
+                                "value": "bigint"
+                              },
+                              "named": true,
+                              "value": "identifier"
+                            }
+                          ]
                         },
                         {
                           "type": "SYMBOL",
@@ -4251,8 +4265,22 @@
                             "type": "CHOICE",
                             "members": [
                               {
-                                "type": "SYMBOL",
-                                "name": "pattern"
+                                "type": "CHOICE",
+                                "members": [
+                                  {
+                                    "type": "SYMBOL",
+                                    "name": "pattern"
+                                  },
+                                  {
+                                    "type": "ALIAS",
+                                    "content": {
+                                      "type": "STRING",
+                                      "value": "bigint"
+                                    },
+                                    "named": true,
+                                    "value": "identifier"
+                                  }
+                                ]
                               },
                               {
                                 "type": "SYMBOL",
@@ -4525,6 +4553,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -4600,6 +4632,10 @@
                       {
                         "type": "STRING",
                         "value": "asserts"
+                      },
+                      {
+                        "type": "STRING",
+                        "value": "bigint"
                       },
                       {
                         "type": "SYMBOL",
@@ -13125,6 +13161,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -15793,6 +15833,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -16384,6 +16428,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -16468,6 +16516,10 @@
                   {
                     "type": "STRING",
                     "value": "asserts"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "bigint"
                   },
                   {
                     "type": "SYMBOL",
@@ -19379,6 +19431,10 @@
                     {
                       "type": "STRING",
                       "value": "satisfies"
+                    },
+                    {
+                      "type": "STRING",
+                      "value": "bigint"
                     }
                   ]
                 },
@@ -21082,11 +21138,6 @@
       "_type_arguments_target"
     ],
     [
-      "nested_type_identifier",
-      "_generic_nested_type_identifier",
-      "_type_arguments_target"
-    ],
-    [
       "_call_signature",
       "function_type"
     ],
@@ -21209,6 +21260,20 @@
     [
       "array_pattern",
       "tuple_type"
+    ],
+    [
+      "array_pattern",
+      "pattern",
+      "_type_arguments_target"
+    ],
+    [
+      "array_pattern",
+      "pattern"
+    ],
+    [
+      "array_pattern",
+      "_type_arguments_target",
+      "predefined_type"
     ],
     [
       "template_literal_type",
