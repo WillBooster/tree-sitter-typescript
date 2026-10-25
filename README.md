@@ -19,8 +19,7 @@ TypeScript and TSX are two different dialects (`<T>x` is a type assertion in Typ
 so this package defines two grammars: `typescript` in `typescript/` and `tsx` in `tsx/`, both generated from
 `common/defineGrammar.js`, which extends the JavaScript grammar of
 [@willbooster/tree-sitter-javascript](https://www.npmjs.com/package/@willbooster/tree-sitter-javascript) and ports its
-external scanner in `common/scanner.h`. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type
-annotations.
+external scanner in `common/scanner.h`. The npm package bundles the base grammar in `javascript/grammar.js`, so production installs can regenerate both dialects without installing a separate JavaScript parser binary. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type annotations.
 
 An error-free tree does not guarantee TypeScript validity. These grammars accept adjacent opening angles in
 heritage references such as `class C implements Foo<<T>() => T> {}` and `number<<T>() => T>`, which TypeScript
@@ -33,7 +32,7 @@ inside error nodes; consumers must not depend on a particular recovery-tree shap
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 13.0.0 or later within 13.x. Its CLI
+for `.tsx` files. The supported runtime is WillBooster version 15.0.0 or later within 15.x. Its CLI
 generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
@@ -81,10 +80,10 @@ highlighting, injection, locals, and tags queries that `tree-sitter.json` lists:
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 13.0.0 or later within 13.x:
+fuzzed with. Use version 15.0.0 or later within 15.x:
 
 ```sh
-cargo add willbooster-tree-sitter@13.0.0 --rename tree-sitter
+cargo add willbooster-tree-sitter@15.0.0 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 
@@ -117,6 +116,8 @@ runtime this package ships. The first run downloads that CLI from its GitHub Rel
 pinned `typescript-reference` API and the generated TypeScript and TSX grammars. `bun run generate-keywords` requires
 both generated grammars to be current and their token-start tables to match. `bun run check-keywords` verifies the
 committed header. The native TypeScript package remains the type checker.
+
+`script/copy-javascript-grammar` refreshes the bundled JavaScript grammar and its license from the pinned development dependency. Parser generation runs it automatically.
 
 `bun run generate` records a fresh generation profile from the applicable `test/corpus` cases and Git-tracked
 files in `examples/`, then generates compact parser tables. The parser also embeds metadata from `tree-sitter.json`. After changing a grammar,

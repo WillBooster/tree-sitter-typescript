@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+for file in grammar.js LICENSE; do
+  source="node_modules/@willbooster/tree-sitter-javascript/$file"
+  target="javascript/$file"
+  if [[ ${1:-} == --check ]]; then
+    cmp "$source" "$target"
+  elif ! cmp -s "$source" "$target"; then
+    cp "$source" "$target"
+  fi
+done

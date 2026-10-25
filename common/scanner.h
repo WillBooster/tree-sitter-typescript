@@ -1503,8 +1503,8 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     bool allow_type_arguments = valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START];
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
-    TSLexerPosition name_start;
-    lexer->get_mark_end(lexer, &name_start);
+    TSLexerCheckpoint name_start;
+    lexer->get_mark_end_checkpoint(lexer, &name_start);
     bool comment = false;
     bool private_name = lexer->lookahead == '#';
     if (private_name) advance(lexer);
@@ -1516,8 +1516,8 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     } else {
         ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     }
-    TSLexerPosition name_end;
-    lexer->get_position(lexer, &name_end);
+    TSLexerCheckpoint name_end;
+    lexer->get_checkpoint(lexer, &name_end);
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME] || conditional_parameter) && !private_name && ascii_word &&
         (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
         lexer->mark_end(lexer);

@@ -1,5 +1,5 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
-const JavaScript = require('@willbooster/tree-sitter-javascript/grammar');
+const JavaScript = require('../javascript/grammar');
 
 const TYPESCRIPT_CONTEXTUAL_TYPE_NAMES = [
   'accessor',

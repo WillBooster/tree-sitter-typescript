@@ -4,6 +4,7 @@ set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
+script/copy-javascript-grammar
 mkdir -p .tmp/generation-profiles
 
 lock="$root/.tmp/generation-profiles/lock"

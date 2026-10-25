@@ -461,10 +461,10 @@ function checkShiftGrowth(parser: Parser, small: string, large: string, hasError
     parseShiftCpu(parser, small, hasError, repetitions),
     parseShiftCpu(parser, large, hasError, repetitions),
   ]);
-  const smallFastest = Math.min(...samples.map(([smallCpu]) => smallCpu!));
-  const largeFastest = Math.min(...samples.map(([, largeCpu]) => largeCpu!));
+  const growthRatios = samples.map(([smallCpu, largeCpu]) => largeCpu! / smallCpu!).toSorted((a, b) => a - b);
+  const medianGrowth = growthRatios[Math.floor(growthRatios.length / 2)]!;
   expect(
-    largeFastest / smallFastest,
+    medianGrowth,
     `${name}: ${repetitions} parses per small/large thread CPU sample ${JSON.stringify(samples)}`
   ).toBeLessThan(18);
 }
