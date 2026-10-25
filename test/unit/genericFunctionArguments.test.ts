@@ -5,6 +5,7 @@ import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
+import { finishCpuMeasurement, type ParseCpuMeasurement, startCpuMeasurement } from '../helpers/parseCpuMeasurement.js';
 import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -443,7 +444,7 @@ for (const dialect of ['typescript', 'tsx']) {
       await Parser.init();
       const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
       try {
-        checkShiftGrowth(parser, source(1000), source(10_000), hasError, name);
+        checkShiftGrowth(parser, source(1000), source(10_000), hasError, name, dialect);
       } finally {
         parser.delete();
       }
@@ -451,16 +452,32 @@ for (const dialect of ['typescript', 'tsx']) {
   );
 }
 
-function checkShiftGrowth(parser: Parser, small: string, large: string, hasError: boolean, name: string): void {
-  parseShiftCpu(parser, large, hasError);
-  parseShiftCpu(parser, large, hasError);
+interface ShiftCpuMeasurement extends ParseCpuMeasurement {
+  sourceLength: number;
+  repetitions: number;
+}
+
+function checkShiftGrowth(
+  parser: Parser,
+  small: string,
+  large: string,
+  hasError: boolean,
+  name: string,
+  dialect: string
+): void {
+  const measurements: ShiftCpuMeasurement[] = [];
+  parseShiftCpu(parser, large, hasError, 1, measurements);
+  parseShiftCpu(parser, large, hasError, 1, measurements);
   // Linux thread CPU accounting can quantize a short parse; equal parse/dispose batches keep that error small.
   let repetitions = 1;
-  while (repetitions < 32 && parseShiftCpu(parser, small, hasError, repetitions) < 16_000) repetitions *= 2;
+  while (repetitions < 32 && parseShiftCpu(parser, small, hasError, repetitions, measurements) < 16_000)
+    repetitions *= 2;
   const samples = Array.from({ length: 5 }, () => [
-    parseShiftCpu(parser, small, hasError, repetitions),
-    parseShiftCpu(parser, large, hasError, repetitions),
+    parseShiftCpu(parser, small, hasError, repetitions, measurements),
+    parseShiftCpu(parser, large, hasError, repetitions, measurements),
   ]);
+  if (name === 'genericCallArray')
+    process.stdout.write(`Generic-call array CPU measurements: ${JSON.stringify({ dialect, measurements })}\n`);
   const growthRatios = samples.map(([smallCpu, largeCpu]) => largeCpu! / smallCpu!).toSorted((a, b) => a - b);
   const medianGrowth = growthRatios[Math.floor(growthRatios.length / 2)]!;
   expect(
@@ -469,8 +486,14 @@ function checkShiftGrowth(parser: Parser, small: string, large: string, hasError
   ).toBeLessThan(18);
 }
 
-function parseShiftCpu(parser: Parser, source: string, hasError: boolean, repetitions = 1): number {
-  const start = process.threadCpuUsage();
+function parseShiftCpu(
+  parser: Parser,
+  source: string,
+  hasError: boolean,
+  repetitions: number,
+  measurements: ShiftCpuMeasurement[]
+): number {
+  const start = startCpuMeasurement();
   let errorCount = 0;
   for (let run = 0; run < repetitions; run++) {
     const tree = parser.parse(source)!;
@@ -480,9 +503,10 @@ function parseShiftCpu(parser: Parser, source: string, hasError: boolean, repeti
       tree.delete();
     }
   }
-  const elapsed = process.threadCpuUsage(start);
+  const measurement = finishCpuMeasurement(start);
+  measurements.push({ sourceLength: source.length, repetitions, ...measurement });
   expect(errorCount).toBe(Number(hasError) * repetitions);
-  return elapsed.user + elapsed.system;
+  return measurement.threadCpuMicroseconds;
 }
 
 function checkArguments(tree: Tree, source: string, dialect: string, query: Query, highlights: Query): void {
