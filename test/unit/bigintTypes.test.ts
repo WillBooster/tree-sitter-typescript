@@ -1,4 +1,4 @@
-import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -141,13 +141,136 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-function check(tree: Tree, source: string): void {
-  const reference = ts.createSourceFile('bigint.ts', source, ts.ScriptTarget.Latest, true);
-  expect(ts.transpileModule(source, { reportDiagnostics: true }).diagnostics).toEqual([]);
+const QuerySource = `function bigint<T>(value: T) { return value; }
+namespace bigint { export const A = { B: 1n }; }
+type Root = (typeof bigint);
+type Chain = (typeof bigint.A.B);
+type Instantiated = (typeof bigint<string>);
+type Return = (value: unknown) => (typeof bigint);
+`;
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves bigint queries and keyword-qualified heritage in ${dialect}`, async () => {
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(type_query) @query');
+    try {
+      for (const source of [
+        'const bigint = 1n; type T = (typeof bigint);',
+        QuerySource,
+        ...['keyof', 'readonly', 'unique', 'infer'].map(
+          (name) =>
+            `class Direct implements ${name}.bigint {}
+class Generic implements ${name}.bigint<string> {}`
+        ),
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source, 'bigint.ts', query);
+        } finally {
+          tree.delete();
+        }
+      }
+      let source = QuerySource;
+      let tree = parser.parse(source)!;
+      const start = source.indexOf('type Root = (typeof bigint') + 'type Root = (typeof '.length;
+      try {
+        for (const replacement of ['Widget', 'bigint']) {
+          const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
+          const next = compareEditedTree(
+            parser,
+            tree,
+            nextSource,
+            new Edit({
+              startIndex: start,
+              oldEndIndex: start + 6,
+              newEndIndex: start + 6,
+              startPosition: position(source, start),
+              oldEndPosition: position(source, start + 6),
+              newEndPosition: position(nextSource, start + 6),
+            }),
+            (edited) => check(edited, nextSource, 'bigint.ts', query)
+          );
+          tree.delete();
+          tree = next;
+          source = nextSource;
+        }
+      } finally {
+        tree.delete();
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+}
+
+test('preserves bigint JSX names and query captures through edits', async () => {
+  const language = await loadCurrentWasmBuild('tsx');
+  const parser = new Parser().setLanguage(language);
+  const query = new Query(
+    language,
+    `[
+    (jsx_opening_element name: (_) @name)
+    (jsx_closing_element name: (_) @name)
+    (jsx_self_closing_element name: (_) @name)
+  ]`
+  );
+  let source = `const elements = [<bigint/>, <bigint a="1"/>, <bigint></bigint>,
+    <bigint:x/>, <x:bigint/>, <bigint.A/>, <A.bigint.B/>];`;
+  let tree = parser.parse(source)!;
+  const start = source.indexOf('<bigint') + 1;
+  try {
+    checkJsx(tree, source);
+    for (const replacement of ['number', 'bigint']) {
+      const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
+      const next = compareEditedTree(
+        parser,
+        tree,
+        nextSource,
+        new Edit({
+          startIndex: start,
+          oldEndIndex: start + 6,
+          newEndIndex: start + 6,
+          startPosition: position(source, start),
+          oldEndPosition: position(source, start + 6),
+          newEndPosition: position(nextSource, start + 6),
+        }),
+        (edited) => checkJsx(edited, nextSource)
+      );
+      tree.delete();
+      tree = next;
+      source = nextSource;
+    }
+  } finally {
+    tree.delete();
+    query.delete();
+    parser.delete();
+  }
+
+  function checkJsx(current: Tree, text: string): void {
+    check(current, text, 'bigint.tsx');
+    const reference = ts.createSourceFile('bigint.tsx', text, ts.ScriptTarget.Latest, true);
+    const names: string[] = [];
+    function visit(node: ts.Node): void {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node)) {
+        names.push(node.tagName.getText(reference));
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(reference);
+    expect(query.captures(current.rootNode).map((capture) => capture.node.text)).toEqual(names);
+  }
+});
+
+function check(tree: Tree, source: string, fileName = 'bigint.ts', query?: Query): void {
+  const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  expect(ts.transpileModule(source, { reportDiagnostics: true, fileName }).diagnostics).toEqual([]);
   expect(tree.rootNode.hasError, tree.rootNode.toString()).toBe(false);
   const expected: string[] = [];
   const primitives: number[][] = [];
   const qualifiedNames: number[][] = [];
+  const typeQueries: number[][] = [];
   function visit(node: ts.Node): void {
     if (ts.isAsExpression(node) || ts.isSatisfiesExpression(node) || ts.isBinaryExpression(node)) {
       expected.push(node.getText(reference));
@@ -158,10 +281,16 @@ function check(tree: Tree, source: string): void {
     if (ts.isExpressionWithTypeArguments(node) && ts.isPropertyAccessExpression(node.expression)) {
       qualifiedNames.push([node.expression.getStart(reference), node.expression.end]);
     }
+    if (ts.isTypeQueryNode(node)) typeQueries.push([node.getStart(reference), node.end]);
     if (node.kind === ts.SyntaxKind.BigIntKeyword) primitives.push([node.getStart(reference), node.end]);
     ts.forEachChild(node, visit);
   }
   visit(reference);
+  expect(tree.rootNode.descendantsOfType('type_query').map((node) => [node.startIndex, node.endIndex])).toEqual(
+    typeQueries
+  );
+  if (query)
+    expect(query.captures(tree.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(typeQueries);
   expect(
     tree.rootNode.descendantsOfType('nested_type_identifier').map((node) => [node.startIndex, node.endIndex])
   ).toEqual(qualifiedNames);

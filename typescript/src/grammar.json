@@ -4497,6 +4497,10 @@
                 "value": "asserts"
               },
               {
+                "type": "STRING",
+                "value": "bigint"
+              },
+              {
                 "type": "SYMBOL",
                 "name": "_contextual_type_identifier"
               }
@@ -15719,8 +15723,22 @@
             "type": "FIELD",
             "name": "name",
             "content": {
-              "type": "SYMBOL",
-              "name": "_type_reference_identifier"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_reference_identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "bigint"
+                  },
+                  "named": true,
+                  "value": "type_identifier"
+                }
+              ]
             }
           }
         ]
@@ -19347,6 +19365,10 @@
               {
                 "type": "STRING",
                 "value": "asserts"
+              },
+              {
+                "type": "STRING",
+                "value": "bigint"
               }
             ]
           },
@@ -21273,6 +21295,10 @@
     [
       "array_pattern",
       "_type_arguments_target",
+      "predefined_type"
+    ],
+    [
+      "jsx_namespace_name",
       "predefined_type"
     ],
     [

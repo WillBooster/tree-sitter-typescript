@@ -259,6 +259,7 @@ module.exports = function defineGrammar(dialect) {
       [$.array_pattern, $.pattern, $._type_arguments_target],
       [$.array_pattern, $.pattern],
       [$.array_pattern, $._type_arguments_target, $.predefined_type],
+      [$.jsx_namespace_name, $.predefined_type],
 
       [$.template_literal_type, $.template_string],
       ...(dialect === 'typescript'
@@ -550,7 +551,17 @@ module.exports = function defineGrammar(dialect) {
         choice(
           previous,
           alias(
-            choice('in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', $._contextual_type_identifier),
+            choice(
+              'in',
+              'out',
+              'abstract',
+              'as',
+              'satisfies',
+              'is',
+              'asserts',
+              'bigint',
+              $._contextual_type_identifier
+            ),
             $.identifier
           )
         ),
@@ -993,7 +1004,7 @@ module.exports = function defineGrammar(dialect) {
               )
             ),
             '.',
-            field('name', $._type_reference_identifier)
+            field('name', qualifiedTypeName($))
           )
         ),
 
@@ -1627,7 +1638,10 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _type_query_identifier: ($) =>
-        choice(reserved('properties', $.identifier), alias(choice('as', 'satisfies', 'asserts'), $.identifier)),
+        choice(
+          reserved('properties', $.identifier),
+          alias(choice('as', 'satisfies', 'asserts', 'bigint'), $.identifier)
+        ),
 
       index_type_query: ($) => prec.right(seq('keyof', choice($.primary_type, $.readonly_type))),
 
@@ -1974,9 +1988,13 @@ function nestedTypeIdentifier($, generic) {
       ),
       '.',
       ...(generic ? [$._type_reference_arguments_start] : []),
-      field('name', choice($._type_reference_identifier, alias('bigint', $.type_identifier)))
+      field('name', qualifiedTypeName($))
     )
   );
+}
+
+function qualifiedTypeName($) {
+  return choice($._type_reference_identifier, alias('bigint', $.type_identifier));
 }
 
 function typeQueryMember($, generic) {
