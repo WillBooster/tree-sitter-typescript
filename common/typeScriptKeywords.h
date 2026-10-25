@@ -95,6 +95,7 @@ static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
     "any",
     "async",
     "await",
+    "bigint",
     "boolean",
     "class",
     "declare",

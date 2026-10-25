@@ -1519,7 +1519,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     TSLexerPosition name_end;
     lexer->get_position(lexer, &name_end);
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME] || conditional_parameter) && !private_name && ascii_word &&
-        (strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
+        (strcmp(word, "bigint") == 0 || strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
         lexer->mark_end(lexer);
         if (!scan_default_trivia(lexer, true, true)) return false;
         bool optional_parameter = lexer->lookahead == '?';
@@ -1616,7 +1616,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
     if (unqualified && ascii_word) {
-        static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
+        static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "bigint", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
             if (strcmp(word, keywords[i]) == 0) return false;
         }
@@ -2908,7 +2908,7 @@ static bool is_type_probe_word(const char *word, const char *const *words, unsig
 
 static bool is_nonreference_type_word(const char *word) {
     return strcmp(word, "any") == 0 || strcmp(word, "number") == 0 || strcmp(word, "boolean") == 0 ||
-        strcmp(word, "string") == 0 || strcmp(word, "symbol") == 0 || strcmp(word, "void") == 0 ||
+        strcmp(word, "string") == 0 || strcmp(word, "symbol") == 0 || strcmp(word, "bigint") == 0 || strcmp(word, "void") == 0 ||
         strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "object") == 0 ||
         strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 ||
         strcmp(word, "undefined") == 0 || strcmp(word, "this") == 0;
@@ -3424,7 +3424,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if ((valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] || valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME] ||
-         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
+         ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'b' || lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
         bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
         if (result && lexer->result_symbol != ABSTRACT_CONSTRUCTOR_PREFIX &&
             lexer->result_symbol != PREDEFINED_PARAMETER_NAME &&
@@ -3473,7 +3473,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_jsx_closing_recovery_identifier(lexer);
     }
     if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
-        (lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
+        (lexer->lookahead == 'b' || lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
         return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
     return scan_contextual_keyword(scanner, lexer, valid_symbols);

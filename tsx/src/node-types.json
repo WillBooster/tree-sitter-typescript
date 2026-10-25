@@ -6088,6 +6088,10 @@
     "named": false
   },
   {
+    "type": "bigint",
+    "named": false
+  },
+  {
     "type": "boolean",
     "named": false
   },

@@ -11738,6 +11738,10 @@
               },
               {
                 "type": "STRING",
+                "value": "bigint"
+              },
+              {
+                "type": "STRING",
                 "value": "object"
               },
               {
@@ -11915,6 +11919,10 @@
         {
           "type": "STRING",
           "value": "symbol"
+        },
+        {
+          "type": "STRING",
+          "value": "bigint"
         },
         {
           "type": "STRING",
@@ -12958,6 +12966,10 @@
         {
           "type": "STRING",
           "value": "symbol"
+        },
+        {
+          "type": "STRING",
+          "value": "bigint"
         },
         {
           "type": "STRING",
@@ -15896,6 +15908,10 @@
                   },
                   {
                     "type": "STRING",
+                    "value": "bigint"
+                  },
+                  {
+                    "type": "STRING",
                     "value": "unknown"
                   },
                   {
@@ -16524,6 +16540,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -16556,8 +16576,22 @@
             "type": "FIELD",
             "name": "name",
             "content": {
-              "type": "SYMBOL",
-              "name": "_type_reference_identifier"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_reference_identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "bigint"
+                  },
+                  "named": true,
+                  "value": "type_identifier"
+                }
+              ]
             }
           }
         ]
@@ -16659,6 +16693,10 @@
                           "value": "satisfies"
                         },
                         {
+                          "type": "STRING",
+                          "value": "bigint"
+                        },
+                        {
                           "type": "SYMBOL",
                           "name": "_contextual_type_identifier"
                         }
@@ -16718,6 +16756,10 @@
                               {
                                 "type": "STRING",
                                 "value": "satisfies"
+                              },
+                              {
+                                "type": "STRING",
+                                "value": "bigint"
                               },
                               {
                                 "type": "SYMBOL",
@@ -17369,6 +17411,10 @@
                           },
                           {
                             "type": "STRING",
+                            "value": "bigint"
+                          },
+                          {
+                            "type": "STRING",
                             "value": "unknown"
                           },
                           {
@@ -17589,6 +17635,10 @@
               {
                 "type": "STRING",
                 "value": "symbol"
+              },
+              {
+                "type": "STRING",
+                "value": "bigint"
               },
               {
                 "type": "STRING",
@@ -18447,6 +18497,10 @@
                         "value": "asserts"
                       },
                       {
+                        "type": "STRING",
+                        "value": "bigint"
+                      },
+                      {
                         "type": "SYMBOL",
                         "name": "_contextual_type_identifier"
                       }
@@ -18483,8 +18537,22 @@
             "type": "FIELD",
             "name": "name",
             "content": {
-              "type": "SYMBOL",
-              "name": "_type_reference_identifier"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_reference_identifier"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "STRING",
+                    "value": "bigint"
+                  },
+                  "named": true,
+                  "value": "type_identifier"
+                }
+              ]
             }
           }
         ]
@@ -18566,6 +18634,15 @@
         {
           "type": "SYMBOL",
           "name": "_type_reference_identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "bigint"
+          },
+          "named": true,
+          "value": "type_identifier"
         },
         {
           "type": "SYMBOL",
@@ -19484,6 +19561,10 @@
           "value": "symbol"
         },
         {
+          "type": "STRING",
+          "value": "bigint"
+        },
+        {
           "type": "ALIAS",
           "content": {
             "type": "SEQ",
@@ -19508,10 +19589,6 @@
         {
           "type": "STRING",
           "value": "unknown"
-        },
-        {
-          "type": "STRING",
-          "value": "string"
         },
         {
           "type": "STRING",
@@ -21005,6 +21082,11 @@
       "_type_arguments_target"
     ],
     [
+      "nested_type_identifier",
+      "_generic_nested_type_identifier",
+      "_type_arguments_target"
+    ],
+    [
       "_call_signature",
       "function_type"
     ],
@@ -21725,6 +21807,26 @@
       {
         "type": "SYMBOL",
         "name": "nested_type_identifier"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "nested_type_identifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "predefined_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_generic_nested_type_identifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "predefined_type"
       }
     ],
     [
