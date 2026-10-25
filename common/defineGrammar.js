@@ -260,6 +260,7 @@ module.exports = function defineGrammar(dialect) {
       [$.array_pattern, $.pattern],
       [$.array_pattern, $._type_arguments_target, $.predefined_type],
       [$.jsx_namespace_name, $.predefined_type],
+      [$.predefined_type, $.type_parameter],
 
       [$.template_literal_type, $.template_string],
       ...(dialect === 'typescript'
@@ -1770,7 +1771,7 @@ module.exports = function defineGrammar(dialect) {
             'name',
             choice(
               $._type_identifier,
-              alias(choice('abstract', 'as', 'satisfies', $._contextual_type_identifier), $.type_identifier)
+              alias(choice('abstract', 'as', 'satisfies', 'bigint', $._contextual_type_identifier), $.type_identifier)
             )
           ),
           field('constraint', optional($.constraint)),

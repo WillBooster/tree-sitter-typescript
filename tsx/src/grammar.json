@@ -20292,6 +20292,10 @@
                       "value": "satisfies"
                     },
                     {
+                      "type": "STRING",
+                      "value": "bigint"
+                    },
+                    {
                       "type": "SYMBOL",
                       "name": "_contextual_type_identifier"
                     }
@@ -21300,6 +21304,10 @@
     [
       "jsx_namespace_name",
       "predefined_type"
+    ],
+    [
+      "predefined_type",
+      "type_parameter"
     ],
     [
       "template_literal_type",

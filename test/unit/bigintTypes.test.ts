@@ -205,6 +205,81 @@ class Generic implements ${name}.bigint<string> {}`
   });
 }
 
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves bigint generic-arrow parameters and queries through edits in ${dialect}`, async () => {
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    const query = new Query(language, '(type_parameter name: (type_identifier) @name)');
+    try {
+      for (const parameters of [
+        'bigint,',
+        'bigint extends X',
+        'bigint, U',
+        'bigint = X',
+        'bigint extends X = Y',
+        'const bigint,',
+        'T, bigint',
+      ]) {
+        for (const prefix of ['', 'async ']) {
+          let source = `const f = ${prefix}<${parameters}>(x: T) => x;`;
+          let tree = parser.parse(source)!;
+          const start = source.indexOf('bigint');
+          try {
+            checkParameters(tree, source);
+            for (const replacement of ['Widget', 'bigint']) {
+              const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
+              const next = compareEditedTree(
+                parser,
+                tree,
+                nextSource,
+                new Edit({
+                  startIndex: start,
+                  oldEndIndex: start + 6,
+                  newEndIndex: start + 6,
+                  startPosition: position(source, start),
+                  oldEndPosition: position(source, start + 6),
+                  newEndPosition: position(nextSource, start + 6),
+                }),
+                (edited) => checkParameters(edited, nextSource)
+              );
+              tree.delete();
+              tree = next;
+              source = nextSource;
+            }
+          } finally {
+            tree.delete();
+          }
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+
+    function checkParameters(current: Tree, source: string): void {
+      check(current, source, `bigint.${dialect === 'tsx' ? 'tsx' : 'ts'}`);
+      const reference = ts.createSourceFile(
+        `bigint.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
+        source,
+        ts.ScriptTarget.Latest,
+        true
+      );
+      const names: number[][] = [];
+      const arrows: number[][] = [];
+      function visit(node: ts.Node): void {
+        if (ts.isTypeParameterDeclaration(node)) names.push([node.name.getStart(reference), node.name.end]);
+        if (ts.isArrowFunction(node)) arrows.push([node.getStart(reference), node.end]);
+        ts.forEachChild(node, visit);
+      }
+      visit(reference);
+      expect(query.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(names);
+      expect(
+        current.rootNode.descendantsOfType('arrow_function').map((node) => [node.startIndex, node.endIndex])
+      ).toEqual(arrows);
+    }
+  });
+}
+
 test('preserves bigint JSX names and query captures through edits', async () => {
   const language = await loadCurrentWasmBuild('tsx');
   const parser = new Parser().setLanguage(language);
