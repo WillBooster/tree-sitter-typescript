@@ -58,6 +58,8 @@ for (const [packageKind, listFiles] of Object.entries(listPublishedFiles)) {
   });
 }
 
-test('keeps inherited queries synchronized with the JavaScript grammar', () => {
-  execFileSync(path.join(Root, 'script/copy-javascript-queries'), ['--check'], execOptions);
+test('keeps inherited grammar sources and queries synchronized with the JavaScript package', () => {
+  for (const script of ['copy-javascript-grammar', 'copy-javascript-queries']) {
+    execFileSync(path.join(Root, 'script', script), ['--check'], execOptions);
+  }
 });
