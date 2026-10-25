@@ -1,8 +1,11 @@
 import { playwright } from '@vitest/browser-playwright';
 import { defineConfig } from 'vitest/config';
 
-// tsconfig.json declares the `vitest/globals` types, so both projects provide the globals at run time for the type check
-// to agree with them.
+const growthTestFiles = [
+  'test/unit/genericFunctionArguments.test.ts',
+  'test/unit/untypedFunctionParameterNames.test.ts',
+];
+
 export default defineConfig({
   test: {
     projects: [
@@ -11,8 +14,19 @@ export default defineConfig({
           name: 'node',
           globals: true,
           include: ['test/unit/**/*.test.ts'],
-          exclude: ['test/unit/browser/**'],
+          exclude: ['test/unit/browser/**', ...growthTestFiles],
           globalSetup: ['test/unit/globalSetup.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'parser-growth',
+          globals: true,
+          include: growthTestFiles,
+          globalSetup: ['test/unit/globalSetup.ts'],
+          fileParallelism: false,
+          maxWorkers: 1,
+          sequence: { groupOrder: 1 },
         },
       },
       {
