@@ -54,6 +54,21 @@ const Sources = [
   'const result = value as const.Member != other;',
   'const result = value as const.Member !== other;',
   'const result = value as const.Member! == other;',
+  'const result = value as keyof A!;',
+  'const result = value as keyof A[]!;',
+  'const result = value as unique symbol!;',
+  'const result = value as keyof const.Member!;',
+  'const result = value as keyof keyof A!;',
+  'const result = value as readonly A[]!;',
+  'const result = value as A.B extends B ? C : const.D;',
+  'const result = value as const.Member ?.5 : 1;',
+  'const result = value as const.Member[Key] ?.5 : 1;',
+  'const result = value as A | const.Member<Arg> ?.5 : 1;',
+  'const result = value as const.Member extends (B extends C ? D : E) ? F : G;',
+  'const result = value as const.Member extends Box<B extends C ? D : E> ? F : G;',
+  'const result = value as const.Member extends B | C & D ? F : G;',
+  'const result = value as const.Member extends unique symbol ? E : F;',
+  'const result = value as const.Member extends unique symbol! ? E : F;',
   'const result = value as const;',
   'const result = (value as const).class;',
   'const result = value as const[Key];',
@@ -76,6 +91,9 @@ const InvalidContexts = [
   'const invalid = value as const.Member[]++;',
   'const invalid = value as const.Member!();',
   'const invalid = value as const.Member!?.field;',
+  'const invalid = value as const.Member extends B extends C ? D : E ? F : G;',
+  'const invalid = value as const.Member[] extends B | C extends D ? E : F ? G : H;',
+  'const invalid = value as const.Member[Key] extends B & C extends D ? E : F ? G : H;',
 ];
 const Following = '\nconst following = 1;';
 
@@ -88,7 +106,7 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
         '(array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-        '(type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
+        '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
         ' (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
         ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft)' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
@@ -144,15 +162,6 @@ for (const dialect of ['typescript', 'tsx']) {
 
 function checkRanges(tree: Tree, source: string, dialect: string, query: Query, valid = true): void {
   const fileName = dialect === 'tsx' ? 'const.tsx' : 'const.ts';
-  const diagnostics = ts.transpileModule(source, {
-    fileName,
-    reportDiagnostics: true,
-    compilerOptions: { target: ts.ScriptTarget.Latest },
-  }).diagnostics;
-  expect(diagnostics?.length === 0, source).toBe(valid);
-  expect(tree.rootNode.hasError, source).toBe(!valid);
-  expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
-  if (!valid) return;
   const reference = ts.createSourceFile(
     fileName,
     source,
@@ -160,7 +169,17 @@ function checkRanges(tree: Tree, source: string, dialect: string, query: Query, 
     true,
     dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
   );
+  const options = { noLib: true, noResolve: true, target: ts.ScriptTarget.Latest };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (name) => (name === fileName ? reference : undefined);
+  const program = ts.createProgram([fileName], options, host);
+  expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
+  expect(tree.rootNode.hasError, source).toBe(!valid);
+  expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+  if (!valid) return;
   const expected: Record<string, Ranges> = {
+    keyof: [],
+    uniqueOperator: [],
     qualified: [],
     generic: [],
     as: [],
@@ -181,6 +200,14 @@ function checkRanges(tree: Tree, source: string, dialect: string, query: Query, 
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (
+      ts.isTypeOperatorNode(node) &&
+      node.operator === ts.SyntaxKind.UniqueKeyword &&
+      node.type.kind !== ts.SyntaxKind.SymbolKeyword
+    )
+      expected.uniqueOperator!.push([node.getText(reference), node.getStart(reference), node.end]);
+    if (ts.isTypeOperatorNode(node) && node.operator === ts.SyntaxKind.KeyOfKeyword)
+      expected.keyof!.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isJSDocNonNullableType(node)) {
       expected.nonNullable!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.nullableOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);

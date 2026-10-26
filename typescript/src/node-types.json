@@ -1582,7 +1582,7 @@
         ]
       },
       "consequence": {
-        "multiple": true,
+        "multiple": false,
         "required": true,
         "types": [
           {
@@ -4347,7 +4347,17 @@
   {
     "type": "predefined_type",
     "named": true,
-    "fields": {}
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "primary_type",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "program",
@@ -6185,6 +6195,10 @@
   {
     "type": "undefined",
     "named": true
+  },
+  {
+    "type": "unique",
+    "named": false
   },
   {
     "type": "unique symbol",

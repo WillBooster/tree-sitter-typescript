@@ -778,6 +778,12 @@ static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool 
     return ascii_word;
 }
 
+static bool question_mark_can_start_ternary(TSLexer *lexer) {
+    if (lexer->lookahead != '.') return true;
+    advance(lexer);
+    return is_ascii_digit(lexer->lookahead);
+}
+
 static bool scan_question_mark(TSLexer *lexer, const bool *valid_symbols) {
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     if (lexer->lookahead != '?') return false;
@@ -796,11 +802,7 @@ static bool scan_question_mark(TSLexer *lexer, const bool *valid_symbols) {
     }
     if (comment_candidate) return valid_symbols[TERNARY_QMARK];
     if (lexer->lookahead == ':' || lexer->lookahead == ')' || lexer->lookahead == ',') return false;
-    if (lexer->lookahead == '.') {
-        advance(lexer);
-        return valid_symbols[TERNARY_QMARK] && is_ascii_digit(lexer->lookahead);
-    }
-    return valid_symbols[TERNARY_QMARK];
+    return valid_symbols[TERNARY_QMARK] && question_mark_can_start_ternary(lexer);
 }
 
 static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
@@ -3255,7 +3257,7 @@ static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
         case '[': case '(': case '`': return line_break;
         case '?':
             advance(lexer);
-            return lexer->lookahead != '.';
+            return question_mark_can_start_ternary(lexer);
         case '+': case '-': {
             if (line_break) return true;
             int32_t operator = lexer->lookahead;
