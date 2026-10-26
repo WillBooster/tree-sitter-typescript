@@ -15291,10 +15291,58 @@
         {
           "type": "SYMBOL",
           "name": "constructor_type"
+        }
+      ]
+    },
+    "_as_infer_type": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "infer"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_type_identifier"
+            }
+          ]
         },
         {
-          "type": "SYMBOL",
-          "name": "infer_type"
+          "type": "PREC_RIGHT",
+          "value": 0,
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "infer"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_type_identifier"
+              },
+              {
+                "type": "STRING",
+                "value": "extends"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_type"
+                },
+                "named": true,
+                "value": "type"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_as_infer_constraint_end"
+              }
+            ]
+          }
         }
       ]
     },
@@ -15311,7 +15359,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "_type_reference_identifier"
+          "name": "_as_identifier"
         },
         {
           "type": "SYMBOL",
@@ -15863,15 +15911,6 @@
           },
           "named": true,
           "value": "readonly_type"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_as_constraint_infer_type"
-          },
-          "named": true,
-          "value": "infer_type"
         }
       ]
     },
@@ -15888,7 +15927,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "_as_constraint_identifier"
+          "name": "_as_identifier"
         },
         {
           "type": "SYMBOL",
@@ -16026,7 +16065,7 @@
         }
       ]
     },
-    "_as_constraint_identifier": {
+    "_as_identifier": {
       "type": "ALIAS",
       "content": {
         "type": "CHOICE",
@@ -16037,7 +16076,7 @@
               "type": "SYMBOL",
               "name": "identifier"
             },
-            "context_name": "as_constraint_names"
+            "context_name": "as_type_names"
           },
           {
             "type": "STRING",
@@ -16298,54 +16337,6 @@
         ]
       }
     },
-    "_as_constraint_infer_type": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "infer"
-            },
-            {
-              "type": "SYMBOL",
-              "name": "_type_identifier"
-            }
-          ]
-        },
-        {
-          "type": "PREC_RIGHT",
-          "value": 0,
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "infer"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "_type_identifier"
-              },
-              {
-                "type": "STRING",
-                "value": "extends"
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_constraint_type"
-                },
-                "named": true,
-                "value": "type"
-              }
-            ]
-          }
-        }
-      ]
-    },
     "_qualified_const_assertion_type": {
       "type": "CHOICE",
       "members": [
@@ -16366,6 +16357,15 @@
           },
           "named": true,
           "value": "readonly_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_infer_type"
+          },
+          "named": true,
+          "value": "infer_type"
         }
       ]
     },
@@ -16456,6 +16456,15 @@
           },
           "named": true,
           "value": "predefined_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
         },
         {
           "type": "ALIAS",
@@ -16640,8 +16649,13 @@
                 "type": "CHOICE",
                 "members": [
                   {
-                    "type": "SYMBOL",
-                    "name": "type"
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_type"
+                    },
+                    "named": true,
+                    "value": "type"
                   },
                   {
                     "type": "ALIAS",
@@ -16660,8 +16674,13 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "type"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_type"
+                },
+                "named": true,
+                "value": "type"
               },
               {
                 "type": "STRING",
@@ -16707,8 +16726,13 @@
                 "type": "CHOICE",
                 "members": [
                   {
-                    "type": "SYMBOL",
-                    "name": "type"
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_type"
+                    },
+                    "named": true,
+                    "value": "type"
                   },
                   {
                     "type": "ALIAS",
@@ -16727,8 +16751,13 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "SYMBOL",
-                "name": "type"
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_type"
+                },
+                "named": true,
+                "value": "type"
               },
               {
                 "type": "STRING",
@@ -16802,8 +16831,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -16828,8 +16862,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -16856,8 +16895,13 @@
                 "type": "FIELD",
                 "name": "left",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "type"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_as_type"
+                  },
+                  "named": true,
+                  "value": "type"
                 }
               },
               {
@@ -16892,8 +16936,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -16918,8 +16967,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -16946,8 +17000,13 @@
                 "type": "FIELD",
                 "name": "left",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "type"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_as_type"
+                  },
+                  "named": true,
+                  "value": "type"
                 }
               },
               {
@@ -16982,8 +17041,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -17027,8 +17091,13 @@
                 "type": "FIELD",
                 "name": "left",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "type"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_as_type"
+                  },
+                  "named": true,
+                  "value": "type"
                 }
               },
               {
@@ -17080,8 +17149,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "type"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
                     },
                     {
                       "type": "ALIAS",
@@ -17227,6 +17301,15 @@
                 },
                 "named": true,
                 "value": "readonly_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_infer_type"
+                },
+                "named": true,
+                "value": "infer_type"
               }
             ]
           }
@@ -17320,6 +17403,15 @@
           },
           "named": true,
           "value": "predefined_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
         }
       ]
     },
@@ -17332,6 +17424,60 @@
           {
             "type": "STRING",
             "value": "readonly"
+          },
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_const_assertion_readonly_operand"
+            },
+            "named": true,
+            "value": "type"
+          }
+        ]
+      }
+    },
+    "_const_assertion_readonly_operand": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_operator_operand"
+          },
+          "named": true,
+          "value": "primary_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_readonly_type"
+          },
+          "named": true,
+          "value": "readonly_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_infer_type"
+          },
+          "named": true,
+          "value": "infer_type"
+        }
+      ]
+    },
+    "_const_assertion_unique_type": {
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "unique"
           },
           {
             "type": "CHOICE",
@@ -17353,30 +17499,53 @@
                 },
                 "named": true,
                 "value": "readonly_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_infer_type"
+                },
+                "named": true,
+                "value": "infer_type"
               }
             ]
           }
         ]
       }
     },
-    "_const_assertion_unique_type": {
-      "type": "PREC",
-      "value": -1,
+    "_const_assertion_nullable_type": {
+      "type": "PREC_RIGHT",
+      "value": 0,
       "content": {
         "type": "SEQ",
         "members": [
           {
             "type": "STRING",
-            "value": "unique"
+            "value": "?"
           },
           {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_const_assertion_operator_operand"
-            },
-            "named": true,
-            "value": "primary_type"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_type"
+                },
+                "named": true,
+                "value": "type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_qualified_const_assertion_type"
+                },
+                "named": true,
+                "value": "type"
+              }
+            ]
           }
         ]
       }
@@ -17397,7 +17566,7 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_const_assertion_readonly_type"
+            "name": "_const_assertion_constraint_readonly_type"
           },
           "named": true,
           "value": "readonly_type"
@@ -17406,42 +17575,12 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_const_assertion_constraint_scoped_infer_type"
+            "name": "_const_assertion_constraint_infer_type"
           },
           "named": true,
           "value": "infer_type"
         }
       ]
-    },
-    "_const_assertion_constraint_scoped_infer_type": {
-      "type": "PREC_RIGHT",
-      "value": 0,
-      "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "STRING",
-            "value": "infer"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "_type_identifier"
-          },
-          {
-            "type": "STRING",
-            "value": "extends"
-          },
-          {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_const_assertion_constraint_scoped_type"
-            },
-            "named": true,
-            "value": "type"
-          }
-        ]
-      }
     },
     "_const_assertion_constraint_scoped_primary_type": {
       "type": "CHOICE",
@@ -17517,7 +17656,7 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_const_assertion_index_type_query"
+            "name": "_const_assertion_constraint_index_type_query"
           },
           "named": true,
           "value": "index_type_query"
@@ -17526,10 +17665,19 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_const_assertion_unique_type"
+            "name": "_const_assertion_constraint_unique_type"
           },
           "named": true,
           "value": "predefined_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
         },
         {
           "type": "ALIAS",
@@ -17728,10 +17876,19 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_const_assertion_unique_type"
+            "name": "_const_assertion_constraint_unique_type"
           },
           "named": true,
           "value": "predefined_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
         },
         {
           "type": "SYMBOL",
@@ -17756,10 +17913,6 @@
         {
           "type": "SYMBOL",
           "name": "tuple_type"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "flow_maybe_type"
         },
         {
           "type": "SYMBOL",
@@ -17981,10 +18134,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "flow_maybe_type"
-        },
-        {
-          "type": "SYMBOL",
           "name": "type_query"
         },
         {
@@ -18173,10 +18322,6 @@
         {
           "type": "SYMBOL",
           "name": "tuple_type"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "flow_maybe_type"
         },
         {
           "type": "SYMBOL",
@@ -18396,16 +18541,183 @@
             "value": "keyof"
           },
           {
-            "type": "ALIAS",
-            "content": {
-              "type": "SYMBOL",
-              "name": "_const_assertion_constraint_primary_type"
-            },
-            "named": true,
-            "value": "primary_type"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_primary_type"
+                },
+                "named": true,
+                "value": "primary_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_readonly_type"
+                },
+                "named": true,
+                "value": "readonly_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_infer_type"
+                },
+                "named": true,
+                "value": "infer_type"
+              }
+            ]
           }
         ]
       }
+    },
+    "_const_assertion_constraint_unique_type": {
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "unique"
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_operator_operand"
+                },
+                "named": true,
+                "value": "primary_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_readonly_type"
+                },
+                "named": true,
+                "value": "readonly_type"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_constraint_infer_type"
+                },
+                "named": true,
+                "value": "infer_type"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "_const_assertion_constraint_operator_operand": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_const_type"
+          },
+          "named": false,
+          "value": "const"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_unqualified_generic_type"
+          },
+          "named": true,
+          "value": "generic_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_type_name"
+          },
+          "named": true,
+          "value": "nested_type_identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_generic_type"
+          },
+          "named": true,
+          "value": "generic_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_array_type"
+          },
+          "named": true,
+          "value": "array_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_lookup_type"
+          },
+          "named": true,
+          "value": "lookup_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_parenthesized_type"
+          },
+          "named": true,
+          "value": "parenthesized_type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "non_nullable_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_constraint_index_type_query"
+          },
+          "named": true,
+          "value": "index_type_query"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_constraint_unique_type"
+          },
+          "named": true,
+          "value": "predefined_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
+        }
+      ]
     },
     "_const_assertion_constraint_readonly_type": {
       "type": "PREC_RIGHT",
@@ -18442,6 +18754,10 @@
             {
               "type": "SYMBOL",
               "name": "_type_identifier"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_nonconditional_infer_name_end"
             }
           ]
         },
@@ -24873,13 +25189,15 @@
       "_const_assertion_constraint_scoped_primary_type"
     ],
     [
-      "_const_assertion_constraint_scoped_infer_type",
-      "_const_assertion_constraint_infer_type",
+      "_const_assertion_constraint_scoped_type",
+      "_const_assertion_constraint_type"
+    ],
+    [
+      "_as_infer_type",
       "infer_type"
     ],
     [
-      "_const_assertion_operator_operand",
-      "_const_assertion_constraint_primary_type"
+      "_as_infer_type"
     ],
     [
       "primary_type",
@@ -24888,6 +25206,45 @@
     [
       "_as_primary_type",
       "_ordinary_assertion_postfix_type",
+      "primary_type"
+    ],
+    [
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type"
+    ],
+    [
+      "_as_constraint_primary_type",
+      "_ordinary_assertion_postfix_type"
+    ],
+    [
+      "_as_constraint_primary_type",
+      "_const_assertion_constraint_primary_type"
+    ],
+    [
+      "_as_constraint_type",
+      "_const_assertion_constraint_type"
+    ],
+    [
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "accessibility_modifier",
+      "primary_type"
+    ],
+    [
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "override_modifier",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
       "primary_type"
     ],
     [
@@ -24905,21 +25262,6 @@
     [
       "_const_assertion_unqualified_generic_type",
       "_generic_type_guarded_name"
-    ],
-    [
-      "primary_type",
-      "_ordinary_assertion_postfix_type",
-      "override_modifier"
-    ],
-    [
-      "primary_type",
-      "_ordinary_assertion_postfix_type",
-      "accessibility_modifier"
-    ],
-    [
-      "primary_type",
-      "_ordinary_assertion_postfix_type",
-      "_type_arguments_target"
     ],
     [
       "type",
@@ -28686,7 +29028,57 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "flow_maybe_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "flow_maybe_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_qualified_const_assertion_type"
       },
       {
         "type": "SYMBOL",
@@ -28700,7 +29092,7 @@
       },
       {
         "type": "SYMBOL",
-        "name": "flow_maybe_type"
+        "name": "_const_assertion_nullable_type"
       }
     ],
     [
@@ -28716,6 +29108,16 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_scoped_type"
       },
       {
@@ -28726,6 +29128,26 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nullable_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "tuple_type"
       },
       {
@@ -28808,6 +29230,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "tuple_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -28918,6 +29350,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_array_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -28978,6 +29420,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_array_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -29029,6 +29481,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_array_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -29089,6 +29551,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_ordinary_assertion_array_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -29149,6 +29621,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "non_nullable_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -29199,6 +29681,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "array_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -29249,6 +29741,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "pattern"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -31176,6 +31678,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_type_name"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -31247,6 +31759,16 @@
       {
         "type": "SYMBOL",
         "name": "_const_assertion_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "nested_type_identifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
       }
     ],
     [
@@ -31496,6 +32018,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_type_name"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -31537,6 +32069,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "nested_type_identifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -31636,6 +32178,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -31726,6 +32278,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_unqualified_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -31816,6 +32378,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -31896,6 +32468,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -32336,6 +32918,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -32396,6 +32988,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_unqualified_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -32456,6 +33058,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -32506,6 +33118,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "generic_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -32733,6 +33355,56 @@
       {
         "type": "SYMBOL",
         "name": "_const_assertion_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_ordinary_assertion_lookup_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "lookup_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_lookup_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_lookup_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_lookup_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
       },
       {
         "type": "SYMBOL",
@@ -33182,6 +33854,56 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "index_type_query"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_index_type_query"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_index_type_query"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_index_type_query"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_index_type_query"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       },
       {
@@ -33446,6 +34168,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_primary_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -33506,6 +34238,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_primary_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -33566,6 +34308,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_primary_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -33626,6 +34378,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -33662,6 +34424,76 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_qualified_const_assertion_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       },
       {
@@ -33677,6 +34509,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_primary_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -33746,6 +34588,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_primary_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -33797,6 +34649,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_postfix_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -33857,6 +34719,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_ordinary_assertion_postfix_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -33907,6 +34779,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "primary_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34216,6 +35098,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_lookup_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -34276,6 +35168,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_lookup_type"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_as_constraint_type"
       }
     ],
@@ -34327,6 +35229,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_lookup_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34387,6 +35299,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_ordinary_assertion_lookup_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34437,6 +35359,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "lookup_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34497,6 +35429,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34557,6 +35499,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34617,6 +35569,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34677,6 +35639,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34727,6 +35699,16 @@
       {
         "type": "SYMBOL",
         "name": "_as_type"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_operand"
       }
     ],
     [
@@ -34890,6 +35872,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_type_name"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -34980,6 +35972,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_generic_name"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -35061,6 +36063,16 @@
       {
         "type": "SYMBOL",
         "name": "_const_assertion_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_nested_identifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
       }
     ],
     [
@@ -35204,6 +36216,16 @@
       },
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "as_expression"
+      },
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_primary_type"
       }
     ],
@@ -35275,6 +36297,16 @@
       {
         "type": "SYMBOL",
         "name": "_const_assertion_operator_operand"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "satisfies_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_operator_operand"
       }
     ],
     [
@@ -35816,6 +36848,14 @@
     {
       "type": "SYMBOL",
       "name": "_type_argument_continuation_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_as_infer_constraint_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_nonconditional_infer_name_end"
     }
   ],
   "inline": [
@@ -35833,6 +36873,7 @@
     "_jsx_identifier",
     "_lhs_expression",
     "_type_identifier",
+    "_as_identifier",
     "_type_reference_identifier",
     "_contextual_type_identifier",
     "_jsx_start_opening_element"
@@ -35860,6 +36901,8 @@
     "_const_assertion_constraint_scoped_type",
     "_const_assertion_constraint_scoped_primary_type",
     "_const_assertion_operator_operand",
+    "_const_assertion_readonly_operand",
+    "_const_assertion_constraint_operator_operand",
     "_const_assertion_constraint_type",
     "_const_assertion_constraint_primary_type",
     "_const_assertion_constraint_postfix_type",
@@ -36166,7 +37209,7 @@
       }
     ],
     "properties": [],
-    "as_constraint_names": [
+    "as_type_names": [
       {
         "type": "STRING",
         "value": "const"

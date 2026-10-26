@@ -93,6 +93,8 @@ enum TokenType {
     CONST_GENERIC_NAME,
     TYPE_ARGUMENT_START,
     TYPE_ARGUMENT_CONTINUATION_START,
+    AS_INFER_CONSTRAINT_END,
+    NONCONDITIONAL_INFER_NAME_END,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3246,6 +3248,8 @@ static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_consequence_can_start(TSLexer *lexer);
 static bool type_argument_can_start(TSLexer *lexer);
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols);
+static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break);
+static bool as_infer_constraint_can_end(TSLexer *lexer);
 
 static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     advance(lexer);
@@ -3269,13 +3273,7 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
         lexer->result_symbol = CONST_ASSERTION_NON_NULLABLE_SUFFIX;
         return true;
     }
-    if (valid_symbols[CONST_ASSERTION_NAME_END]) {
-        lexer->result_symbol = CONST_ASSERTION_NAME_END;
-        return !trivia || const_assertion_name_can_end(lexer, line_break);
-    }
-    if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END] || (trivia && !const_assertion_type_can_end(lexer, line_break))) return false;
-    lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
-    return true;
+    return scan_assertion_type_end(lexer, valid_symbols, trivia, line_break);
 }
 
 static bool const_assertion_consequence_can_start(TSLexer *lexer) {
@@ -3294,6 +3292,35 @@ static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols)
                      valid_symbols[TYPE_ARGUMENT_START] ? TYPE_ARGUMENT_START : TYPE_ARGUMENT_CONTINUATION_START;
     lexer->result_symbol = start;
     return start == TYPE_ARGUMENT_CONTINUATION_START ? type_argument_can_start(lexer) : const_assertion_consequence_can_start(lexer);
+}
+
+static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break) {
+    if (valid_symbols[NONCONDITIONAL_INFER_NAME_END]) {
+        lexer->result_symbol = NONCONDITIONAL_INFER_NAME_END;
+        return !trivia || lexer->lookahead != 'e' || !scan_word(lexer, "extends");
+    }
+    if (valid_symbols[CONST_ASSERTION_NAME_END]) {
+        lexer->result_symbol = CONST_ASSERTION_NAME_END;
+        return !trivia || const_assertion_name_can_end(lexer, line_break);
+    }
+    if (valid_symbols[AS_INFER_CONSTRAINT_END]) {
+        lexer->result_symbol = AS_INFER_CONSTRAINT_END;
+        return !trivia || as_infer_constraint_can_end(lexer);
+    }
+    if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END]) return false;
+    lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
+    return !trivia || const_assertion_type_can_end(lexer, line_break);
+}
+
+static bool as_infer_constraint_can_end(TSLexer *lexer) {
+    if (lexer->lookahead == '|' || lexer->lookahead == '&') {
+        int32_t operator = lexer->lookahead;
+        advance(lexer);
+        return lexer->lookahead == operator || lexer->lookahead == '=';
+    }
+    if (lexer->lookahead != '?') return true;
+    advance(lexer);
+    return lexer->lookahead == '?' || !question_mark_can_start_ternary(lexer);
 }
 
 static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break) {
@@ -3334,6 +3361,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[CONST_ASSERTION_NAME_END] ||
          valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
          valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] ||
+         valid_symbols[AS_INFER_CONSTRAINT_END] ||
+         valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 

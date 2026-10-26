@@ -9,6 +9,31 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 type Ranges = [string, number, number][];
 const Sources = [
   'const result = value as const.class;',
+  'const result = value as infer U extends infer V extends B;',
+  'const result = value as infer U extends infer V\nextends B;',
+  'const result = value as infer U extends B | C ? D : E;',
+  'const result = value as infer U extends const.Member | B;',
+
+  'const result = value as infer U extends B ?? fallback;',
+  'const result = value as infer U extends const.Member ?? fallback;',
+  'const result = value as A extends ? infer U extends infer V extends B ? C : D ? other : last / 2;',
+
+  'const result = value as A | const.X | const.Y;',
+  'const result = value as A | const.X<T> & const.Y[Key] | const.Z[];',
+  'const result = value as A & const.X & const.Y;',
+  'const result = value as ?A![];',
+  'const result = value as ?A[]!;',
+  'const result = value as ??A![];',
+  'const result = value as ?const.Member![];',
+  'const result = value as ?A | const.Member![];',
+  'const result = value as keyof ?const.Member![];',
+  'const result = value as ?keyof A![];',
+  'const result = value as A extends readonly infer U extends const ? C : D;',
+  'const result = value as A extends keyof infer U extends B ? C : D ? other : last / 2;',
+  'const result = value as A extends keyof readonly infer U extends const ? C : D;',
+  'const result = value as A extends readonly keyof infer U extends B ? C : D ? other : last / 2;',
+  'const result = value as A extends unique infer U extends const ? C : D;',
+
   'const result = value as const /* namespace */ . Member;',
   'const result = value as const\n.Member;',
   'const result = value as const.Member.Nested;',
@@ -118,6 +143,10 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as A | const.X | const.Y();',
+  'const invalid = value as A & const.X & const.Y();',
+  'const invalid = value as A | const.X | const.Y?.();',
+  'const invalid = value as A | const.X | const.Y[]();',
   'const invalid = value as X extends const.Right ? Z : const.Member<Arg>(other);',
   'const invalid = value as X extends const[]! ? Y : Z<Arg>(other);',
   'type Result = Box<const.Member>;',
@@ -149,9 +178,9 @@ for (const dialect of ['typescript', 'tsx']) {
     const query = new Query(
       language,
       '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
-        '(array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
+        '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
         '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-        ' (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
+        ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
         ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
     );
@@ -232,6 +261,12 @@ function checkRanges(
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
   if (!valid || !compareRanges) return;
   const expected: Record<string, Ranges> = {
+    flowMaybe: [],
+    flowMaybeOperand: [],
+    readonlyOperator: [],
+    readonlyOperand: [],
+    infer: [],
+    inferOperand: [],
     ternary: [],
     binary: [],
     binaryOperator: [],
@@ -257,6 +292,17 @@ function checkRanges(
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isJSDocNullableType(node) && !node.postfix) {
+      expected.flowMaybe!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.flowMaybeOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
+    if (ts.isInferTypeNode(node)) expected.infer!.push([node.getText(reference), node.getStart(reference), node.end]);
+    if (ts.isTypeOperatorNode(node) && node.operator === ts.SyntaxKind.ReadonlyKeyword) {
+      expected.readonlyOperator!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.readonlyOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
+    if (ts.isTypeOperatorNode(node) && ts.isInferTypeNode(node.type))
+      expected.inferOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
     if (ts.isConditionalExpression(node))
       expected.ternary!.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isBinaryExpression(node)) {
@@ -347,6 +393,11 @@ function checkRanges(
   collect(reference);
   const actual: Record<string, Ranges> = Object.fromEntries(Object.keys(expected).map((name) => [name, []]));
   for (const { name, node } of query.captures(tree.rootNode)) {
+    if (
+      (name === 'union' && node.parent?.type === 'union_type') ||
+      (name === 'intersection' && node.parent?.type === 'intersection_type')
+    )
+      continue;
     actual[name]!.push([node.text, node.startIndex, node.endIndex]);
   }
   const byRange = (a: Ranges[number], b: Ranges[number]): number => a[1] - b[1] || b[2] - a[2];

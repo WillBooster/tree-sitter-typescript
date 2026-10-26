@@ -2129,7 +2129,7 @@
       "required": true,
       "types": [
         {
-          "type": "primary_type",
+          "type": "type",
           "named": true
         }
       ]
@@ -3068,6 +3068,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "infer_type",
+          "named": true
+        },
         {
           "type": "primary_type",
           "named": true
@@ -4353,7 +4357,15 @@
       "required": false,
       "types": [
         {
+          "type": "infer_type",
+          "named": true
+        },
+        {
           "type": "primary_type",
+          "named": true
+        },
+        {
+          "type": "readonly_type",
           "named": true
         }
       ]
