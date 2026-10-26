@@ -113,6 +113,7 @@ module.exports = function defineGrammar(dialect) {
       $._type_argument_continuation_start,
       $._as_infer_constraint_end,
       $._nonconditional_infer_name_end,
+      $._nullable_type_start,
     ],
 
     supertypes: ($, previous) => [
@@ -1166,7 +1167,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _const_assertion_nullable_type: ($) => prec.right(seq('?', assertionType($))),
+      _const_assertion_nullable_type: ($) => prec.right(seq('?', $._nullable_type_start, assertionType($))),
 
       _const_assertion_constraint_scoped_type: ($) =>
         choice(
@@ -2437,7 +2438,13 @@ function assertionType($) {
 
 function assertionBinaryType($, operator) {
   const scoped = alias($._qualified_const_assertion_type, $.type);
-  return prec.left(choice(seq(scoped, operator, assertionType($)), seq(alias($._as_type, $.type), operator, scoped)));
+  return prec.left(
+    choice(
+      seq(scoped, operator, assertionType($)),
+      seq(alias($._as_type, $.type), operator, scoped),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, scoped))
+    )
+  );
 }
 
 function assertionTypePrecedences($, lists) {

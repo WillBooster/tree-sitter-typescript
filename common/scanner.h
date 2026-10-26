@@ -95,6 +95,7 @@ enum TokenType {
     TYPE_ARGUMENT_CONTINUATION_START,
     AS_INFER_CONSTRAINT_END,
     NONCONDITIONAL_INFER_NAME_END,
+    NULLABLE_TYPE_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3261,7 +3262,7 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
     bool line_break = false;
     bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
     if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
-        valid_symbols[TYPE_ARGUMENT_CONTINUATION_START]) {
+        valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[NULLABLE_TYPE_START]) {
         return trivia && scan_assertion_type_start(lexer, valid_symbols);
     }
     if (valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] && trivia && !line_break && lexer->lookahead == '[') {
@@ -3288,6 +3289,12 @@ static bool type_argument_can_start(TSLexer *lexer) {
 }
 
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols) {
+    if (valid_symbols[NULLABLE_TYPE_START]) {
+        lexer->result_symbol = NULLABLE_TYPE_START;
+        if (lexer->lookahead != '|') return true;
+        advance(lexer);
+        return lexer->lookahead == '|' || lexer->lookahead == '=';
+    }
     TSSymbol start = valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] ? CONST_ASSERTION_CONSEQUENCE_START :
                      valid_symbols[TYPE_ARGUMENT_START] ? TYPE_ARGUMENT_START : TYPE_ARGUMENT_CONTINUATION_START;
     lexer->result_symbol = start;
@@ -3363,6 +3370,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
          valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] ||
          valid_symbols[AS_INFER_CONSTRAINT_END] ||
          valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
+         valid_symbols[NULLABLE_TYPE_START] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 

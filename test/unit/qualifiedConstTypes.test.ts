@@ -9,6 +9,19 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 type Ranges = [string, number, number][];
 const Sources = [
   'const result = value as const.class;',
+  'const result = value as | const.Member;',
+  'const result = value as | const.Member & Other;',
+  'const result = value as | const.Member & Other | Last;',
+  'const result = value as | const.Member & Other extends Base ? Left : Right;',
+  'const result = value as & const.Member;',
+  'const result = value as | A | const.Member;',
+  'const result = value as | A & const.Member | const.Other;',
+  'const result = value as & A & const.Member;',
+  'const result = value as | A!;',
+  'const result = value as ? & const.Member!;',
+  'const result = value as | infer U extends B;',
+  'const result = value as | ?A![] extends B ? C : D;',
+
   'const result = value as infer U extends infer V extends B;',
   'const result = value as infer U extends infer V\nextends B;',
   'const result = value as infer U extends B | C ? D : E;',
@@ -143,6 +156,8 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as | const.Member();',
+  'const invalid = value as & const.Member?.();',
   'const invalid = value as A | const.X | const.Y();',
   'const invalid = value as A & const.X & const.Y();',
   'const invalid = value as A | const.X | const.Y?.();',

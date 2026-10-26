@@ -16696,6 +16696,28 @@
                 "value": "type"
               }
             ]
+          },
+          {
+            "type": "PREC_DYNAMIC",
+            "value": -4,
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "|"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_qualified_const_assertion_type"
+                  },
+                  "named": true,
+                  "value": "type"
+                }
+              ]
+            }
           }
         ]
       }
@@ -16773,6 +16795,28 @@
                 "value": "type"
               }
             ]
+          },
+          {
+            "type": "PREC_DYNAMIC",
+            "value": -4,
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "&"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_qualified_const_assertion_type"
+                  },
+                  "named": true,
+                  "value": "type"
+                }
+              ]
+            }
           }
         ]
       }
@@ -17523,6 +17567,10 @@
           {
             "type": "STRING",
             "value": "?"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_nullable_type_start"
           },
           {
             "type": "CHOICE",
@@ -36856,6 +36904,10 @@
     {
       "type": "SYMBOL",
       "name": "_nonconditional_infer_name_end"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_nullable_type_start"
     }
   ],
   "inline": [
