@@ -8,6 +8,14 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
 const Sources = [
+  'const result = value as () => asserts x[K];',
+  'const result = value as () => asserts x | const.M;',
+  'const result = value as () => asserts x[] & const.M;',
+  'const result = value as () => asserts this[Key];',
+  'const result = value as A extends (() => asserts x[Key]) ? C : const.M;',
+  String.raw`const result = value as keyof infer \u0078;`,
+  String.raw`const result = value as keyof infer \u03c0;`,
+
   'const result = value as const.Member[- /* gap */ .1];',
   'const result = value as () => any.Member[.1];',
   'const result = value as A extends const.Member[-\n1n] ? B : C;',
@@ -259,6 +267,12 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  String.raw`const invalid = value as keyof infer \u0063onst;`,
+  String.raw`const invalid = value as A extends infer \u{63}lass ? const.M : D;`,
+  String.raw`const invalid = value as infer \u0074his;`,
+  String.raw`const invalid = value as () => \u0063onst is const.M;`,
+  String.raw`const invalid = value as () => asserts \u0065num is const.M;`,
+
   'const invalid = value as () => any.Member[class.Key];',
   'const invalid = value as A extends any.Member[+1] ? C : const.Last;',
   String.raw`const invalid = value as A extends any.Member[\u0063onst.Key] ? C : const.Last;`,

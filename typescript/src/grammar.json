@@ -15574,6 +15574,10 @@
           "type": "SEQ",
           "members": [
             {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
+            {
               "type": "FIELD",
               "name": "name",
               "content": {
@@ -15726,6 +15730,10 @@
           "type": "SEQ",
           "members": [
             {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
+            {
               "type": "FIELD",
               "name": "name",
               "content": {
@@ -15867,7 +15875,7 @@
         }
       ]
     },
-    "_as_asserts_type": {
+    "_as_bare_asserts_type": {
       "type": "SEQ",
       "members": [
         {
@@ -15882,17 +15890,12 @@
               "value": "asserts"
             },
             {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
+            {
               "type": "CHOICE",
               "members": [
-                {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_asserts_predicate"
-                  },
-                  "named": true,
-                  "value": "type_predicate"
-                },
                 {
                   "type": "SEQ",
                   "members": [
@@ -16024,6 +16027,28 @@
               ]
             }
           ]
+        }
+      ]
+    },
+    "_as_asserts_type": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_as_asserts_start"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_asserts_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
         }
       ]
     },
@@ -18069,6 +18094,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -18191,6 +18225,15 @@
     "_const_assertion_postfix_type": {
       "type": "CHOICE",
       "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
         {
           "type": "ALIAS",
           "content": {
@@ -19759,6 +19802,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -20062,6 +20114,15 @@
     "_const_assertion_constraint_scoped_primary_type": {
       "type": "CHOICE",
       "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
         {
           "type": "ALIAS",
           "content": {
@@ -20614,6 +20675,10 @@
         {
           "type": "SEQ",
           "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
             {
               "type": "FIELD",
               "name": "name",
@@ -22003,17 +22068,26 @@
       }
     },
     "_infer_type_identifier": {
-      "type": "ALIAS",
-      "content": {
-        "type": "RESERVED",
-        "content": {
+      "type": "SEQ",
+      "members": [
+        {
           "type": "SYMBOL",
-          "name": "identifier"
+          "name": "_assertion_binding_identifier_start"
         },
-        "context_name": "assertion_bindings"
-      },
-      "named": true,
-      "value": "type_identifier"
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "RESERVED",
+            "content": {
+              "type": "SYMBOL",
+              "name": "identifier"
+            },
+            "context_name": "assertion_bindings"
+          },
+          "named": true,
+          "value": "type_identifier"
+        }
+      ]
     },
     "_const_assertion_constraint_primary_type": {
       "type": "CHOICE",
@@ -22186,6 +22260,15 @@
           },
           "named": true,
           "value": "lookup_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
         },
         {
           "type": "ALIAS",
@@ -22432,6 +22515,15 @@
           },
           "named": true,
           "value": "lookup_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
         },
         {
           "type": "ALIAS",
@@ -23117,6 +23209,15 @@
           },
           "named": true,
           "value": "lookup_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_bare_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
         },
         {
           "type": "ALIAS",
@@ -51108,6 +51209,10 @@
     {
       "type": "SYMBOL",
       "name": "_as_lookup_index_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_assertion_binding_identifier_start"
     },
     {
       "type": "SYMBOL",

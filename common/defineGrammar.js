@@ -114,6 +114,7 @@ module.exports = function defineGrammar(dialect) {
       $._type_argument_start,
       $._type_argument_continuation_start,
       $._as_lookup_index_start,
+      $._assertion_binding_identifier_start,
       $._as_infer_constraint_end,
       $._nonconditional_infer_name_end,
       $._nullable_type_start,
@@ -1100,18 +1101,29 @@ module.exports = function defineGrammar(dialect) {
       _as_type_predicate: ($) =>
         seq(
           $._as_type_predicate_start,
-          typePredicate($, assertionType($), reserved('assertion_bindings', $.identifier))
+          typePredicate(
+            $,
+            assertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start
+          )
         ),
       _as_asserts_predicate: ($) =>
         seq(
           $._as_asserts_predicate_start,
-          typePredicate($, assertionType($), reserved('assertion_bindings', $.identifier))
+          typePredicate(
+            $,
+            assertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start
+          )
         ),
-      _as_asserts_type: ($) =>
+      _as_bare_asserts_type: ($) =>
         seq(
           $._as_asserts_start,
-          assertsType($, alias($._as_asserts_predicate, $.type_predicate), reserved('assertion_bindings', $.identifier))
+          assertsType($, false, reserved('assertion_bindings', $.identifier), $._assertion_binding_identifier_start)
         ),
+      _as_asserts_type: ($) => seq($._as_asserts_start, 'asserts', alias($._as_asserts_predicate, $.type_predicate)),
 
       _as_infer_type: ($) =>
         choice(
@@ -1356,7 +1368,12 @@ module.exports = function defineGrammar(dialect) {
       _as_non_postfix_type_predicate: ($) =>
         seq(
           $._as_type_predicate_start,
-          typePredicate($, nonPostfixAssertionType($), reserved('assertion_bindings', $.identifier))
+          typePredicate(
+            $,
+            nonPostfixAssertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start
+          )
         ),
       _as_non_postfix_type: ($) =>
         choice(
@@ -1414,7 +1431,11 @@ module.exports = function defineGrammar(dialect) {
         prec.right(seq('keyof', nonPostfixConstraintOperatorOperand($))),
       _const_assertion_non_postfix_constraint_unique_type: ($) =>
         prec(-1, seq('unique', nonPostfixConstraintOperatorOperand($))),
-      _infer_type_identifier: ($) => alias(reserved('assertion_bindings', $.identifier), $.type_identifier),
+      _infer_type_identifier: ($) =>
+        seq(
+          $._assertion_binding_identifier_start,
+          alias(reserved('assertion_bindings', $.identifier), $.type_identifier)
+        ),
 
       _const_assertion_constraint_primary_type: ($) =>
         choice(
@@ -2438,11 +2459,12 @@ function assertionFunctionParameters($) {
   return choice($.formal_parameters, alias($._conditional_function_parameters, $.formal_parameters));
 }
 
-function assertsType($, predicate = $.type_predicate, identifier = $.identifier) {
+function assertsType($, predicate = $.type_predicate, identifier = $.identifier, bindingStart) {
   return seq(
     'asserts',
+    ...(bindingStart ? [bindingStart] : []),
     choice(
-      predicate,
+      ...(predicate ? [predicate] : []),
       seq(
         choice(
           identifier,
@@ -2480,8 +2502,9 @@ function assertsType($, predicate = $.type_predicate, identifier = $.identifier)
   );
 }
 
-function typePredicate($, type = $.type, identifier = $.identifier) {
+function typePredicate($, type = $.type, identifier = $.identifier, bindingStart) {
   return seq(
+    ...(bindingStart ? [bindingStart] : []),
     field(
       'name',
       choice(
@@ -2609,6 +2632,7 @@ function ordinaryAssertionPostfixTypes($) {
 
 function constAssertionPostfixTypes($) {
   return [
+    alias($._as_bare_asserts_type, $.asserts),
     alias($._as_const_type, 'const'),
     alias($._const_assertion_unqualified_generic_type, $.generic_type),
     alias($._const_assertion_type_name, $.nested_type_identifier),

@@ -94,6 +94,7 @@ enum TokenType {
     TYPE_ARGUMENT_START,
     TYPE_ARGUMENT_CONTINUATION_START,
     AS_LOOKUP_INDEX_START,
+    ASSERTION_BINDING_IDENTIFIER_START,
     AS_INFER_CONSTRAINT_END,
     NONCONDITIONAL_INFER_NAME_END,
     NULLABLE_TYPE_START,
@@ -1696,7 +1697,6 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
 }
 
 static bool assertion_binding_word_is_reserved(const char *word) {
-    if (strcmp(word, "this") == 0) return false;
     for (unsigned i = 0; i < sizeof(TS_BINDING_RESERVED_KEYWORDS) / sizeof(TS_BINDING_RESERVED_KEYWORDS[0]); i++) {
         if (strcmp(word, TS_BINDING_RESERVED_KEYWORDS[i]) == 0) return true;
     }
@@ -1704,7 +1704,7 @@ static bool assertion_binding_word_is_reserved(const char *word) {
 }
 
 static bool scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break) {
-    if (ascii_word && assertion_binding_word_is_reserved(word)) return false;
+    if (ascii_word && strcmp(word, "this") != 0 && assertion_binding_word_is_reserved(word)) return false;
     if (!scan_expression_trivia(lexer, line_break, NULL)) return false;
     bool name_follows = is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead);
     bool predicate = valid_symbols[AS_ASSERTS_PREDICATE_START] || (valid_symbols[AS_TYPE_PREDICATE_START] && !*line_break);
@@ -3292,6 +3292,7 @@ static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, b
 static bool as_infer_constraint_can_end(TSLexer *lexer, bool line_break);
 static bool as_query_name_can_end(TSLexer *lexer, bool line_break, bool allow_shift);
 static bool as_parenthesized_type_can_end(TSLexer *lexer, bool line_break);
+static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *valid_symbols);
 
 static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     advance(lexer);
@@ -3301,7 +3302,11 @@ static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
 static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool line_break = false;
-    bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
+    bool comment = false;
+    bool trivia = scan_expression_trivia(lexer, &line_break, &comment);
+    if (valid_symbols[ASSERTION_BINDING_IDENTIFIER_START]) {
+        return trivia && !comment && scan_assertion_binding_identifier_start(lexer, valid_symbols);
+    }
     if (valid_symbols[AS_CONDITIONAL_LINE_BREAK] && trivia && line_break && lexer->lookahead == '?') {
         lexer->result_symbol = AS_CONDITIONAL_LINE_BREAK;
         return true;
@@ -3339,18 +3344,49 @@ static bool type_argument_can_start(TSLexer *lexer) {
     }
 }
 
+typedef enum {
+    ASSERTION_IDENTIFIER_INVALID,
+    ASSERTION_IDENTIFIER_WORD,
+    ASSERTION_IDENTIFIER_OTHER,
+} AssertionIdentifier;
+
+static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word, bool *escaped) {
+    unsigned length = 0;
+    bool first = true;
+    bool other = false;
+    while (is_identifier_part(lexer->lookahead)) {
+        *escaped |= lexer->lookahead == '\\';
+        int32_t character = scan_identifier_character(lexer);
+        if (!is_identifier_part(character) || character == '\\' || (first && is_ascii_digit(character))) return ASSERTION_IDENTIFIER_INVALID;
+        first = false;
+        if (character > 0x7F || length == TS_GLOBAL_KEYWORD_MAX_LENGTH) other = true;
+        else if (!other) word[length++] = (char)character;
+    }
+    return first ? ASSERTION_IDENTIFIER_INVALID : other ? ASSERTION_IDENTIFIER_OTHER : ASSERTION_IDENTIFIER_WORD;
+}
+
+static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *valid_symbols) {
+    TSLexerCheckpoint name_start;
+    lexer->get_checkpoint(lexer, &name_start);
+    char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+    bool escaped = false;
+    AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
+    if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
+    bool reserved = kind == ASSERTION_IDENTIFIER_WORD && assertion_binding_word_is_reserved(word);
+    if (reserved && (escaped || strcmp(word, "this") != 0)) return false;
+    bool line_break = false;
+    if ((valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_PREDICATE_START]) &&
+        scan_assertion_return_prefix(lexer, valid_symbols, word, kind == ASSERTION_IDENTIFIER_WORD && !escaped, &name_start, &line_break)) return true;
+    lexer->result_symbol = ASSERTION_BINDING_IDENTIFIER_START;
+    return !reserved || strcmp(word, "this") == 0;
+}
+
 static bool as_lookup_index_keyword_can_start(TSLexer *lexer) {
     char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
-    unsigned length = 0;
     bool escaped = false;
-    while (is_identifier_part(lexer->lookahead)) {
-        escaped |= lexer->lookahead == '\\';
-        int32_t character = scan_identifier_character(lexer);
-        if (!is_identifier_part(character) || character == '\\') return false;
-        if (character > 0x7F || length == sizeof(word) - 1) return true;
-        word[length++] = (char)character;
-    }
-    if (!assertion_binding_word_is_reserved(word) && strcmp(word, "this") != 0) return true;
+    AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
+    if (kind != ASSERTION_IDENTIFIER_WORD) return kind == ASSERTION_IDENTIFIER_OTHER;
+    if (!assertion_binding_word_is_reserved(word)) return true;
     if (strcmp(word, "function") == 0) return true;
     if (escaped) return false;
     return strcmp(word, "void") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 ||
@@ -3492,7 +3528,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[CONST_ASSERTION_NAME_END] ||
          valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
-         valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] ||
+         valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] || valid_symbols[ASSERTION_BINDING_IDENTIFIER_START] ||
          valid_symbols[AS_INFER_CONSTRAINT_END] ||
          valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
          valid_symbols[NULLABLE_TYPE_START] || valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] || valid_symbols[AS_QUERY_NAME_END] || valid_symbols[AS_PARENTHESIZED_TYPE_END] || valid_symbols[AS_CONDITIONAL_LINE_BREAK] ||
