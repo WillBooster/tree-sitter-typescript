@@ -83,6 +83,17 @@ const Sources = [
   'const result = value as const.Left extends Y ? Z : const.Member[Key]<Arg>(other);',
   'const result = value as X extends Y ? Z : A | const.Member[Key]<Arg>(other);',
   'const result = value as X extends Y ? Z : const.Member[Key]<A<B> | C<D> | E<F>>(other);',
+  'const result = value as A extends infer T extends const ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends const.Member ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends infer U extends const ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends B ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends (B extends C ? D : E) ? F : G ? other : last / 2;',
+  'const result = value as A extends infer T extends Box<B extends C ? D : E> ? F : G ? other : last / 2;',
+  'const result = value as A extends infer T extends () => B extends C ? D : E ? F : G ? other : last / 2;',
+  'const result = value as A extends infer T extends keyof B ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends readonly B[] ? C : D ? other : last / 2;',
+  'const result = value as A extends infer T extends B | C ? D : E ? other : last / 2;',
+  'const result = value as A extends infer T extends infer U extends B ? C : D ? other : last / 2;',
   'const result = value as typeof Namespace.value<Arg>;',
   'const result = value as typeof Namespace.value<Arg> / 2;',
   'const result = value as A[Key]\n(other);',
@@ -107,6 +118,8 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as X extends const.Right ? Z : const.Member<Arg>(other);',
+  'const invalid = value as X extends const[]! ? Y : Z<Arg>(other);',
   'type Result = Box<const.Member>;',
   'type Result = [const.Member];',
   'type Result = T extends X ? const.Member : Y;',
@@ -139,7 +152,7 @@ for (const dialect of ['typescript', 'tsx']) {
         '(array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
         '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
         ' (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
-        ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary' +
+        ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
     );
     const queries = configuredQueries(language, dialect);
@@ -219,6 +232,7 @@ function checkRanges(
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
   if (!valid || !compareRanges) return;
   const expected: Record<string, Ranges> = {
+    ternary: [],
     binary: [],
     binaryOperator: [],
     keyof: [],
@@ -243,6 +257,8 @@ function checkRanges(
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isConditionalExpression(node))
+      expected.ternary!.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isBinaryExpression(node)) {
       expected.binary!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.binaryOperator!.push([

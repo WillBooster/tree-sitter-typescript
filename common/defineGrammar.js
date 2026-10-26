@@ -110,6 +110,7 @@ module.exports = function defineGrammar(dialect) {
       $._as_const_qualified_name,
       $._const_generic_name,
       $._type_argument_start,
+      $._type_argument_continuation_start,
     ],
 
     supertypes: ($, previous) => [
@@ -123,6 +124,8 @@ module.exports = function defineGrammar(dialect) {
       $._conditional_right_type,
       $._as_type,
       $._as_primary_type,
+      $._as_constraint_type,
+      $._as_constraint_primary_type,
       $._qualified_const_assertion_type,
       $._const_assertion_primary_type,
       $._const_assertion_postfix_type,
@@ -268,6 +271,7 @@ module.exports = function defineGrammar(dialect) {
       [$.for_in_clause, $.primary_expression],
 
       [$._const_assertion_constraint_primary_type, $._const_assertion_constraint_scoped_primary_type],
+      [$._const_assertion_constraint_scoped_infer_type, $._const_assertion_constraint_infer_type, $.infer_type],
       [$._const_assertion_operator_operand, $._const_assertion_constraint_primary_type],
       [$.primary_type, $._ordinary_assertion_postfix_type],
       [$._as_primary_type, $._ordinary_assertion_postfix_type, $.primary_type],
@@ -331,6 +335,10 @@ module.exports = function defineGrammar(dialect) {
       $._contextual_type_identifier,
       $._jsx_start_opening_element,
     ],
+
+    reserved: {
+      as_constraint_names: () => ['const'],
+    },
 
     rules: {
       labeled_statement: ($) =>
@@ -1006,12 +1014,60 @@ module.exports = function defineGrammar(dialect) {
       _as_union_type: ($) => binaryType($, '|', alias($._as_type, $.type)),
       _as_intersection_type: ($) => binaryType($, '&', alias($._as_type, $.type)),
       _as_conditional_type: ($) =>
-        conditionalType($, alias($._as_type, $.type), { alternative: alias($._as_type, $.type) }),
+        conditionalType($, alias($._as_type, $.type), {
+          right: choice(alias($._as_constraint_type, $.type), alias($._conditional_right_type, $.type)),
+          alternative: alias($._as_type, $.type),
+        }),
       _as_index_type_query: ($) =>
         prec.right(
           seq('keyof', choice(alias($._as_primary_type, $.primary_type), alias($._as_readonly_type, $.readonly_type)))
         ),
       _as_readonly_type: ($) => prec.right(seq('readonly', alias($._as_type, $.type))),
+
+      _as_constraint_type: ($) =>
+        choice(
+          alias($._as_constraint_primary_type, $.primary_type),
+          $.function_type,
+          $.constructor_type,
+          alias($._as_constraint_readonly_type, $.readonly_type),
+          alias($._as_constraint_infer_type, $.infer_type)
+        ),
+      _as_constraint_primary_type: ($) => choice(...ordinaryAssertionPrimaryTypes($, true)),
+      _as_constraint_identifier: ($) =>
+        alias(
+          choice(
+            reserved('as_constraint_names', $.identifier),
+            'in',
+            'out',
+            'is',
+            'asserts',
+            'abstract',
+            'as',
+            'satisfies',
+            $._contextual_type_identifier
+          ),
+          $.type_identifier
+        ),
+      _as_constraint_array_type: ($) => seq(alias($._as_constraint_primary_type, $.primary_type), '[', ']'),
+      _as_constraint_lookup_type: ($) => seq(alias($._as_constraint_primary_type, $.primary_type), '[', $.type, ']'),
+      _as_constraint_union_type: ($) => binaryType($, '|', alias($._as_constraint_type, $.type)),
+      _as_constraint_intersection_type: ($) => binaryType($, '&', alias($._as_constraint_type, $.type)),
+      _as_constraint_index_type_query: ($) =>
+        prec.right(
+          seq(
+            'keyof',
+            choice(
+              alias($._as_constraint_primary_type, $.primary_type),
+              alias($._as_constraint_readonly_type, $.readonly_type)
+            )
+          )
+        ),
+      _as_constraint_readonly_type: ($) => prec.right(seq('readonly', alias($._as_constraint_type, $.type))),
+      _as_constraint_infer_type: ($) =>
+        choice(
+          seq('infer', $._type_identifier),
+          prec.right(seq('infer', $._type_identifier, 'extends', alias($._as_constraint_type, $.type)))
+        ),
 
       _qualified_const_assertion_type: ($) =>
         choice(
@@ -1090,7 +1146,12 @@ module.exports = function defineGrammar(dialect) {
       _const_assertion_constraint_scoped_type: ($) =>
         choice(
           alias($._const_assertion_constraint_scoped_primary_type, $.primary_type),
-          alias($._const_assertion_readonly_type, $.readonly_type)
+          alias($._const_assertion_readonly_type, $.readonly_type),
+          alias($._const_assertion_constraint_scoped_infer_type, $.infer_type)
+        ),
+      _const_assertion_constraint_scoped_infer_type: ($) =>
+        prec.right(
+          seq('infer', $._type_identifier, 'extends', alias($._const_assertion_constraint_scoped_type, $.type))
         ),
       _const_assertion_constraint_scoped_primary_type: ($) =>
         choice(
@@ -1326,7 +1387,7 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _implements_keyword_arguments: ($) =>
-        seq('<', commaSep1(seq($._type_argument_start, $.type)), $._keyword_heritage_arguments_end, '>'),
+        seq('<', guardedTypeArgumentList($), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(
@@ -2092,8 +2153,11 @@ function withShiftPrefix($, rule) {
 }
 
 function typeArguments($, opening, allowConst = false) {
-  const type = allowConst ? $.type : seq($._type_argument_start, $.type);
-  return seq(opening, commaSep1(type), optional(','), '>');
+  return seq(opening, allowConst ? commaSep1($.type) : guardedTypeArgumentList($), optional(','), '>');
+}
+
+function guardedTypeArgumentList($) {
+  return seq($._type_argument_start, $.type, repeat(seq(',', $._type_argument_continuation_start, $.type)));
 }
 
 function variableDeclarator($, name) {
@@ -2168,19 +2232,22 @@ function sepBy1(sep, rule) {
   return seq(rule, repeat(seq(sep, rule)));
 }
 
-function ordinaryAssertionPrimaryTypes($) {
+function ordinaryAssertionPrimaryTypes($, constraint = false) {
   const variants = {
-    generic_type: alias($._as_generic_type, $.generic_type),
-    array_type: alias($._as_array_type, $.array_type),
-    lookup_type: alias($._as_lookup_type, $.lookup_type),
-    union_type: alias($._as_union_type, $.union_type),
-    intersection_type: alias($._as_intersection_type, $.intersection_type),
-    conditional_type: alias($._as_conditional_type, $.conditional_type),
-    index_type_query: alias($._as_index_type_query, $.index_type_query),
+    generic_type: $._as_generic_type,
+    array_type: constraint ? $._as_constraint_array_type : $._as_array_type,
+    lookup_type: constraint ? $._as_constraint_lookup_type : $._as_lookup_type,
+    union_type: constraint ? $._as_constraint_union_type : $._as_union_type,
+    intersection_type: constraint ? $._as_constraint_intersection_type : $._as_intersection_type,
+    conditional_type: $._as_conditional_type,
+    index_type_query: constraint ? $._as_constraint_index_type_query : $._as_index_type_query,
   };
   return primaryTypes($)
-    .filter((rule) => rule !== 'const')
-    .map((rule) => variants[rule.name] ?? rule);
+    .filter((rule) => rule !== 'const' && (!constraint || rule.name !== 'conditional_type'))
+    .map((rule) => {
+      const type = variants[rule.name] ? alias(variants[rule.name], $[rule.name]) : rule;
+      return constraint && rule.name === '_type_reference_identifier' ? $._as_constraint_identifier : type;
+    });
 }
 
 function primaryTypes($) {
@@ -2315,12 +2382,14 @@ function assertionTypePrecedences($, lists) {
   const variants = {
     type: [
       $._as_type,
+      $._as_constraint_type,
       $._qualified_const_assertion_type,
       $._const_assertion_constraint_type,
       $._const_assertion_constraint_scoped_type,
     ],
     primary_type: [
       $._as_primary_type,
+      $._as_constraint_primary_type,
       $._const_assertion_constraint_scoped_primary_type,
       $._const_assertion_operator_operand,
       $._const_assertion_primary_type,
@@ -2334,19 +2403,27 @@ function assertionTypePrecedences($, lists) {
     generic_type: [$._as_generic_type, $._const_assertion_unqualified_generic_type, $._const_assertion_generic_type],
     array_type: [
       $._as_array_type,
+      $._as_constraint_array_type,
       $._const_assertion_array_type,
       $._ordinary_assertion_array_type,
       $.non_nullable_type,
     ],
-    lookup_type: [$._as_lookup_type, $._const_assertion_lookup_type, $._ordinary_assertion_lookup_type],
+    lookup_type: [
+      $._as_lookup_type,
+      $._as_constraint_lookup_type,
+      $._const_assertion_lookup_type,
+      $._ordinary_assertion_lookup_type,
+    ],
     union_type: [
       $._as_union_type,
+      $._as_constraint_union_type,
       $._const_assertion_union_type,
       $._const_assertion_constraint_union_type,
       $._const_assertion_constraint_scoped_union_type,
     ],
     intersection_type: [
       $._as_intersection_type,
+      $._as_constraint_intersection_type,
       $._const_assertion_intersection_type,
       $._const_assertion_constraint_intersection_type,
       $._const_assertion_constraint_scoped_intersection_type,
@@ -2354,10 +2431,16 @@ function assertionTypePrecedences($, lists) {
     conditional_type: [$._as_conditional_type, $._const_assertion_conditional_type],
     index_type_query: [
       $._as_index_type_query,
+      $._as_constraint_index_type_query,
       $._const_assertion_index_type_query,
       $._const_assertion_constraint_index_type_query,
     ],
-    readonly_type: [$._as_readonly_type, $._const_assertion_constraint_readonly_type, $._const_assertion_readonly_type],
+    readonly_type: [
+      $._as_readonly_type,
+      $._as_constraint_readonly_type,
+      $._const_assertion_constraint_readonly_type,
+      $._const_assertion_readonly_type,
+    ],
   };
   return lists.flatMap((list) => [
     list,

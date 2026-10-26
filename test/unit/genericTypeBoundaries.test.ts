@@ -1,4 +1,4 @@
-import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -452,6 +452,96 @@ for (const dialect of ['typescript', 'tsx']) {
               tree.delete();
             }
           }
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`preserves empty generic argument recovery through ${dialect} edits`, async () => {
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
+    try {
+      for (const template of [
+        'let value: Box<ARGUMENT>;',
+        'let value: ns.Box<ARGUMENT>;',
+        'class Child implements Box<ARGUMENT> {}',
+        'class Child implements number<ARGUMENT> {}',
+        'const value = new Box<ARGUMENT>();',
+        'const value = make<ARGUMENT>();',
+      ]) {
+        const start = template.indexOf('ARGUMENT');
+        const following = '\nconst following = 1;';
+        const sourceFor = (argument: string): string => template.replace('ARGUMENT', argument) + following;
+        const check = (tree: Tree, argument: string): void => {
+          const source = sourceFor(argument);
+          const reference = ts.createSourceFile(
+            dialect === 'tsx' ? 'recovery.tsx' : 'recovery.ts',
+            source,
+            ts.ScriptTarget.Latest,
+            true,
+            dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+          );
+          const options = { noLib: true, noResolve: true };
+          const host = ts.createCompilerHost(options);
+          host.getSourceFile = (name) => (name === reference.fileName ? reference : undefined);
+          const program = ts.createProgram([reference.fileName], options, host);
+          expect(program.getSyntacticDiagnostics(reference), source).toHaveLength(0);
+          const empty = argument === '' || argument === '/* gap */';
+          expect(tree.rootNode.hasError, source).toBe(empty);
+          expect(
+            tree.rootNode.namedChildren.some((node) => node.type === 'ERROR'),
+            source
+          ).toBe(false);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+          const argumentsNode = tree.rootNode.descendantsOfType('type_arguments')[0]!;
+          expect(argumentsNode?.text, source).toBe(`<${argument}>`);
+          expect(argumentsNode.startIndex).toBe(start - 1);
+          expect(argumentsNode.endIndex).toBe(start + argument.length + 1);
+          const argumentsTypes = argumentsNode.namedChildren.filter((node) => node.type !== 'comment');
+          expect(argumentsTypes.map((node) => [node.type, node.text, node.isMissing])).toEqual([
+            ['type_identifier', empty ? '' : 'Value', empty],
+          ]);
+          if (template.startsWith('class')) {
+            expect(tree.rootNode.firstNamedChild?.type).toBe('class_declaration');
+            expect(tree.rootNode.descendantsOfType('class_body')).toHaveLength(1);
+          }
+          if (template.startsWith('let')) expect(tree.rootNode.descendantsOfType('type_annotation')).toHaveLength(1);
+        };
+        let argument = '';
+        let source = sourceFor(argument);
+        let tree = parser.parse(source)!;
+        try {
+          check(tree, argument);
+          for (const next of ['Value', 'Value,', '/* gap */', 'Value /* gap */,', '']) {
+            const nextSource = sourceFor(next);
+            const nextTree = compareEditedTree(
+              parser,
+              tree,
+              nextSource,
+              new Edit({
+                startIndex: start,
+                oldEndIndex: start + argument.length,
+                newEndIndex: start + next.length,
+                startPosition: position(source, start),
+                oldEndPosition: position(source, start + argument.length),
+                newEndPosition: position(nextSource, start + next.length),
+              }),
+              (incremental, fresh) => {
+                check(incremental, next);
+                check(fresh, next);
+              },
+              true
+            );
+            tree.delete();
+            tree = nextTree;
+            argument = next;
+            source = nextSource;
+          }
+        } finally {
+          tree.delete();
         }
       }
     } finally {

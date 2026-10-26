@@ -92,6 +92,7 @@ enum TokenType {
     AS_CONST_QUALIFIED_NAME,
     CONST_GENERIC_NAME,
     TYPE_ARGUMENT_START,
+    TYPE_ARGUMENT_CONTINUATION_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3244,6 +3245,7 @@ static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_consequence_can_start(TSLexer *lexer);
 static bool type_argument_can_start(TSLexer *lexer);
+static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols);
 
 static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     advance(lexer);
@@ -3254,13 +3256,9 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
     lexer->mark_end(lexer);
     bool line_break = false;
     bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
-    if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START]) {
-        lexer->result_symbol = CONST_ASSERTION_CONSEQUENCE_START;
-        return trivia && const_assertion_consequence_can_start(lexer);
-    }
-    if (valid_symbols[TYPE_ARGUMENT_START]) {
-        lexer->result_symbol = TYPE_ARGUMENT_START;
-        return trivia && type_argument_can_start(lexer);
+    if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
+        valid_symbols[TYPE_ARGUMENT_CONTINUATION_START]) {
+        return trivia && scan_assertion_type_start(lexer, valid_symbols);
     }
     if (valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] && trivia && !line_break && lexer->lookahead == '[') {
         lexer->result_symbol = CONST_ASSERTION_TYPE_SUFFIX;
@@ -3272,9 +3270,8 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
         return true;
     }
     if (valid_symbols[CONST_ASSERTION_NAME_END]) {
-        if (trivia && !const_assertion_name_can_end(lexer, line_break)) return false;
         lexer->result_symbol = CONST_ASSERTION_NAME_END;
-        return true;
+        return !trivia || const_assertion_name_can_end(lexer, line_break);
     }
     if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END] || (trivia && !const_assertion_type_can_end(lexer, line_break))) return false;
     lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
@@ -3290,6 +3287,13 @@ static bool type_argument_can_start(TSLexer *lexer) {
         case 0: case '>': case ',': case ')': case ']': case '}': case ';': return false;
         default: return const_assertion_consequence_can_start(lexer);
     }
+}
+
+static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols) {
+    TSSymbol start = valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] ? CONST_ASSERTION_CONSEQUENCE_START :
+                     valid_symbols[TYPE_ARGUMENT_START] ? TYPE_ARGUMENT_START : TYPE_ARGUMENT_CONTINUATION_START;
+    lexer->result_symbol = start;
+    return start == TYPE_ARGUMENT_CONTINUATION_START ? type_argument_can_start(lexer) : const_assertion_consequence_can_start(lexer);
 }
 
 static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break) {
@@ -3329,6 +3333,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
 
     if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[CONST_ASSERTION_NAME_END] ||
          valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
+         valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 
