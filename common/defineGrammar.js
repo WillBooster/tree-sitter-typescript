@@ -47,7 +47,7 @@ const IMPLEMENTS_TYPE_OPERATOR_NAMES = ['keyof', 'readonly', 'unique', 'infer'];
 // arguments first and keeps them only before what may follow them (see `scan_type_arguments_end` in scanner.h), reads
 // one way. Comparisons have 0.
 const DYNAMIC_PRECEDENCE = {
-  // The type arguments of a call, a tagged template, or a `new`: they also outweigh comparisons that contain
+  // The type arguments of a call, a tagged template, a `new`, or a qualified assertion type also outweigh comparisons that contain
   // instantiation expressions (`f<A<B> | C>(x)`) and an extends clause's type arguments in a misreading
   // (`class C extends f<A<B>, D>(x) {}`).
   TYPE_ARGUMENTS: 3,
@@ -1111,11 +1111,14 @@ module.exports = function defineGrammar(dialect) {
           prec.right(seq('infer', $._type_identifier, 'extends', alias($._const_assertion_constraint_type, $.type)))
         ),
       _const_assertion_generic_type: ($) =>
-        prec(
-          'call',
-          seq(
-            field('name', alias($._const_assertion_generic_name, $.nested_type_identifier)),
-            field('type_arguments', $.type_arguments)
+        prec.dynamic(
+          DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+          prec(
+            'call',
+            seq(
+              field('name', alias($._const_assertion_generic_name, $.nested_type_identifier)),
+              field('type_arguments', $.type_arguments)
+            )
           )
         ),
 

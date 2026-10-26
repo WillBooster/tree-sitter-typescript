@@ -17243,33 +17243,37 @@
       ]
     },
     "_const_assertion_generic_type": {
-      "type": "PREC",
-      "value": "call",
+      "type": "PREC_DYNAMIC",
+      "value": 3,
       "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "FIELD",
-            "name": "name",
-            "content": {
-              "type": "ALIAS",
+        "type": "PREC",
+        "value": "call",
+        "content": {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "name",
+              "content": {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_const_assertion_generic_name"
+                },
+                "named": true,
+                "value": "nested_type_identifier"
+              }
+            },
+            {
+              "type": "FIELD",
+              "name": "type_arguments",
               "content": {
                 "type": "SYMBOL",
-                "name": "_const_assertion_generic_name"
-              },
-              "named": true,
-              "value": "nested_type_identifier"
+                "name": "type_arguments"
+              }
             }
-          },
-          {
-            "type": "FIELD",
-            "name": "type_arguments",
-            "content": {
-              "type": "SYMBOL",
-              "name": "type_arguments"
-            }
-          }
-        ]
+          ]
+        }
       }
     },
     "_const_assertion_type_name": {
