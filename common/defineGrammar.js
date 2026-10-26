@@ -298,6 +298,7 @@ module.exports = function defineGrammar(dialect) {
       [$.call_expression, $._as_import_call, $._type_query_call_expression_in_type_annotation],
       [$.call_expression, $._as_import_call],
       [$._as_type_query_member, $._type_query_member_expression],
+      [$._as_type_query, $.type_query],
       [$._as_import_call, $._type_query_call_expression],
       [$._const_assertion_unqualified_generic_type, $._generic_type_guarded_name],
       [$.type, $._const_assertion_constraint_type],
@@ -1050,14 +1051,16 @@ module.exports = function defineGrammar(dialect) {
             choice(
               seq(assertionQueryName($), $._as_query_name_end),
               seq(alias($._as_import_call, $.call_expression), $._as_query_name_end),
-              alias($._as_typed_import_type, $.call_expression),
-              alias($._as_type_query_instantiation, $.instantiation_expression)
+              seq(alias($._as_import_member, $.member_expression), $._as_query_name_end),
+              alias($._typed_import_type, $.call_expression),
+              alias($._as_type_query_instantiation, $.instantiation_expression),
+              alias($._as_import_query_instantiation, $.instantiation_expression)
             )
           )
         ),
       _as_type_query_member: ($) =>
         seq(
-          field('object', choice(assertionQueryName($), alias($._as_import_call, $.call_expression))),
+          field('object', assertionQueryName($)),
           '.',
           field('property', reserved('properties', alias($.identifier, $.property_identifier)))
         ),
@@ -1068,12 +1071,10 @@ module.exports = function defineGrammar(dialect) {
           field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
         ),
       _as_import_call: ($) => seq(field('function', $.import), field('arguments', $.arguments)),
-      _as_typed_import_type: ($) =>
+      _as_import_query_instantiation: ($) =>
         seq(
-          field('function', $.import),
-          field('arguments', alias($._typed_import_arguments, $.arguments)),
-          $._as_query_type_arguments_start,
-          field('type_arguments', $.type_arguments)
+          field('function', alias($._as_generic_import_member, $.member_expression)),
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
         ),
       _as_import_member: ($) => assertionImportMember($, false),
       _as_generic_import_member: ($) => assertionImportMember($, true),
@@ -2347,7 +2348,6 @@ function assertionPrimaryTypes($) {
     type_query: alias($._as_type_query, $.type_query),
     _type_query_member_expression_in_type_annotation: $._as_import_member,
     _type_query_call_expression_in_type_annotation: $._as_import_call,
-    _typed_import_type: $._as_typed_import_type,
   };
   return primaryTypes($).map((rule) =>
     typeof rule === 'string'

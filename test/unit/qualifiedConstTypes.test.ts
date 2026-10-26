@@ -9,6 +9,11 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 type Ranges = [string, number, number][];
 const Sources = [
   'class C { field = value as A<Arg>!; next = 1; }',
+  'const result = value as const.Member | typeof operand << 1;',
+  'const result = value as ?typeof Namespace.value< <T>() => T> << 1;',
+  'const result = value as const.Member | typeof import("module")<<T>() => T>;',
+  'const result = value as const.Member | typeof import("module").value<<T>() => T>;',
+  'const result = value as const.Member | typeof this<Arg>;',
   'const result = value as ?typeof operand<Arg>;',
   'const result = value as ?typeof operand<Arg>[];',
   'const result = value as ??typeof Namespace.value<Arg>;',
@@ -179,6 +184,7 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as const.Member | typeof operand<<T>() => T>;',
   'const invalid = value as (const.Member) | typeof Namespace.value();',
   'const invalid = value as const.Member & typeof Namespace.value?.property;',
   'const invalid = value as ?A | typeof Namespace.value?.();',

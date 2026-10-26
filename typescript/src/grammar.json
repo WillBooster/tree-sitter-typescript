@@ -15446,7 +15446,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_as_typed_import_type"
+              "name": "_typed_import_type"
             },
             "named": true,
             "value": "call_expression"
@@ -15635,10 +15635,28 @@
                 ]
               },
               {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_import_member"
+                    },
+                    "named": true,
+                    "value": "member_expression"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_query_name_end"
+                  }
+                ]
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "_as_typed_import_type"
+                  "name": "_typed_import_type"
                 },
                 "named": true,
                 "value": "call_expression"
@@ -15648,6 +15666,15 @@
                 "content": {
                   "type": "SYMBOL",
                   "name": "_as_type_query_instantiation"
+                },
+                "named": true,
+                "value": "instantiation_expression"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_as_import_query_instantiation"
                 },
                 "named": true,
                 "value": "instantiation_expression"
@@ -15667,35 +15694,21 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "SYMBOL",
-                    "name": "_type_query_identifier"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "this"
-                  },
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_as_type_query_member"
-                    },
-                    "named": true,
-                    "value": "member_expression"
-                  }
-                ]
+                "type": "SYMBOL",
+                "name": "_type_query_identifier"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "this"
               },
               {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "_as_import_call"
+                  "name": "_as_type_query_member"
                 },
                 "named": true,
-                "value": "call_expression"
+                "value": "member_expression"
               }
             ]
           }
@@ -15792,40 +15805,33 @@
         }
       ]
     },
-    "_as_typed_import_type": {
+    "_as_import_query_instantiation": {
       "type": "SEQ",
       "members": [
         {
           "type": "FIELD",
           "name": "function",
           "content": {
-            "type": "SYMBOL",
-            "name": "import"
-          }
-        },
-        {
-          "type": "FIELD",
-          "name": "arguments",
-          "content": {
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_typed_import_arguments"
+              "name": "_as_generic_import_member"
             },
             "named": true,
-            "value": "arguments"
+            "value": "member_expression"
           }
-        },
-        {
-          "type": "SYMBOL",
-          "name": "_as_query_type_arguments_start"
         },
         {
           "type": "FIELD",
           "name": "type_arguments",
           "content": {
-            "type": "SYMBOL",
-            "name": "type_arguments"
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_unprefixed_type_arguments"
+            },
+            "named": true,
+            "value": "type_arguments"
           }
         }
       ]
@@ -16387,7 +16393,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_as_typed_import_type"
+              "name": "_typed_import_type"
             },
             "named": true,
             "value": "call_expression"
@@ -18382,7 +18388,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_as_typed_import_type"
+              "name": "_typed_import_type"
             },
             "named": true,
             "value": "call_expression"
@@ -18605,7 +18611,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_as_typed_import_type"
+              "name": "_typed_import_type"
             },
             "named": true,
             "value": "call_expression"
@@ -18801,7 +18807,7 @@
             "type": "ALIAS",
             "content": {
               "type": "SYMBOL",
-              "name": "_as_typed_import_type"
+              "name": "_typed_import_type"
             },
             "named": true,
             "value": "call_expression"
@@ -25716,6 +25722,10 @@
     [
       "_as_type_query_member",
       "_type_query_member_expression"
+    ],
+    [
+      "_as_type_query",
+      "type_query"
     ],
     [
       "_as_import_call",

@@ -3253,6 +3253,7 @@ static bool type_argument_can_start(TSLexer *lexer);
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break);
 static bool as_infer_constraint_can_end(TSLexer *lexer, bool line_break);
+static bool as_query_name_can_end(TSLexer *lexer, bool line_break, bool allow_shift);
 
 static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     advance(lexer);
@@ -3265,8 +3266,9 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
     bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
     if (valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] && trivia && !line_break && lexer->lookahead == '<') {
         advance(lexer);
-        lexer->result_symbol = lexer->lookahead == '=' ? AS_QUERY_NAME_END : AS_QUERY_TYPE_ARGUMENTS_START;
-        return lexer->lookahead != '=' || valid_symbols[AS_QUERY_NAME_END];
+        bool query_end = lexer->lookahead == '=' || lexer->lookahead == '<';
+        lexer->result_symbol = query_end ? AS_QUERY_NAME_END : AS_QUERY_TYPE_ARGUMENTS_START;
+        return !query_end || valid_symbols[AS_QUERY_NAME_END];
     }
     if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
         valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[NULLABLE_TYPE_START]) {
@@ -3311,12 +3313,7 @@ static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols)
 static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break) {
     if (valid_symbols[AS_QUERY_NAME_END]) {
         lexer->result_symbol = AS_QUERY_NAME_END;
-        if (lexer->lookahead == '(' || lexer->lookahead == '`') return line_break;
-        if (lexer->lookahead == '?') {
-            advance(lexer);
-            return question_mark_can_start_ternary(lexer);
-        }
-        return !trivia || const_assertion_name_can_end(lexer, line_break);
+        return !trivia || as_query_name_can_end(lexer, line_break, valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START]);
     }
     if (valid_symbols[NONCONDITIONAL_INFER_NAME_END]) {
         lexer->result_symbol = NONCONDITIONAL_INFER_NAME_END;
@@ -3333,6 +3330,19 @@ static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, b
     if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END]) return false;
     lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
     return !trivia || const_assertion_type_can_end(lexer, line_break);
+}
+
+static bool as_query_name_can_end(TSLexer *lexer, bool line_break, bool allow_shift) {
+    if (lexer->lookahead == '(' || lexer->lookahead == '`') return line_break;
+    if (lexer->lookahead == '?') {
+        advance(lexer);
+        return question_mark_can_start_ternary(lexer);
+    }
+    if (!line_break && lexer->lookahead == '<') {
+        advance(lexer);
+        return lexer->lookahead == '=' || (lexer->lookahead == '<' && allow_shift);
+    }
+    return const_assertion_name_can_end(lexer, line_break);
 }
 
 static bool as_infer_constraint_can_end(TSLexer *lexer, bool line_break) {
