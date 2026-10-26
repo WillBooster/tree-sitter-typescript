@@ -8,6 +8,81 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
 const Sources = [
+  'const result = value as const.Member[- /* gap */ .1];',
+  'const result = value as () => any.Member[.1];',
+  'const result = value as A extends const.Member[-\n1n] ? B : C;',
+  'const result = value as A extends string[] ? D : const.Member;',
+  'const result = value as A extends string[Key] ? D : const.Member;',
+  'const result = value as A extends readonly string[] ? D : const.Member;',
+  'const result = value as A extends number[] ? C : D | const.Member;',
+  'const result = value as () => any.Member[any.Key];',
+  'const result = value as new () => any.Member[(number.Key)];',
+  'const result = value as () => x is A.Member[K & unknown.Key];',
+  'const result = value as () => asserts x is const.Member[any.Key];',
+  'const result = value as () => A.Member[(const.Key)];',
+  'const result = value as const.Member[(const.Key)];',
+  'const result = value as () => unknown.Member[typeof Namespace.value];',
+  'const result = value as () => any.Member;',
+  'const result = value as new () => unknown.Member<Arg>;',
+  'const result = value as () => x is string.Member[Key];',
+  'const result = value as () => asserts x is number.Member[];',
+  'const result = value as keyof const extends A ? B : () => symbol.Member;',
+  'const result = value as () => A | any.Member;',
+  'const result = value as () => never.Member.Nested<Arg>!;',
+  'const result = value as ?unique symbol.Member;',
+  'const result = value as infer U | unique symbol\n.Member;',
+  'const result = value as ?keyof unknown.Member;',
+  'const result = value as ?unique string.Member<Arg>[Key];',
+  'const result = value as A extends keyof number.Member ? B : const.Member;',
+  'const result = value as () => readonly is [A];',
+  'const result = value as () => this is const.Member;',
+  'const result = value as () => asserts is const.Member;',
+  'const result = value as () => /* before */ x /* between */ is const.Member;',
+  'const result = value as () => asserts x /*\n*/is const.Member;',
+  String.raw`const result = value as () => \u0078 is const.Member;`,
+  String.raw`const result = value as () => asserts \u0078 is const.Member;`,
+  'const result = value as keyof const extends A ? B : () => const.Member;',
+  'const result = value as keyof const extends A ? B : (x: A) => const.Member[Key];',
+  'const result = value as keyof const extends A ? B : <T>() => const.Member<T>;',
+  'const result = value as keyof const extends A ? B : new () => const.Member;',
+  'const result = value as keyof const extends A ? B : abstract new () => const.Member[];',
+  'const result = value as keyof const extends A ? B : () => x is const.Member;',
+  'const result = value as keyof const extends A ? B : () => asserts x is const.Member;',
+  'const result = value as () => const.Member;',
+  'const result = value as () => A | const.Member;',
+  'const result = value as A extends () => infer U ? const : D;',
+  'const result = value as A extends new () => infer U ? const.Member : D;',
+  'const result = value as A extends () => x is infer U ? const.Member : D;',
+  'const result = value as A extends () => infer U extends infer V ? const.Member : infer W ? const : D;',
+  'const result = value as A extends () => readonly infer U ? const.Member : D;',
+  'const result = value as A extends () => B | infer U ? const.Member : D;',
+  'const result = value as const.Member extends | readonly infer U extends () => B ? C : D;',
+  'const result = value as const.Member extends | readonly (() => B) ? C : D;',
+  'const result = value as A extends B /*\n*/? const.Member : D;',
+  'const result = value as A extends infer U /*\n*/? const : D;',
+  'const result = value as A extends infer U ? const.Member : D;',
+  'const result = value as (A extends infer U ? const.Member : D);',
+  'const result = value as A extends keyof infer U ? const.Member : D;',
+  'const result = value as A extends readonly infer U ? const.Member : D;',
+  'const result = value as A extends B | infer U ? const.Member : D;',
+  'const result = value as A extends B & infer U ? const.Member : D;',
+  'const result = value as A extends infer U extends infer V ? const.Member : D;',
+  'const result = value as A extends infer any ? const.Member : D;',
+  'const result = value as A extends B\n? const.Member : D;',
+  'const result = value as (A extends B\n? const : D);',
+  'const result = value as A extends | B ? C : const.Member;',
+  'const result = value as A extends & B ? C : const.Member;',
+  'const result = value as A extends | infer U ? const.Member : D;',
+  'const result = value as A extends & infer U ? const.Member : D;',
+  'const result = value as ((typeof import("module")));',
+  'const result = value as (typeof import("module").Member<Arg>);',
+  'const result = value as (typeof import("module").Member<Arg>)[];',
+  'const result = value as (typeof Namespace.value);',
+  'const result = value as ((typeof Namespace.value));',
+  'const result = value as readonly (keyof typeof Namespace.value)[];',
+  'const result = value as (typeof Namespace.value)!;',
+  'const result = value as (A extends infer U ? const : D);',
+  'const result = value as A extends B ? typeof Namespace.value : C;',
   'class C { field = value as A<Arg>!; next = 1; }',
   'const result = value as const.Member | typeof operand << 1;',
   'const result = value as ?typeof Namespace.value< <T>() => T> << 1;',
@@ -184,6 +259,44 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as () => any.Member[class.Key];',
+  'const invalid = value as A extends any.Member[+1] ? C : const.Last;',
+  String.raw`const invalid = value as A extends any.Member[\u0063onst.Key] ? C : const.Last;`,
+  'const invalid = value as () => A.Member[const.Key];',
+  'const invalid = value as const.Member[const.Key];',
+  'const invalid = value as () => any.Member[void.Key];',
+  'const invalid = value as const.Member[(const.Key)()];',
+  'const invalid = value as () => void.Member;',
+  'const invalid = value as ?unique void.Member;',
+  'const invalid = value as const.Member extends A ? B : () => void.Member;',
+  'const invalid = value as () => any.Member<Arg>();',
+  'const invalid = value as const.Member | number.Member<Arg>();',
+  'const invalid = value as () => x /*\n*/is const.Member;',
+  'const invalid = value as () => void is const.Member;',
+  'const invalid = value as () => enum is const.Member;',
+  'const invalid = value as () => asserts void is const.Member;',
+  'const invalid = value as () => asserts enum is const.Member;',
+  'const invalid = value as A extends infer enum ? const.Member : D;',
+  String.raw`const invalid = value as () => x \u0069s const.Member;`,
+  'const invalid = value as () => const.Member();',
+  'const invalid = value as const.Member | () => B;',
+  'const invalid = value as A extends () => infer U extends infer V ? const.Member : D;',
+  'const invalid = value as A extends () => asserts x is infer U ? const.Member : D;',
+  'const invalid = value as const.Member extends | readonly () => B ? C : D;',
+  'const invalid = value as const.Member extends | keyof () => B ? C : D;',
+  'const invalid = value as const.Member extends | unique () => B ? C : D;',
+  'const invalid = value as ((typeof import("module")))();',
+  'const invalid = value as (typeof import("module").Member<Arg>)?.field;',
+  'const invalid = value as ((typeof import("module").Member<Arg>))++;',
+  'const invalid = value as A extends infer U extends B ? const.Member : D;',
+  'const invalid = value as A extends (infer U) ? const.Member : D;',
+  'const invalid = value as A extends infer U | B ? const.Member : D;',
+  'const invalid = value as A extends infer const ? const.Member : D;',
+  'const invalid = value as A extends infer class ? const.Member : D;',
+  'const invalid = value as A extends infer void ? const.Member : D;',
+  'const invalid = value as const.Member extends | () => B ? C : D;',
+  'const invalid = value as const.Member extends | new () => B ? C : D;',
+  'const invalid = value as const.Member extends B | () => C ? D : E;',
   'const invalid = value as const.Member | typeof operand<<T>() => T>;',
   'const invalid = value as (const.Member) | typeof Namespace.value();',
   'const invalid = value as const.Member & typeof Namespace.value?.property;',
@@ -227,7 +340,7 @@ for (const dialect of ['typescript', 'tsx']) {
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
-      '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
+      '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
         '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
         '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
         ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
@@ -311,6 +424,14 @@ function checkRanges(
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
   if (!valid || !compareRanges) return;
   const expected: Record<string, Ranges> = {
+    functionType: [],
+    constructorType: [],
+    functionReturn: [],
+    constructorReturn: [],
+    predicate: [],
+    predicateType: [],
+    asserts: [],
+    comment: [],
     flowMaybe: [],
     flowMaybeOperand: [],
     readonlyOperator: [],
@@ -342,6 +463,23 @@ function checkRanges(
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isFunctionTypeNode(node)) {
+      expected.functionType!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.functionReturn!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
+    if (ts.isConstructorTypeNode(node)) {
+      expected.constructorType!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.constructorReturn!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
+    if (ts.isTypePredicateNode(node)) {
+      if (node.assertsModifier) expected.asserts!.push([node.getText(reference), node.getStart(reference), node.end]);
+      if (!node.assertsModifier || node.type) {
+        const start = node.parameterName.getStart(reference);
+        expected.predicate!.push([source.slice(start, node.end), start, node.end]);
+      }
+      if (node.type)
+        expected.predicateType!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
     if (ts.isJSDocNullableType(node) && !node.postfix) {
       expected.flowMaybe!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.flowMaybeOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
@@ -455,6 +593,18 @@ function checkRanges(
     ts.forEachChild(node, collect);
   };
   collect(reference);
+  const comments = new Map<number, Ranges[number]>();
+  const collectComments = (node: ts.Node): void => {
+    for (const comment of [
+      ...(ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []),
+      ...(ts.getTrailingCommentRanges(source, node.end) ?? []),
+    ]) {
+      comments.set(comment.pos, [source.slice(comment.pos, comment.end), comment.pos, comment.end]);
+    }
+    for (const child of node.getChildren(reference)) collectComments(child);
+  };
+  collectComments(reference);
+  expected.comment!.push(...comments.values());
   const actual: Record<string, Ranges> = Object.fromEntries(Object.keys(expected).map((name) => [name, []]));
   for (const { name, node } of query.captures(tree.rootNode)) {
     if (

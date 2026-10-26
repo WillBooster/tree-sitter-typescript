@@ -6,9 +6,14 @@ import ts from 'typescript-reference';
 import { grammarOperandKeywords } from './grammarKeywordStarts';
 
 const keywords: string[] = [];
+const bindingKeywords: string[] = [];
 for (let kind = ts.SyntaxKind.FirstKeyword; kind <= ts.SyntaxKind.LastKeyword; kind++) {
   const word = ts.tokenToString(kind);
   if (word !== undefined && kind !== ts.SyntaxKind.ExportKeyword) keywords.push(word);
+}
+for (let kind = ts.SyntaxKind.FirstReservedWord; kind <= ts.SyntaxKind.LastReservedWord; kind++) {
+  const word = ts.tokenToString(kind);
+  if (word !== undefined) bindingKeywords.push(word);
 }
 assert.ok(keywords.length > 0);
 const grammarArgument = process.argv.indexOf('--grammar');
@@ -30,6 +35,10 @@ const header = `// Generated from TypeScript ${ts.version} and grammar token sta
 
 static const char *const TS_GLOBAL_KEYWORDS[] = {
 ${keywords.map((word) => `    "${word}",`).join('\n')}
+};
+
+static const char *const TS_BINDING_RESERVED_KEYWORDS[] = {
+${bindingKeywords.map((word) => `    "${word}",`).join('\n')}
 };
 
 static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
