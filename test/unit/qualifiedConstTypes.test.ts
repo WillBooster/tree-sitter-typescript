@@ -78,6 +78,27 @@ const Sources = [
   'const result = value as X extends Y ? Z : const.Member<Arg>\n!other;',
   'const result = value as X extends Y ? Z : A | const.Member<Arg> / 2;',
   'const result = value as X extends Y ? Z : A & const.Member<Arg> / 2;',
+  'const result = value as X extends Y ? Z : const.Member[Key]<Arg>(other);',
+  'const result = value as X extends Y ? Z : const.Member!<Arg>(other);',
+  'const result = value as const.Left extends Y ? Z : const.Member[Key]<Arg>(other);',
+  'const result = value as X extends Y ? Z : A | const.Member[Key]<Arg>(other);',
+  'const result = value as X extends Y ? Z : const.Member[Key]<A<B> | C<D> | E<F>>(other);',
+  'const result = value as typeof Namespace.value<Arg>;',
+  'const result = value as typeof Namespace.value<Arg> / 2;',
+  'const result = value as A[Key]\n(other);',
+  'const result = value as A | B\n(other);',
+  'const result = value as const /* gap */;',
+  'const result = value as const / 2;',
+  'const result = value as const <= other;',
+  'const result = value as const!;',
+  'const result = value as const[]!;',
+  'const result = value as const[Key]!;',
+  'const result = value as const![];',
+  'const result = value as const![Key];',
+  'const result = value as const!!;',
+  'const result = value as (const)!;',
+  'const result = value as keyof const[]!;',
+
   'const result = value as const;',
   'const result = (value as const).class;',
   'const result = value as const[Key];',
@@ -104,6 +125,7 @@ const InvalidContexts = [
   'const invalid = value as const.Member[] extends B | C extends D ? E : F ? G : H;',
   'const invalid = value as const.Member[Key] extends B & C extends D ? E : F ? G : H;',
 ];
+const SyntaxControls = ['const result = value as unknown.field;', 'const result = value as any.field;'];
 const Following = '\nconst following = 1;';
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -116,14 +138,17 @@ for (const dialect of ['typescript', 'tsx']) {
       '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
         '(array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
         '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-        ' (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
-        ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft)' +
+        ' (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
+        ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
     );
     const queries = configuredQueries(language, dialect);
-    const sources = [...Sources, ...(dialect === 'typescript' ? ['const result = <const>value;'] : [])].map(
-      (source) => source + Following
-    );
+    const sources = [
+      ...Sources,
+      ...SyntaxControls,
+      ...(dialect === 'typescript' ? ['const result = <const>value;'] : []),
+    ].map((source) => source + Following);
+    const syntaxSources = new Set(SyntaxControls.map((source) => source + Following));
     const invalidSources = InvalidContexts.map((source) => source + '\n' + Sources[0] + Following);
     const captures = (tree: Tree): unknown =>
       queries.map((configured) =>
@@ -151,8 +176,8 @@ for (const dialect of ['typescript', 'tsx']) {
             newEndPosition: position(next, next.length - Following.length),
           }),
           (incremental, fresh) => {
-            checkRanges(incremental, next, dialect, query, !invalidSources.includes(next));
-            checkRanges(fresh, next, dialect, query, !invalidSources.includes(next));
+            checkRanges(incremental, next, dialect, query, !invalidSources.includes(next), !syntaxSources.has(next));
+            checkRanges(fresh, next, dialect, query, !invalidSources.includes(next), !syntaxSources.has(next));
             expect(captures(incremental)).toEqual(captures(fresh));
           },
           true
@@ -169,7 +194,14 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-function checkRanges(tree: Tree, source: string, dialect: string, query: Query, valid = true): void {
+function checkRanges(
+  tree: Tree,
+  source: string,
+  dialect: string,
+  query: Query,
+  valid = true,
+  compareRanges = true
+): void {
   const fileName = dialect === 'tsx' ? 'const.tsx' : 'const.ts';
   const reference = ts.createSourceFile(
     fileName,
@@ -185,8 +217,10 @@ function checkRanges(tree: Tree, source: string, dialect: string, query: Query, 
   expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
   expect(tree.rootNode.hasError, source).toBe(!valid);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
-  if (!valid) return;
+  if (!valid || !compareRanges) return;
   const expected: Record<string, Ranges> = {
+    binary: [],
+    binaryOperator: [],
     keyof: [],
     uniqueOperator: [],
     qualified: [],
@@ -209,6 +243,14 @@ function checkRanges(tree: Tree, source: string, dialect: string, query: Query, 
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isBinaryExpression(node)) {
+      expected.binary!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.binaryOperator!.push([
+        node.operatorToken.getText(reference),
+        node.operatorToken.getStart(reference),
+        node.operatorToken.end,
+      ]);
+    }
     if (
       ts.isTypeOperatorNode(node) &&
       node.operator === ts.SyntaxKind.UniqueKeyword &&
