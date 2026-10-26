@@ -100,6 +100,9 @@ module.exports = function defineGrammar(dialect) {
       $._adjacent_type_angles,
       $._import_type_arguments_start,
       $._const_assertion_type_suffix,
+      $._const_assertion_non_nullable_suffix,
+      $._const_assertion_name_end,
+      $._const_assertion_consequence_start,
       $._qualified_const_assertion_end,
     ],
 
@@ -114,6 +117,7 @@ module.exports = function defineGrammar(dialect) {
       $._conditional_right_type,
       $._qualified_const_assertion_type,
       $._const_assertion_primary_type,
+      $._const_assertion_postfix_type,
       $._conditional_parameter_pattern,
       $._implements_keyword_type,
       $._implements_keyword_primary_type,
@@ -123,92 +127,83 @@ module.exports = function defineGrammar(dialect) {
       $._implements_keyword_bare_primary_type,
     ],
 
-    precedences: ($, previous) => [
-      ...withTypeArgumentsTarget($, previous),
-      ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
-      // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
-      // expression (`<T>a<B>` before a line break and `[0]`).
-      ['member', 'unary'],
-      [$.update_expression, 'unary'],
-      ['extends', 'instantiation'],
-      ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
-      // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
-      // `==`, `&`, `&&`, `||`, and `??`.
-      [
-        'binary_exp',
-        'binary_times',
-        'binary_plus',
-        'binary_shift',
-        'binary_relation',
-        'binary',
-        'binary_equality',
-        'bitwise_and',
-        'bitwise_xor',
-        'bitwise_or',
-        'logical_and',
-        'logical_or',
-        'ternary',
-      ],
-      [
-        $.index_type_query,
-        $.readonly_type,
-        $.intersection_type,
-        $.union_type,
-        $.conditional_type,
-        $.function_type,
-        $.constructor_type,
-        'binary',
-        $.type_predicate,
-      ],
-      [$.mapped_type_clause, $._type_arguments_target],
-      [$.accessibility_modifier, $._type_arguments_target],
-      ['unary_void', $.expression],
-      [$.extends_clause, $._type_arguments_target],
-      ['unary', 'assign'],
-      ['declaration', $.expression],
-      [$.predefined_type, $.unary_expression],
-      [$.type, $.flow_maybe_type],
-      [$.tuple_type, $.array_type, $.pattern, $.type],
-      [$.array_type, $.lookup_type, $.index_type_query, $.readonly_type],
-      [$.readonly_type, $.pattern],
-      [$.readonly_type, $._type_arguments_target],
-      [$.type_query, $.subscript_expression, $.expression],
-      [$.type_query, $._type_query_subscript_expression],
-      [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
-      // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
-      [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
-      [$._const_assertion_nested_identifier, $._const_assertion_type_name],
-      [$._const_assertion_type_name, $.primary_type],
-      [$._const_assertion_generic_name, $.primary_type],
-      [$._const_assertion_nested_identifier, $.primary_type],
-      [$._const_assertion_array_type, $._const_assertion_lookup_type, $._qualified_const_assertion_type],
-      [
-        $._const_assertion_array_type,
-        $._const_assertion_lookup_type,
-        $._const_assertion_intersection_type,
-        $._const_assertion_union_type,
-        $._const_assertion_conditional_type,
-        'binary',
-      ],
-      [$.nested_type_identifier, $.predefined_type],
-      [$._generic_nested_type_identifier, $.predefined_type],
-      [$.as_expression, $.satisfies_expression, $.primary_type],
-      [$._type_query_member_expression, $.member_expression],
-      [$._type_query_member_expression, $._type_arguments_target],
-      [$._type_query_subscript_expression, $.subscript_expression],
-      [$._type_query_subscript_expression, $._type_arguments_target],
-      [$._type_query_call_expression, $._type_arguments_target],
-      [$._type_query_instantiation_expression, $._type_arguments_target],
-      [$.type_query, $._type_arguments_target],
-      [$.override_modifier, $._type_arguments_target],
-      [$.decorator_call_expression, $.decorator],
-      [$.literal_type, $.pattern],
-      [$.predefined_type, $.pattern],
-      [$.call_expression, $._type_query_call_expression],
-      [$.new_expression, $._type_arguments_target],
-      [$.meta_property, $._type_arguments_target],
-      [$.construct_signature, $._property_name],
-    ],
+    precedences: ($, previous) =>
+      assertionTypePrecedences($, [
+        ...withTypeArgumentsTarget($, previous),
+        ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
+        // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
+        // expression (`<T>a<B>` before a line break and `[0]`).
+        ['member', 'unary'],
+        [$.update_expression, 'unary'],
+        ['extends', 'instantiation'],
+        ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
+        // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
+        // `==`, `&`, `&&`, `||`, and `??`.
+        [
+          'binary_exp',
+          'binary_times',
+          'binary_plus',
+          'binary_shift',
+          'binary_relation',
+          'binary',
+          'binary_equality',
+          'bitwise_and',
+          'bitwise_xor',
+          'bitwise_or',
+          'logical_and',
+          'logical_or',
+          'ternary',
+        ],
+        [
+          $.index_type_query,
+          $.readonly_type,
+          $.intersection_type,
+          $.union_type,
+          $.conditional_type,
+          $.function_type,
+          $.constructor_type,
+          'binary',
+          $.type_predicate,
+        ],
+        [$.mapped_type_clause, $._type_arguments_target],
+        [$.accessibility_modifier, $._type_arguments_target],
+        ['unary_void', $.expression],
+        [$.extends_clause, $._type_arguments_target],
+        ['unary', 'assign'],
+        ['declaration', $.expression],
+        [$.predefined_type, $.unary_expression],
+        [$.type, $.flow_maybe_type],
+        [$.tuple_type, $.array_type, $.pattern, $.type],
+        [$.array_type, $.lookup_type, $.index_type_query, $.readonly_type],
+        [$.readonly_type, $.pattern],
+        [$.readonly_type, $._type_arguments_target],
+        [$.type_query, $.subscript_expression, $.expression],
+        [$.type_query, $._type_query_subscript_expression],
+        [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
+        // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
+        [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
+        [$._const_assertion_type_name, $.primary_type],
+        [$._const_assertion_generic_name, $.primary_type],
+        [$._const_assertion_nested_identifier, $.primary_type],
+        [$.nested_type_identifier, $.predefined_type],
+        [$._generic_nested_type_identifier, $.predefined_type],
+        [$.as_expression, $.satisfies_expression, $.primary_type],
+        [$._type_query_member_expression, $.member_expression],
+        [$._type_query_member_expression, $._type_arguments_target],
+        [$._type_query_subscript_expression, $.subscript_expression],
+        [$._type_query_subscript_expression, $._type_arguments_target],
+        [$._type_query_call_expression, $._type_arguments_target],
+        [$._type_query_instantiation_expression, $._type_arguments_target],
+        [$.type_query, $._type_arguments_target],
+        [$.override_modifier, $._type_arguments_target],
+        [$.decorator_call_expression, $.decorator],
+        [$.literal_type, $.pattern],
+        [$.predefined_type, $.pattern],
+        [$.call_expression, $._type_query_call_expression],
+        [$.new_expression, $._type_arguments_target],
+        [$.meta_property, $._type_arguments_target],
+        [$.construct_signature, $._property_name],
+      ]),
 
     conflicts: ($, previous) => [
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
@@ -961,27 +956,37 @@ module.exports = function defineGrammar(dialect) {
 
       _const_assertion_primary_type: ($) =>
         choice(
-          alias($._const_assertion_type_name, $.nested_type_identifier),
-          alias($._const_assertion_generic_type, $.generic_type),
-          alias($._const_assertion_array_type, $.array_type),
-          alias($._const_assertion_lookup_type, $.lookup_type),
+          ...constAssertionPostfixTypes($),
           alias($._const_assertion_union_type, $.union_type),
           alias($._const_assertion_intersection_type, $.intersection_type),
           alias($._const_assertion_conditional_type, $.conditional_type)
         ),
 
+      _const_assertion_postfix_type: ($) => choice(...constAssertionPostfixTypes($)),
+
       _const_assertion_array_type: ($) =>
-        seq(alias($._const_assertion_primary_type, $.primary_type), $._const_assertion_type_suffix, '[', ']'),
+        seq(alias($._const_assertion_postfix_type, $.primary_type), $._const_assertion_type_suffix, '[', ']'),
 
       _const_assertion_lookup_type: ($) =>
-        seq(alias($._const_assertion_primary_type, $.primary_type), $._const_assertion_type_suffix, '[', $.type, ']'),
+        seq(alias($._const_assertion_postfix_type, $.primary_type), $._const_assertion_type_suffix, '[', $.type, ']'),
 
-      _const_assertion_union_type: ($) => prec.left(seq(alias($._qualified_const_assertion_type, $.type), '|', $.type)),
+      _const_assertion_union_type: ($) => assertionBinaryType($, '|'),
 
-      _const_assertion_intersection_type: ($) =>
-        prec.left(seq(alias($._qualified_const_assertion_type, $.type), '&', $.type)),
+      _const_assertion_intersection_type: ($) => assertionBinaryType($, '&'),
 
-      _const_assertion_conditional_type: ($) => conditionalType($, alias($._qualified_const_assertion_type, $.type)),
+      _const_assertion_conditional_type: ($) => constAssertionConditionalType($),
+
+      _const_assertion_parenthesized_type: ($) => seq('(', alias($._qualified_const_assertion_type, $.type), ')'),
+
+      non_nullable_type: ($) =>
+        prec.left(
+          'member',
+          seq(
+            choice($.primary_type, alias($._const_assertion_primary_type, $.primary_type)),
+            $._const_assertion_non_nullable_suffix,
+            '!'
+          )
+        ),
 
       _const_assertion_generic_type: ($) =>
         prec(
@@ -992,7 +997,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _const_assertion_type_name: ($) => constAssertionTypeName($, false),
+      _const_assertion_type_name: ($) =>
+        prec('member', seq(constAssertionTypeName($, false), $._const_assertion_name_end)),
 
       _const_assertion_generic_name: ($) => constAssertionTypeName($, true),
 
@@ -2026,16 +2032,84 @@ function sepBy1(sep, rule) {
   return seq(rule, repeat(seq(sep, rule)));
 }
 
-function conditionalType($, left) {
+function constAssertionPostfixTypes($) {
+  return [
+    alias($._const_assertion_type_name, $.nested_type_identifier),
+    alias($._const_assertion_generic_type, $.generic_type),
+    alias($._const_assertion_array_type, $.array_type),
+    alias($._const_assertion_lookup_type, $.lookup_type),
+    alias($._const_assertion_parenthesized_type, $.parenthesized_type),
+    $.non_nullable_type,
+  ];
+}
+
+function constAssertionConditionalType($) {
+  const scoped = alias($._qualified_const_assertion_type, $.type);
+  const any = assertionType($);
+  const consequence = seq($._const_assertion_consequence_start, any);
+  return choice(
+    conditionalType($, scoped, {
+      right: choice(any, alias($._conditional_right_type, $.type)),
+      consequence,
+      alternative: any,
+    }),
+    conditionalType($, $.type, { right: scoped, consequence, alternative: any }),
+    conditionalType($, $.type, { consequence, alternative: scoped }),
+    conditionalType($, $.type, {
+      consequence: seq($._const_assertion_consequence_start, scoped),
+      alternative: any,
+    })
+  );
+}
+
+function assertionType($) {
+  return choice($.type, alias($._qualified_const_assertion_type, $.type));
+}
+
+function assertionBinaryType($, operator) {
+  const scoped = alias($._qualified_const_assertion_type, $.type);
+  return prec.left(choice(seq(scoped, operator, assertionType($)), seq($.type, operator, scoped)));
+}
+
+function assertionTypePrecedences($, lists) {
+  const variants = {
+    type: [$._qualified_const_assertion_type],
+    primary_type: [$._const_assertion_primary_type],
+    nested_identifier: [$._const_assertion_nested_identifier],
+    nested_type_identifier: [$._const_assertion_type_name],
+    _generic_nested_type_identifier: [$._const_assertion_generic_name],
+    generic_type: [$._const_assertion_generic_type],
+    array_type: [$._const_assertion_array_type, $.non_nullable_type],
+    lookup_type: [$._const_assertion_lookup_type],
+    union_type: [$._const_assertion_union_type],
+    intersection_type: [$._const_assertion_intersection_type],
+    conditional_type: [$._const_assertion_conditional_type],
+  };
+  return lists.flatMap((list) => [
+    list,
+    ...list.flatMap((higher, index) =>
+      list.slice(index + 1).flatMap((lower) => {
+        const above = variants[higher.name] ?? [];
+        const below = variants[lower.name] ?? [];
+        return [
+          ...above.flatMap((entry) => [[entry, lower], ...below.map((other) => [entry, other])]),
+          ...below.map((entry) => [higher, entry]),
+        ];
+      })
+    ),
+  ]);
+}
+
+function conditionalType($, left, { right, consequence, alternative } = {}) {
   return prec.right(
     seq(
       field('left', left),
       'extends',
-      field('right', choice($.type, alias($._conditional_right_type, $.type))),
+      field('right', right ?? choice($.type, alias($._conditional_right_type, $.type))),
       '?',
-      field('consequence', $.type),
+      field('consequence', consequence ?? seq(optional($._const_assertion_consequence_start), $.type)),
       ':',
-      field('alternative', $.type)
+      field('alternative', alternative ?? $.type)
     )
   );
 }

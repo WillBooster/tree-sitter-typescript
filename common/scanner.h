@@ -84,6 +84,9 @@ enum TokenType {
     ADJACENT_TYPE_ANGLES,
     IMPORT_TYPE_ARGUMENTS_START,
     CONST_ASSERTION_TYPE_SUFFIX,
+    CONST_ASSERTION_NON_NULLABLE_SUFFIX,
+    CONST_ASSERTION_NAME_END,
+    CONST_ASSERTION_CONSEQUENCE_START,
     QUALIFIED_CONST_ASSERTION_END,
 };
 
@@ -3200,13 +3203,35 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 }
 
 static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
+static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break);
+static bool const_assertion_consequence_can_start(TSLexer *lexer);
+
+static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
+    advance(lexer);
+    return lexer->lookahead != '=';
+}
 
 static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool line_break = false;
     bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
+    if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START]) {
+        if (!trivia || !const_assertion_consequence_can_start(lexer)) return false;
+        lexer->result_symbol = CONST_ASSERTION_CONSEQUENCE_START;
+        return true;
+    }
     if (valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] && trivia && !line_break && lexer->lookahead == '[') {
         lexer->result_symbol = CONST_ASSERTION_TYPE_SUFFIX;
+        return true;
+    }
+    if (valid_symbols[CONST_ASSERTION_NON_NULLABLE_SUFFIX] && trivia && !line_break && lexer->lookahead == '!' &&
+        scan_non_nullable_type_suffix(lexer)) {
+        lexer->result_symbol = CONST_ASSERTION_NON_NULLABLE_SUFFIX;
+        return true;
+    }
+    if (valid_symbols[CONST_ASSERTION_NAME_END]) {
+        if (trivia && !const_assertion_name_can_end(lexer, line_break)) return false;
+        lexer->result_symbol = CONST_ASSERTION_NAME_END;
         return true;
     }
     if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END] || (trivia && !const_assertion_type_can_end(lexer, line_break))) return false;
@@ -3214,22 +3239,38 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
     return true;
 }
 
+static bool const_assertion_consequence_can_start(TSLexer *lexer) {
+    return lexer->lookahead != 'c' || !scan_word(lexer, "const");
+}
+
+static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break) {
+    if (lexer->lookahead == '.') return false;
+    if (line_break || lexer->lookahead != '<') return true;
+    advance(lexer);
+    return lexer->lookahead == '=';
+}
+
 static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
     switch (lexer->lookahead) {
-        case '[': return line_break;
+        case '[': case '(': case '`': return line_break;
+        case '?':
+            advance(lexer);
+            return lexer->lookahead != '.';
+        case '+': case '-': {
+            if (line_break) return true;
+            int32_t operator = lexer->lookahead;
+            advance(lexer);
+            return lexer->lookahead != operator;
+        }
         case '.':
             advance(lexer);
             return is_ascii_digit(lexer->lookahead);
-        case '<':
-            if (line_break) return true;
-            advance(lexer);
-            return lexer->lookahead == '=';
         case '|': case '&': {
             int32_t operator = lexer->lookahead;
             advance(lexer);
             return lexer->lookahead == operator;
         }
-        case 'e': return !scan_word(lexer, "extends");
+        case 'e': return line_break || !scan_word(lexer, "extends");
         default: return true;
     }
 }
@@ -3237,7 +3278,9 @@ static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
 
-    if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
+    if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[CONST_ASSERTION_NAME_END] ||
+         valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] ||
+         valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 
     if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
@@ -3433,6 +3476,12 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         }
         bool before_line_break = false;
         bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], false, rule, &scanned_content, &before_line_break, false);
+        if (!ret && before_line_break && !scanned_content && valid_symbols[CONST_ASSERTION_NON_NULLABLE_SUFFIX] &&
+            !valid_symbols[ERROR_RECOVERY] && lexer->lookahead == '!') {
+            if (!scan_non_nullable_type_suffix(lexer)) return false;
+            lexer->result_symbol = CONST_ASSERTION_NON_NULLABLE_SUFFIX;
+            return true;
+        }
         if (ret && valid_symbols[TYPE_MEMBER_SEMICOLON]) lexer->result_symbol = TYPE_MEMBER_SEMICOLON;
         if (ret && valid_symbols[STATEMENT_BOUNDARY] && !valid_symbols[NAMESPACE_EXPRESSION_END] && lexer->result_symbol == AUTOMATIC_SEMICOLON) {
             lexer->result_symbol = STATEMENT_BOUNDARY;
@@ -3486,7 +3535,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         }
     }
 
+    bool suffix_line_break = false;
     while (is_whitespace(lexer->lookahead)) {
+        suffix_line_break |= is_line_terminator(lexer->lookahead);
         skip(lexer);
     }
     if (valid_symbols[GLOBAL_DECLARATION_START] && !valid_symbols[ERROR_RECOVERY] &&
@@ -3520,6 +3571,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         (lexer->lookahead == 'b' || lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
         return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
     }
+    if (valid_symbols[CONST_ASSERTION_NON_NULLABLE_SUFFIX] && !valid_symbols[ERROR_RECOVERY] && !suffix_line_break &&
+        (lexer->lookahead == '!' || lexer->lookahead == '/')) return scan_const_assertion_context(lexer, valid_symbols);
     return scan_contextual_keyword(scanner, lexer, valid_symbols);
 }
 

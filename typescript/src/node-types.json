@@ -328,6 +328,10 @@
         "named": true
       },
       {
+        "type": "non_nullable_type",
+        "named": true
+      },
+      {
         "type": "object_type",
         "named": true
       },
@@ -1578,7 +1582,7 @@
         ]
       },
       "consequence": {
-        "multiple": false,
+        "multiple": true,
         "required": true,
         "types": [
           {
@@ -3936,6 +3940,21 @@
       "types": [
         {
           "type": "primary_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "non_nullable_type",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "primary_type",
           "named": true
         }
       ]

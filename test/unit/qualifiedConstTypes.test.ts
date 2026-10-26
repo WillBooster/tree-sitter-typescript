@@ -29,6 +29,31 @@ const Sources = [
   'const result = value as const.Member /* gap */ [Key];',
   'const result = value as Namespace.const.Member;',
   'const result = value as Namespace.Member.const;',
+  'const result = value as const.Member!;',
+  'const result = value as const.Member[]!;',
+  'const result = value as const.Member | A[];',
+  'const result = value as const.Member | A & B;',
+  'const result = value as const.Member extends A ? B : C[];',
+  'const result = value as const.Member | const.Other;',
+  'const result = value as const.Member & const.Other;',
+  'const result = value as const.Member extends const.Other ? A : B;',
+  'const result = value as const.Member extends A ? B : const.Other;',
+  'const result = value as A | const.Other;',
+  'const result = (value as const.Member[])();',
+  'const result = (value as const.Member[])?.field;',
+  'const result = (value as const.Member[])++;',
+  'const result = value as const.Member[Key] < other;',
+  'const result = value as const.Member[Key][Other] << other;',
+  'const result = value as const.Member<Arg> << other;',
+  'const result = value as const.Member<Arg>[] < other;',
+  'const result = value as const.Member | A!;',
+  'const result = value as const.Member![];',
+  'const result = value as const.Member extends A ? (const.Other) : const.Third;',
+  'const result = value as A extends B ? (const.Other) : C;',
+  'const result = value as const.Member extends A ? B | const.Other : C;',
+  'const result = value as const.Member != other;',
+  'const result = value as const.Member !== other;',
+  'const result = value as const.Member! == other;',
   'const result = value as const;',
   'const result = (value as const).class;',
   'const result = value as const[Key];',
@@ -44,6 +69,13 @@ const InvalidContexts = [
   'const invalid = value as const.Member[].field;',
   'const invalid = value as const.Member < other;',
   'const invalid = value as const.Member << other;',
+  'const invalid = value as const.Member\nextends A ? B : C;',
+  'const invalid = value as const.Member[]\nextends A ? B : C;',
+  'const invalid = value as const.Member[]();',
+  'const invalid = value as const.Member[]?.field;',
+  'const invalid = value as const.Member[]++;',
+  'const invalid = value as const.Member!();',
+  'const invalid = value as const.Member!?.field;',
 ];
 const Following = '\nconst following = 1;';
 
@@ -56,7 +88,7 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
         '(array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-        '(type_query) @typeQuery (type_query (member_expression) @queryOperand)' +
+        '(type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
         ' (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
         ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft)' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
@@ -145,8 +177,14 @@ function checkRanges(tree: Tree, source: string, dialect: string, query: Query, 
     arrayOperand: [],
     lookupOperand: [],
     conditionalLeft: [],
+    nonNullable: [],
+    nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isJSDocNonNullableType(node)) {
+      expected.nonNullable!.push([node.getText(reference), node.getStart(reference), node.end]);
+      expected.nullableOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    }
     if (ts.isAsExpression(node))
       expected.assertedType!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
     const operand = ts.isArrayTypeNode(node)
