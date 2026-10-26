@@ -99,6 +99,8 @@ module.exports = function defineGrammar(dialect) {
       $._type_assertion_context,
       $._adjacent_type_angles,
       $._import_type_arguments_start,
+      $._const_assertion_type_suffix,
+      $._qualified_const_assertion_end,
     ],
 
     supertypes: ($, previous) => [
@@ -110,6 +112,8 @@ module.exports = function defineGrammar(dialect) {
       $._decorated_export_declaration,
       $._decorated_export_ambient_class_declaration,
       $._conditional_right_type,
+      $._qualified_const_assertion_type,
+      $._const_assertion_primary_type,
       $._conditional_parameter_pattern,
       $._implements_keyword_type,
       $._implements_keyword_primary_type,
@@ -173,6 +177,19 @@ module.exports = function defineGrammar(dialect) {
       [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
       // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
       [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
+      [$._const_assertion_nested_identifier, $._const_assertion_type_name],
+      [$._const_assertion_type_name, $.primary_type],
+      [$._const_assertion_generic_name, $.primary_type],
+      [$._const_assertion_nested_identifier, $.primary_type],
+      [$._const_assertion_array_type, $._const_assertion_lookup_type, $._qualified_const_assertion_type],
+      [
+        $._const_assertion_array_type,
+        $._const_assertion_lookup_type,
+        $._const_assertion_intersection_type,
+        $._const_assertion_union_type,
+        $._const_assertion_conditional_type,
+        'binary',
+      ],
       [$.nested_type_identifier, $.predefined_type],
       [$._generic_nested_type_identifier, $.predefined_type],
       [$.as_expression, $.satisfies_expression, $.primary_type],
@@ -930,7 +947,66 @@ module.exports = function defineGrammar(dialect) {
         prec.left('unary', seq(alias($._unprefixed_type_arguments, $.type_arguments), $.expression)),
 
       as_expression: ($) =>
-        prec.left('binary', seq($.expression, 'as', choice('const', $.type), optional($._type_assertion_context))),
+        prec.left(
+          'binary',
+          seq(
+            $.expression,
+            'as',
+            choice($.type, seq(alias($._qualified_const_assertion_type, $.type), $._qualified_const_assertion_end)),
+            optional($._type_assertion_context)
+          )
+        ),
+
+      _qualified_const_assertion_type: ($) => alias($._const_assertion_primary_type, $.primary_type),
+
+      _const_assertion_primary_type: ($) =>
+        choice(
+          alias($._const_assertion_type_name, $.nested_type_identifier),
+          alias($._const_assertion_generic_type, $.generic_type),
+          alias($._const_assertion_array_type, $.array_type),
+          alias($._const_assertion_lookup_type, $.lookup_type),
+          alias($._const_assertion_union_type, $.union_type),
+          alias($._const_assertion_intersection_type, $.intersection_type),
+          alias($._const_assertion_conditional_type, $.conditional_type)
+        ),
+
+      _const_assertion_array_type: ($) =>
+        seq(alias($._const_assertion_primary_type, $.primary_type), $._const_assertion_type_suffix, '[', ']'),
+
+      _const_assertion_lookup_type: ($) =>
+        seq(alias($._const_assertion_primary_type, $.primary_type), $._const_assertion_type_suffix, '[', $.type, ']'),
+
+      _const_assertion_union_type: ($) => prec.left(seq(alias($._qualified_const_assertion_type, $.type), '|', $.type)),
+
+      _const_assertion_intersection_type: ($) =>
+        prec.left(seq(alias($._qualified_const_assertion_type, $.type), '&', $.type)),
+
+      _const_assertion_conditional_type: ($) => conditionalType($, alias($._qualified_const_assertion_type, $.type)),
+
+      _const_assertion_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field('name', alias($._const_assertion_generic_name, $.nested_type_identifier)),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
+
+      _const_assertion_type_name: ($) => constAssertionTypeName($, false),
+
+      _const_assertion_generic_name: ($) => constAssertionTypeName($, true),
+
+      _const_assertion_nested_identifier: ($) =>
+        prec(
+          'member',
+          seq(
+            field(
+              'object',
+              choice(alias('const', $.identifier), alias($._const_assertion_nested_identifier, $.member_expression))
+            ),
+            ...nestedIdentifierTail($)
+          )
+        ),
 
       satisfies_expression: ($) =>
         prec.left('binary', seq($.expression, 'satisfies', $.type, optional($._type_assertion_context))),
@@ -1443,18 +1519,7 @@ module.exports = function defineGrammar(dialect) {
       infer_type: ($) =>
         choice(seq('infer', $._type_identifier), prec.right(seq('infer', $._type_identifier, 'extends', $.type))),
 
-      conditional_type: ($) =>
-        prec.right(
-          seq(
-            field('left', $.type),
-            'extends',
-            field('right', choice($.type, alias($._conditional_right_type, $.type))),
-            '?',
-            field('consequence', $.type),
-            ':',
-            field('alternative', $.type)
-          )
-        ),
+      conditional_type: ($) => conditionalType($, $.type),
 
       _conditional_right_type: ($) => alias($._conditional_function_type, $.function_type),
 
@@ -1961,31 +2026,54 @@ function sepBy1(sep, rule) {
   return seq(rule, repeat(seq(sep, rule)));
 }
 
-function nestedTypeIdentifier($, generic) {
+function conditionalType($, left) {
+  return prec.right(
+    seq(
+      field('left', left),
+      'extends',
+      field('right', choice($.type, alias($._conditional_right_type, $.type))),
+      '?',
+      field('consequence', $.type),
+      ':',
+      field('alternative', $.type)
+    )
+  );
+}
+
+function constAssertionTypeName($, generic) {
+  return nestedTypeIdentifier(
+    $,
+    generic,
+    choice(alias('const', $.identifier), alias($._const_assertion_nested_identifier, $.nested_identifier))
+  );
+}
+
+function nestedTypeIdentifier($, generic, module) {
   return prec(
     'member',
     seq(
       field(
         'module',
-        choice(
-          $.identifier,
-          alias(
-            choice(
-              'in',
-              'out',
-              'abstract',
-              'as',
-              'satisfies',
-              'is',
-              'asserts',
-              'bigint',
-              $._contextual_type_identifier
+        module ??
+          choice(
+            $.identifier,
+            alias(
+              choice(
+                'in',
+                'out',
+                'abstract',
+                'as',
+                'satisfies',
+                'is',
+                'asserts',
+                'bigint',
+                $._contextual_type_identifier
+              ),
+              $.identifier
             ),
-            $.identifier
-          ),
-          $.nested_identifier,
-          alias($._in_nested_identifier, $.nested_identifier)
-        )
+            $.nested_identifier,
+            alias($._in_nested_identifier, $.nested_identifier)
+          )
       ),
       '.',
       ...(generic ? [$._type_reference_arguments_start] : []),

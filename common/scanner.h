@@ -83,6 +83,8 @@ enum TokenType {
     TYPE_ASSERTION_CONTEXT,
     ADJACENT_TYPE_ANGLES,
     IMPORT_TYPE_ARGUMENTS_START,
+    CONST_ASSERTION_TYPE_SUFFIX,
+    QUALIFIED_CONST_ASSERTION_END,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3197,8 +3199,46 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
     return finish_function_context(scanner, lexer, FUNCTION_SIGNATURE_END);
 }
 
+static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
+
+static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
+    lexer->mark_end(lexer);
+    bool line_break = false;
+    bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
+    if (valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] && trivia && !line_break && lexer->lookahead == '[') {
+        lexer->result_symbol = CONST_ASSERTION_TYPE_SUFFIX;
+        return true;
+    }
+    if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END] || (trivia && !const_assertion_type_can_end(lexer, line_break))) return false;
+    lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
+    return true;
+}
+
+static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
+    switch (lexer->lookahead) {
+        case '[': return line_break;
+        case '.':
+            advance(lexer);
+            return is_ascii_digit(lexer->lookahead);
+        case '<':
+            if (line_break) return true;
+            advance(lexer);
+            return lexer->lookahead == '=';
+        case '|': case '&': {
+            int32_t operator = lexer->lookahead;
+            advance(lexer);
+            return lexer->lookahead == operator;
+        }
+        case 'e': return !scan_word(lexer, "extends");
+        default: return true;
+    }
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
+        !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 
     if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
         while (is_whitespace(lexer->lookahead)) skip(lexer);
