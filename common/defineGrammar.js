@@ -114,6 +114,8 @@ module.exports = function defineGrammar(dialect) {
       $._as_infer_constraint_end,
       $._nonconditional_infer_name_end,
       $._nullable_type_start,
+      $._as_query_type_arguments_start,
+      $._as_query_name_end,
     ],
 
     supertypes: ($, previous) => [
@@ -292,6 +294,11 @@ module.exports = function defineGrammar(dialect) {
       [$._as_primary_type, $.primary_type],
       [$._as_type, $.type],
       [$._as_generic_type, $._generic_type_guarded_name],
+      [$._as_import_call, $._type_query_call_expression_in_type_annotation],
+      [$.call_expression, $._as_import_call, $._type_query_call_expression_in_type_annotation],
+      [$.call_expression, $._as_import_call],
+      [$._as_type_query_member, $._type_query_member_expression],
+      [$._as_import_call, $._type_query_call_expression],
       [$._const_assertion_unqualified_generic_type, $._generic_type_guarded_name],
       [$.type, $._const_assertion_constraint_type],
       [$.primary_type, $._const_assertion_constraint_primary_type],
@@ -1031,8 +1038,45 @@ module.exports = function defineGrammar(dialect) {
       _as_generic_type: ($) =>
         prec(
           'call',
-          seq(genericTypeName($, $._type_identifier_before_angle), field('type_arguments', $.type_arguments))
+          seq(
+            genericTypeName($, $._type_identifier_before_angle, $._as_generic_import_member),
+            field('type_arguments', $.type_arguments)
+          )
         ),
+      _as_type_query: ($) =>
+        prec.right(
+          seq(
+            'typeof',
+            choice(
+              seq(assertionQueryName($), $._as_query_name_end),
+              seq(alias($._as_import_call, $.call_expression), $._as_query_name_end),
+              alias($._as_typed_import_type, $.call_expression),
+              alias($._as_type_query_instantiation, $.instantiation_expression)
+            )
+          )
+        ),
+      _as_type_query_member: ($) =>
+        seq(
+          field('object', choice(assertionQueryName($), alias($._as_import_call, $.call_expression))),
+          '.',
+          field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+        ),
+      _as_type_query_instantiation: ($) =>
+        seq(
+          field('function', assertionQueryName($)),
+          $._as_query_type_arguments_start,
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
+        ),
+      _as_import_call: ($) => seq(field('function', $.import), field('arguments', $.arguments)),
+      _as_typed_import_type: ($) =>
+        seq(
+          field('function', $.import),
+          field('arguments', alias($._typed_import_arguments, $.arguments)),
+          $._as_query_type_arguments_start,
+          field('type_arguments', $.type_arguments)
+        ),
+      _as_import_member: ($) => assertionImportMember($, false),
+      _as_generic_import_member: ($) => assertionImportMember($, true),
       _as_array_type: ($) => seq(alias($._as_primary_type, $.primary_type), '[', ']'),
       _as_lookup_type: ($) => seq(alias($._as_primary_type, $.primary_type), '[', $.type, ']'),
       _as_union_type: ($) => binaryType($, '|', alias($._as_type, $.type)),
@@ -2290,12 +2334,26 @@ function ordinaryAssertionPrimaryTypes($, constraint = false) {
     conditional_type: $._as_conditional_type,
     index_type_query: constraint ? $._as_constraint_index_type_query : $._as_index_type_query,
   };
-  return primaryTypes($)
+  return assertionPrimaryTypes($)
     .filter((rule) => rule !== 'const' && (!constraint || rule.name !== 'conditional_type'))
     .map((rule) => {
       const type = variants[rule.name] ? alias(variants[rule.name], $[rule.name]) : rule;
       return rule.name === '_type_reference_identifier' ? $._as_identifier : type;
     });
+}
+
+function assertionPrimaryTypes($) {
+  const variants = {
+    type_query: alias($._as_type_query, $.type_query),
+    _type_query_member_expression_in_type_annotation: $._as_import_member,
+    _type_query_call_expression_in_type_annotation: $._as_import_call,
+    _typed_import_type: $._as_typed_import_type,
+  };
+  return primaryTypes($).map((rule) =>
+    typeof rule === 'string'
+      ? rule
+      : mapRule(rule, (part) => (part.type === 'SYMBOL' ? (variants[part.name] ?? part) : part))
+  );
 }
 
 function primaryTypes($) {
@@ -2347,7 +2405,7 @@ function assertionPostfixTypes($) {
     'union_type',
   ]);
   return [
-    ...primaryTypes($).filter((rule) => !compound.has(rule.name)),
+    ...assertionPrimaryTypes($).filter((rule) => !compound.has(rule.name)),
     alias($._const_assertion_predefined_type, $.predefined_type),
   ];
 }
@@ -2544,11 +2602,11 @@ function conditionalType($, left, { right, consequence, consequenceStart, altern
   );
 }
 
-function genericTypeName($, unqualified) {
+function genericTypeName($, unqualified, queryMember = $._generic_type_query_member_expression) {
   return choice(
     field('name', alias(unqualified, $.type_identifier)),
     field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier)),
-    field('name', alias($._generic_type_query_member_expression, $.member_expression))
+    field('name', alias(queryMember, $.member_expression))
   );
 }
 
@@ -2601,22 +2659,34 @@ function qualifiedTypeName($) {
   return choice($._type_reference_identifier, alias('bigint', $.type_identifier));
 }
 
-function typeQueryMember($, generic) {
+function assertionQueryName($) {
+  return choice($._type_query_identifier, $.this, alias($._as_type_query_member, $.member_expression));
+}
+
+function assertionImportMember($, generic) {
+  return typeQueryMember(
+    $,
+    generic,
+    [alias($._as_import_call, $.call_expression), alias($._as_import_member, $.member_expression)],
+    reserved('properties', alias($.identifier, $.property_identifier))
+  );
+}
+
+function typeQueryMember(
+  $,
+  generic,
+  objects = [
+    $.import,
+    alias($._type_query_member_expression_in_type_annotation, $.member_expression),
+    alias($._type_query_call_expression_in_type_annotation, $.call_expression),
+  ],
+  property = choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+) {
   return seq(
-    field(
-      'object',
-      choice(
-        $.import,
-        alias($._type_query_member_expression_in_type_annotation, $.member_expression),
-        alias($._type_query_call_expression_in_type_annotation, $.call_expression)
-      )
-    ),
+    field('object', choice(...objects)),
     '.',
     ...(generic ? [$._type_reference_arguments_start] : []),
-    field(
-      'property',
-      choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
-    )
+    field('property', property)
   );
 }
 

@@ -8,6 +8,21 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
 const Sources = [
+  'class C { field = value as A<Arg>!; next = 1; }',
+  'const result = value as ?typeof operand<Arg>;',
+  'const result = value as ?typeof operand<Arg>[];',
+  'const result = value as ??typeof Namespace.value<Arg>;',
+  'const result = value as ?typeof Namespace.value<Arg>[Key];',
+  'const result = value as ?A | typeof Namespace.value<Arg>;',
+  'const result = value as const.Member | typeof Namespace.value<Arg>;',
+  'const result = value as const.Member & typeof operand<Arg> ? left : right;',
+  'const result = value as infer U extends typeof Namespace.value<Arg>;',
+  'const result = value as const.Member | typeof import("module");',
+  'const result = value as const.Member | typeof import("module").value<Arg>;',
+  'const result = value as const.Member | typeof import("module")<Arg>;',
+  'const result = value as const.Member | import("module").Type<Arg>;',
+  'const result = value as const.Member | typeof operand <= other;',
+  'const result = value as const.Member | typeof operand\n< other;',
   'const result = value as const.class;',
   'const result = value as | const.Member;',
   'const result = value as | const.Member & Other;',
@@ -164,6 +179,12 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as (const.Member) | typeof Namespace.value();',
+  'const invalid = value as const.Member & typeof Namespace.value?.property;',
+  'const invalid = value as ?A | typeof Namespace.value?.();',
+  'const invalid = value as ?A | typeof operand < other;',
+  'const invalid = value as A! | typeof operand < other;',
+
   'const invalid = value as | const.Member();',
   'const invalid = value as & const.Member?.();',
   'const invalid = value as A | const.X | const.Y();',
@@ -203,7 +224,7 @@ for (const dialect of ['typescript', 'tsx']) {
       '(nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
         '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
         '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-        ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
+        ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
         ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
         (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
     );
@@ -367,6 +388,20 @@ function checkRanges(
         node.checkType.getStart(reference),
         node.checkType.end,
       ]);
+    if (ts.isImportTypeNode(node)) {
+      if (node.isTypeOf) {
+        expected.typeQuery!.push([node.getText(reference), node.getStart(reference), node.end]);
+        if (node.qualifier) {
+          const start = node
+            .getChildren(reference)
+            .find((child) => child.kind === ts.SyntaxKind.ImportKeyword)!
+            .getStart(reference);
+          expected.queryOperand!.push([reference.text.slice(start, node.qualifier.end), start, node.qualifier.end]);
+        }
+      } else if (node.qualifier && node.typeArguments) {
+        expected.generic!.push([node.getText(reference), node.getStart(reference), node.end]);
+      }
+    }
     if (ts.isTypeQueryNode(node)) {
       expected.typeQuery!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.queryOperand!.push([

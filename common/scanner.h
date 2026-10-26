@@ -96,6 +96,8 @@ enum TokenType {
     AS_INFER_CONSTRAINT_END,
     NONCONDITIONAL_INFER_NAME_END,
     NULLABLE_TYPE_START,
+    AS_QUERY_TYPE_ARGUMENTS_START,
+    AS_QUERY_NAME_END,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3261,6 +3263,11 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
     lexer->mark_end(lexer);
     bool line_break = false;
     bool trivia = scan_expression_trivia(lexer, &line_break, NULL);
+    if (valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] && trivia && !line_break && lexer->lookahead == '<') {
+        advance(lexer);
+        lexer->result_symbol = lexer->lookahead == '=' ? AS_QUERY_NAME_END : AS_QUERY_TYPE_ARGUMENTS_START;
+        return lexer->lookahead != '=' || valid_symbols[AS_QUERY_NAME_END];
+    }
     if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
         valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[NULLABLE_TYPE_START]) {
         return trivia && scan_assertion_type_start(lexer, valid_symbols);
@@ -3302,6 +3309,15 @@ static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols)
 }
 
 static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break) {
+    if (valid_symbols[AS_QUERY_NAME_END]) {
+        lexer->result_symbol = AS_QUERY_NAME_END;
+        if (lexer->lookahead == '(' || lexer->lookahead == '`') return line_break;
+        if (lexer->lookahead == '?') {
+            advance(lexer);
+            return question_mark_can_start_ternary(lexer);
+        }
+        return !trivia || const_assertion_name_can_end(lexer, line_break);
+    }
     if (valid_symbols[NONCONDITIONAL_INFER_NAME_END]) {
         lexer->result_symbol = NONCONDITIONAL_INFER_NAME_END;
         return !trivia || lexer->lookahead != 'e' || !scan_word(lexer, "extends");
@@ -3371,7 +3387,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
          valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] ||
          valid_symbols[AS_INFER_CONSTRAINT_END] ||
          valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
-         valid_symbols[NULLABLE_TYPE_START] ||
+         valid_symbols[NULLABLE_TYPE_START] || valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] || valid_symbols[AS_QUERY_NAME_END] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 

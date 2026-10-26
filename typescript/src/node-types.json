@@ -3125,6 +3125,10 @@
           {
             "type": "subscript_expression",
             "named": true
+          },
+          {
+            "type": "this",
+            "named": true
           }
         ]
       },
