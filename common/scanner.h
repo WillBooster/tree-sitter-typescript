@@ -3250,7 +3250,7 @@ static bool const_assertion_consequence_can_start(TSLexer *lexer);
 static bool type_argument_can_start(TSLexer *lexer);
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break);
-static bool as_infer_constraint_can_end(TSLexer *lexer);
+static bool as_infer_constraint_can_end(TSLexer *lexer, bool line_break);
 
 static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     advance(lexer);
@@ -3312,19 +3312,20 @@ static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, b
     }
     if (valid_symbols[AS_INFER_CONSTRAINT_END]) {
         lexer->result_symbol = AS_INFER_CONSTRAINT_END;
-        return !trivia || as_infer_constraint_can_end(lexer);
+        return !trivia || as_infer_constraint_can_end(lexer, line_break);
     }
     if (!valid_symbols[QUALIFIED_CONST_ASSERTION_END]) return false;
     lexer->result_symbol = QUALIFIED_CONST_ASSERTION_END;
     return !trivia || const_assertion_type_can_end(lexer, line_break);
 }
 
-static bool as_infer_constraint_can_end(TSLexer *lexer) {
+static bool as_infer_constraint_can_end(TSLexer *lexer, bool line_break) {
     if (lexer->lookahead == '|' || lexer->lookahead == '&') {
         int32_t operator = lexer->lookahead;
         advance(lexer);
         return lexer->lookahead == operator || lexer->lookahead == '=';
     }
+    if (lexer->lookahead == '[' || lexer->lookahead == '.') return const_assertion_type_can_end(lexer, line_break);
     if (lexer->lookahead != '?') return true;
     advance(lexer);
     return lexer->lookahead == '?' || !question_mark_can_start_ternary(lexer);
