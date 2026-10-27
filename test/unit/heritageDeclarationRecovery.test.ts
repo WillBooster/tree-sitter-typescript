@@ -61,7 +61,7 @@ for (const dialect of ['typescript', 'tsx'] as const) {
     try {
       for (const [declaration, kind] of Declarations) {
         for (const gap of Trivia) {
-          const withTrivia = declaration.replace(/\b(interface|enum|let|function) /, `$1${gap}`);
+          const withTrivia = declaration.replace(/\b(interface|enum|let|function)(\*?) /, `$1$2${gap}`);
           const following = withTrivia + '\n' + Sentinel;
           let header = BrokenHeader;
           let tree = parser.parse(header + following)!;
