@@ -27,7 +27,7 @@ const ValidTypes = [
   'interface<T>',
   'let<T>',
   'interface/* gap */extends T ? U : V',
-  'let// gap\nextends T ? U : V',
+  'let/* gap */extends T ? U : V',
   'function/* gap */extends T ? U : V',
   'interface.Member<T>',
   'let.Member<T>',
