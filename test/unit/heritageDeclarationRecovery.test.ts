@@ -9,6 +9,9 @@ const Declarations = [
   ['enum E { A }', 'enum_declaration'],
   ['let value = 1;', 'lexical_declaration'],
   ['function following() {}', 'function_declaration'],
+  ['async function following() {}', 'function_declaration'],
+  ['async function* following() {}', 'generator_function_declaration'],
+  ['let { value } = item;', 'lexical_declaration'],
   ['function* following() {}', 'generator_function_declaration'],
   ['interface LongIdentifierBeyondSixteen {}', 'interface_declaration'],
   ['interface 日本 {}', 'interface_declaration'],
@@ -19,6 +22,11 @@ const RepairedHeader = 'class C extends Base<T> {}\n';
 const Sentinel = 'export const sentinel = 2;';
 const ValidTypes = [
   'interface',
+  'async',
+  'async<T>',
+  'async.Member<T>',
+  'async extends T ? U : V',
+  'async/* gap */extends T ? U : V',
   'function',
   'let',
   'interface extends T ? U : V',
@@ -53,7 +61,7 @@ for (const dialect of ['typescript', 'tsx'] as const) {
     try {
       for (const [declaration, kind] of Declarations) {
         for (const gap of Trivia) {
-          const withTrivia = declaration.replace(/^(interface|enum|let|function) /, `$1${gap}`);
+          const withTrivia = declaration.replace(/\b(interface|enum|let|function) /, `$1${gap}`);
           const following = withTrivia + '\n' + Sentinel;
           let header = BrokenHeader;
           let tree = parser.parse(header + following)!;
