@@ -16162,15 +16162,6 @@
         }
       ]
     },
-    "_as_guarded_tuple_primary": {
-      "type": "ALIAS",
-      "content": {
-        "type": "SYMBOL",
-        "name": "_as_guarded_tuple_type"
-      },
-      "named": true,
-      "value": "tuple_type"
-    },
     "_as_guarded_tuple_type": {
       "type": "SEQ",
       "members": [
@@ -17454,8 +17445,13 @@
           "value": "array_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "SYMBOL",
@@ -17714,6 +17710,10 @@
             "value": "."
           },
           {
+            "type": "SYMBOL",
+            "name": "_as_query_name_end"
+          },
+          {
             "type": "FIELD",
             "name": "name",
             "content": {
@@ -17811,6 +17811,10 @@
           {
             "type": "STRING",
             "value": "."
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_as_query_name_end"
           },
           {
             "type": "SYMBOL",
@@ -17944,6 +17948,10 @@
           {
             "type": "STRING",
             "value": "."
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_as_query_name_end"
           },
           {
             "type": "FIELD",
@@ -18417,6 +18425,10 @@
             "value": "typeof"
           },
           {
+            "type": "SYMBOL",
+            "name": "_as_query_root_start"
+          },
+          {
             "type": "CHOICE",
             "members": [
               {
@@ -18426,12 +18438,17 @@
                     "type": "CHOICE",
                     "members": [
                       {
-                        "type": "SYMBOL",
-                        "name": "_type_query_identifier"
-                      },
-                      {
-                        "type": "SYMBOL",
-                        "name": "this"
+                        "type": "CHOICE",
+                        "members": [
+                          {
+                            "type": "SYMBOL",
+                            "name": "_type_query_identifier"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "this"
+                          }
+                        ]
                       },
                       {
                         "type": "ALIAS",
@@ -18522,20 +18539,29 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "FIELD",
-          "name": "object",
-          "content": {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "_type_query_identifier"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "this"
-              },
-              {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "object",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_type_query_identifier"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "this"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "FIELD",
+              "name": "object",
+              "content": {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -18544,12 +18570,16 @@
                 "named": true,
                 "value": "member_expression"
               }
-            ]
-          }
+            }
+          ]
         },
         {
           "type": "STRING",
           "value": "."
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_as_query_name_end"
         },
         {
           "type": "FIELD",
@@ -18574,20 +18604,29 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "FIELD",
-          "name": "function",
-          "content": {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "SYMBOL",
-                "name": "_type_query_identifier"
-              },
-              {
-                "type": "SYMBOL",
-                "name": "this"
-              },
-              {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "function",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_type_query_identifier"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "this"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "FIELD",
+              "name": "function",
+              "content": {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -18596,8 +18635,8 @@
                 "named": true,
                 "value": "member_expression"
               }
-            ]
-          }
+            }
+          ]
         },
         {
           "type": "SYMBOL",
@@ -18705,6 +18744,10 @@
           "value": "."
         },
         {
+          "type": "SYMBOL",
+          "name": "_as_query_name_end"
+        },
+        {
           "type": "FIELD",
           "name": "property",
           "content": {
@@ -18756,6 +18799,10 @@
         {
           "type": "STRING",
           "value": "."
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_as_query_name_end"
         },
         {
           "type": "SYMBOL",
@@ -19106,8 +19153,13 @@
           "value": "array_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "SYMBOL",
@@ -19564,7 +19616,7 @@
             "name": "_const_assertion_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -21069,6 +21121,24 @@
         {
           "type": "STRING",
           "value": "object"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "unique"
+              },
+              {
+                "type": "STRING",
+                "value": "symbol"
+              }
+            ]
+          },
+          "named": false,
+          "value": "unique symbol"
         }
       ]
     },
@@ -21200,8 +21270,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -21541,8 +21616,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -21790,7 +21870,7 @@
             "name": "_const_assertion_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -21829,115 +21909,63 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_const_assertion_operator_operand"
-              },
-              "named": true,
-              "value": "primary_type"
-            },
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_const_assertion_readonly_type"
-              },
-              "named": true,
-              "value": "readonly_type"
-            },
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_as_infer_type"
-              },
-              "named": true,
-              "value": "infer_type"
-            }
-          ]
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_operator_operand"
+          },
+          "named": true,
+          "value": "primary_type"
         },
         {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_as_guarded_tuple_primary"
+            "name": "_const_assertion_readonly_type"
           },
           "named": true,
-          "value": "primary_type"
+          "value": "readonly_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_infer_type"
+          },
+          "named": true,
+          "value": "infer_type"
         }
       ]
     },
     "_const_assertion_unique_type": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "unique"
-              },
-              {
-                "type": "STRING",
-                "value": "symbol"
-              }
-            ]
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "unique"
           },
-          "named": false,
-          "value": "unique symbol"
-        },
-        {
-          "type": "PREC",
-          "value": -1,
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "unique"
+          {
+            "type": "SYMBOL",
+            "name": "_as_unique_operand_start"
+          },
+          {
+            "type": "FIELD",
+            "name": "type",
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_const_assertion_readonly_operand"
               },
-              {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_const_assertion_operator_operand"
-                    },
-                    "named": true,
-                    "value": "primary_type"
-                  },
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_const_assertion_readonly_type"
-                    },
-                    "named": true,
-                    "value": "readonly_type"
-                  },
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_as_infer_type"
-                    },
-                    "named": true,
-                    "value": "infer_type"
-                  }
-                ]
-              }
-            ]
+              "named": true,
+              "value": "type"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "_const_assertion_nullable_type": {
       "type": "PREC_RIGHT",
@@ -22164,7 +22192,7 @@
             "name": "_const_assertion_constraint_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -22876,7 +22904,7 @@
             "name": "_as_non_postfix_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -23037,7 +23065,7 @@
             "name": "_as_non_postfix_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         }
       ]
     },
@@ -23241,36 +23269,21 @@
             "value": "unique"
           },
           {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_non_postfix_operator_primary_type"
-                },
-                "named": true,
-                "value": "primary_type"
+            "type": "SYMBOL",
+            "name": "_as_unique_operand_start"
+          },
+          {
+            "type": "FIELD",
+            "name": "type",
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_as_non_postfix_readonly_operand"
               },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_non_postfix_readonly_type"
-                },
-                "named": true,
-                "value": "readonly_type"
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_non_postfix_infer_type"
-                },
-                "named": true,
-                "value": "infer_type"
-              }
-            ]
+              "named": true,
+              "value": "type"
+            }
           }
         ]
       }
@@ -23857,7 +23870,7 @@
             "name": "_const_assertion_non_postfix_constraint_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         }
       ]
     },
@@ -24116,7 +24129,7 @@
             "name": "_const_assertion_non_postfix_constraint_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         }
       ]
     },
@@ -24176,36 +24189,21 @@
             "value": "unique"
           },
           {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_const_assertion_non_postfix_constraint_operator_primary_type"
-                },
-                "named": true,
-                "value": "primary_type"
+            "type": "SYMBOL",
+            "name": "_as_unique_operand_start"
+          },
+          {
+            "type": "FIELD",
+            "name": "type",
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_const_assertion_non_postfix_constraint_readonly_operand"
               },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_const_assertion_non_postfix_constraint_readonly_type"
-                },
-                "named": true,
-                "value": "readonly_type"
-              },
-              {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_const_assertion_non_postfix_constraint_infer_type"
-                },
-                "named": true,
-                "value": "infer_type"
-              }
-            ]
+              "named": true,
+              "value": "type"
+            }
           }
         ]
       }
@@ -24255,7 +24253,7 @@
             "name": "_const_assertion_constraint_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -24302,8 +24300,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -24594,8 +24597,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -24859,8 +24867,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -25237,72 +25250,34 @@
       }
     },
     "_const_assertion_constraint_unique_type": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "unique"
-              },
-              {
-                "type": "STRING",
-                "value": "symbol"
-              }
-            ]
+      "type": "PREC",
+      "value": -1,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "STRING",
+            "value": "unique"
           },
-          "named": false,
-          "value": "unique symbol"
-        },
-        {
-          "type": "PREC",
-          "value": -1,
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "unique"
+          {
+            "type": "SYMBOL",
+            "name": "_as_unique_operand_start"
+          },
+          {
+            "type": "FIELD",
+            "name": "type",
+            "content": {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_const_assertion_constraint_readonly_operand"
               },
-              {
-                "type": "CHOICE",
-                "members": [
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_const_assertion_constraint_operator_operand"
-                    },
-                    "named": true,
-                    "value": "primary_type"
-                  },
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_const_assertion_constraint_readonly_type"
-                    },
-                    "named": true,
-                    "value": "readonly_type"
-                  },
-                  {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_const_assertion_constraint_infer_type"
-                    },
-                    "named": true,
-                    "value": "infer_type"
-                  }
-                ]
-              }
-            ]
+              "named": true,
+              "value": "type"
+            }
           }
-        }
-      ]
+        ]
+      }
     },
     "_const_assertion_constraint_operator_operand": {
       "type": "CHOICE",
@@ -25343,8 +25318,13 @@
           "name": "object_type"
         },
         {
-          "type": "SYMBOL",
-          "name": "tuple_type"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_guarded_tuple_type"
+          },
+          "named": true,
+          "value": "tuple_type"
         },
         {
           "type": "ALIAS",
@@ -25592,7 +25572,7 @@
             "name": "_const_assertion_constraint_unique_type"
           },
           "named": true,
-          "value": "predefined_type"
+          "value": "unique_type"
         },
         {
           "type": "ALIAS",
@@ -25631,45 +25611,31 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "CHOICE",
-          "members": [
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_const_assertion_constraint_operator_operand"
-              },
-              "named": true,
-              "value": "primary_type"
-            },
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_const_assertion_constraint_readonly_type"
-              },
-              "named": true,
-              "value": "readonly_type"
-            },
-            {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_const_assertion_constraint_infer_type"
-              },
-              "named": true,
-              "value": "infer_type"
-            }
-          ]
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_constraint_operator_operand"
+          },
+          "named": true,
+          "value": "primary_type"
         },
         {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_as_guarded_tuple_primary"
+            "name": "_const_assertion_constraint_readonly_type"
           },
           "named": true,
-          "value": "primary_type"
+          "value": "readonly_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_const_assertion_constraint_infer_type"
+          },
+          "named": true,
+          "value": "infer_type"
         }
       ]
     },
@@ -25843,6 +25809,10 @@
                   "value": "."
                 },
                 {
+                  "type": "SYMBOL",
+                  "name": "_as_query_name_end"
+                },
+                {
                   "type": "FIELD",
                   "name": "name",
                   "content": {
@@ -25913,6 +25883,10 @@
           },
           {
             "type": "SYMBOL",
+            "name": "_as_query_name_end"
+          },
+          {
+            "type": "SYMBOL",
             "name": "_type_reference_arguments_start"
           },
           {
@@ -25976,6 +25950,10 @@
           {
             "type": "STRING",
             "value": "."
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_as_query_name_end"
           },
           {
             "type": "FIELD",
@@ -32043,7 +32021,7 @@
     },
     {
       "type": "PATTERN",
-      "value": "[\\s\\p{Zs}\\uFEFF\\u2028\\u2029\\u2060\\u200B]",
+      "value": "[\\s\\p{Zs}\\uFEFF\\u2028\\u2029\\u200B]",
       "flags": "u"
     }
   ],
@@ -51494,6 +51472,14 @@
     {
       "type": "SYMBOL",
       "name": "_as_protected_identifier"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_as_unique_operand_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_as_query_root_start"
     }
   ],
   "inline": [
@@ -51547,7 +51533,6 @@
     "_as_non_postfix_operator_primary_type",
     "_as_non_postfix_readonly_operand",
     "_as_primary_type",
-    "_as_guarded_tuple_primary",
     "_as_constraint_type",
     "_as_constraint_primary_type",
     "_qualified_const_assertion_type",

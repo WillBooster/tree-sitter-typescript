@@ -12,6 +12,21 @@ const Sources = [
   'const result = value as const.Member & !A;',
   'const result = value as const.Member[!true];',
   'const result = value as !infer.Member<Arg>[];',
+  String.raw`const result = value as !\u{10400};`,
+  String.raw`const result = value as !A\u0301;`,
+  String.raw`const result = value as !A\u200c;`,
+  'const result = value as !𐐀;',
+  String.raw`const result = value as !Namespace.\u{10400}[];`,
+  String.raw`const result = value as const.\u0063lass[];`,
+  String.raw`const result = value as typeof Namespace.\u0063lass;`,
+  String.raw`const result = value as typeof Namespace.\u0069mport;`,
+  String.raw`const result = value as typeof \u0063lass.Member<Arg>;`,
+  'const result = value as typeof import("module");',
+  String.raw`const result = value as typeof import("module").\u{10400};`,
+  'const result = value as typeof Namespace.value as const.Member;',
+  'const result = value as typeof Namespace.value satisfies A;',
+  'const result = value as typeof Namespace.value instanceof C;',
+  'const result = value as typeof Namespace.value\nnew C();',
   'const result = value as keyof new.Member;',
   'const result = value as (x) => const.Member;',
   String.raw`const result = value as (\u0078) => const.Member;`,
@@ -19,6 +34,10 @@ const Sources = [
   'const result = value as (public [x]: T) => const.Member;',
   'const result = value as (override []) => const.Member;',
   'const result = value as (readonly []);',
+  'const result = value as readonly [A][];',
+  'const result = value as readonly [keyof I, (a: unknown, b: unknown) => boolean][];',
+  'const result = value as readonly [A][Key];',
+  'const result = value as readonly [A]!;',
   'const result = value as (readonly []) => const.Member;',
   'const result = value as -1!;',
   'const result = value as const.Member | !true;',
@@ -100,6 +119,11 @@ const Sources = [
   'const result = value as () => A | any.Member;',
   'const result = value as () => never.Member.Nested<Arg>!;',
   'const result = value as ?unique symbol.Member;',
+  'const result = value as unique !symbol;',
+  'const result = value as unique !symbol[];',
+  'const result = value as unique !(symbol[]);',
+  'const result = value as A extends unique infer U ? const : D;',
+  'const result = value as A extends unique infer U ?\nconst.Member : D;',
   'const result = value as infer U | unique symbol\n.Member;',
   'const result = value as ?keyof unknown.Member;',
   'const result = value as ?unique string.Member<Arg>[Key];',
@@ -268,6 +292,10 @@ const Sources = [
   'const result = value as keyof A!;',
   'const result = value as keyof A[]!;',
   'const result = value as unique symbol!;',
+  'const result = value as unique symbol[];',
+  'const result = value as unique symbol[Key];',
+  'const result = value as unique readonly A[];',
+  'const result = value as unique keyof A;',
   'const result = value as keyof const.Member!;',
   'const result = value as keyof keyof A!;',
   'const result = value as readonly A[]!;',
@@ -329,7 +357,22 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  String.raw`const invalid = value as typeof \u0069mport;`,
+  String.raw`const invalid = value as typeof \u0069mport` + '\n<2;',
+  String.raw`const invalid = value as typeof \u0069mport.Member` + '/*\n*/<2;',
   'const invalid = value as A extends B ? infer : D;',
+  String.raw`const invalid = value as !\u007f;`,
+  String.raw`const invalid = value as !\u{1f600};`,
+  String.raw`const invalid = value as !\u0301;`,
+  String.raw`const invalid = value as !\uD800;`,
+  'const invalid = value as !A\u2060;',
+  String.raw`const invalid = value as !Namespace.\u007f;`,
+  String.raw`const invalid = value as const.\u007f[];`,
+  String.raw`const invalid = value as !const.\u0301;`,
+  String.raw`const invalid = value as !typeof Namespace.\u{1f600};`,
+  String.raw`const invalid = value as typeof import("module").\u007f;`,
+  'const invalid = value as typeof Namespace.value extra;',
+  'const invalid = value as typeof Namespace.value new C();',
   'const invalid = value as A extends B ? C : infer.Member;',
   'const invalid = value as A extends B ? (infer) : D;',
   'const invalid = value as ?readonly | A;',
@@ -458,8 +501,8 @@ for (const dialect of ['typescript', 'tsx']) {
         '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
           '(required_parameter pattern: (pattern/array_pattern) @arrayBinding) (jsdoc_unknown_type) @unknownType ((type_identifier) @constType (#eq? @constType "const")) (as_expression "const" @wholeConst) ' +
           '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-          '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
+          '(unique_type) @uniqueOperator (unique_type "unique" @uniqueKeyword type: (type) @uniqueOperand) (predefined_type "unique symbol") @uniqueSymbol (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
+          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (unique_type (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
           ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
           (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
       );
@@ -562,6 +605,9 @@ function checkRanges(
     binaryOperator: [],
     keyof: [],
     uniqueOperator: [],
+    uniqueKeyword: [],
+    uniqueOperand: [],
+    uniqueSymbol: [],
     qualified: [],
     generic: [],
     as: [],
@@ -636,17 +682,26 @@ function checkRanges(
         node.operatorToken.end,
       ]);
     }
-    if (
-      ts.isTypeOperatorNode(node) &&
-      node.operator === ts.SyntaxKind.UniqueKeyword &&
-      node.type.kind !== ts.SyntaxKind.SymbolKeyword
-    )
+    if (ts.isTypeOperatorNode(node) && node.operator === ts.SyntaxKind.UniqueKeyword && !uniqueSymbolOperand(node)) {
       expected.uniqueOperator!.push([node.getText(reference), node.getStart(reference), node.end]);
+      const keyword = node.getFirstToken(reference)!;
+      expected.uniqueKeyword!.push([keyword.getText(reference), keyword.getStart(reference), keyword.end]);
+      expected.uniqueOperand!.push(publicTypeRange(node.type, reference));
+    }
+    if (ts.isTypeOperatorNode(node)) {
+      const symbol = uniqueSymbolOperand(node);
+      if (symbol)
+        expected.uniqueSymbol!.push([
+          source.slice(node.getStart(reference), symbol.end),
+          node.getStart(reference),
+          symbol.end,
+        ]);
+    }
     if (ts.isTypeOperatorNode(node) && node.operator === ts.SyntaxKind.KeyOfKeyword)
       expected.keyof!.push([node.getText(reference), node.getStart(reference), node.end]);
     if (ts.isJSDocNonNullableType(node)) {
-      expected.nonNullable!.push([node.getText(reference), node.getStart(reference), node.end]);
-      expected.nullableOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+      expected.nonNullable!.push(publicTypeRange(node, reference));
+      expected.nullableOperand!.push(publicTypeRange(node.type, reference));
     }
     if (ts.isAsExpression(node)) {
       const range: Ranges[number] = [node.type.getText(reference), node.type.getStart(reference), node.type.end];
@@ -660,11 +715,7 @@ function checkRanges(
         ? node.objectType
         : undefined;
     if (operand)
-      expected[ts.isArrayTypeNode(node) ? 'arrayOperand' : 'lookupOperand']!.push([
-        operand.getText(reference),
-        operand.getStart(reference),
-        operand.end,
-      ]);
+      expected[ts.isArrayTypeNode(node) ? 'arrayOperand' : 'lookupOperand']!.push(publicTypeRange(operand, reference));
     if (ts.isConditionalTypeNode(node))
       expected.conditionalLeft!.push([
         node.checkType.getText(reference),
@@ -707,7 +758,7 @@ function checkRanges(
             : ts.isConditionalTypeNode(node)
               ? 'conditional'
               : undefined;
-    if (typeKind) expected[typeKind]!.push([node.getText(reference), node.getStart(reference), node.end]);
+    if (typeKind) expected[typeKind]!.push(publicTypeRange(node, reference));
     if (ts.isTypeReferenceNode(node) && ts.isQualifiedName(node.typeName)) {
       expected.qualified!.push([
         node.typeName.getText(reference),
@@ -757,4 +808,28 @@ function checkRanges(
   for (const name of Object.keys(expected)) {
     expect(actual[name]!.toSorted(byRange), `${name}: ${source}`).toEqual(expected[name]!.toSorted(byRange));
   }
+}
+
+function publicTypeRange(node: ts.Node, reference: ts.SourceFile): Ranges[number] {
+  let current = node;
+  while (current.parent && postfixTypeOperand(current.parent) === current) current = current.parent;
+  const operator = current.parent;
+  const start =
+    operator && ts.isTypeOperatorNode(operator) && uniqueSymbolOperand(operator)
+      ? operator.getStart(reference)
+      : node.getStart(reference);
+  return [reference.text.slice(start, node.end), start, node.end];
+}
+
+function uniqueSymbolOperand(node: ts.TypeOperatorNode): ts.TypeNode | undefined {
+  if (node.operator !== ts.SyntaxKind.UniqueKeyword) return undefined;
+  let operand = node.type;
+  for (let next = postfixTypeOperand(operand); next; next = postfixTypeOperand(operand)) operand = next;
+  return operand.kind === ts.SyntaxKind.SymbolKeyword ? operand : undefined;
+}
+
+function postfixTypeOperand(node: ts.Node): ts.TypeNode | undefined {
+  if (ts.isArrayTypeNode(node)) return node.elementType;
+  if (ts.isIndexedAccessTypeNode(node)) return node.objectType;
+  return ts.isJSDocNonNullableType(node) && node.postfix ? node.type : undefined;
 }

@@ -382,6 +382,10 @@
       {
         "type": "union_type",
         "named": true
+      },
+      {
+        "type": "unique_type",
+        "named": true
       }
     ]
   },
@@ -4537,25 +4541,7 @@
   {
     "type": "predefined_type",
     "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "infer_type",
-          "named": true
-        },
-        {
-          "type": "primary_type",
-          "named": true
-        },
-        {
-          "type": "readonly_type",
-          "named": true
-        }
-      ]
-    }
+    "fields": {}
   },
   {
     "type": "program",
@@ -5621,6 +5607,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "unique_type",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {

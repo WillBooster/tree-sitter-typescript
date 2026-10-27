@@ -72,10 +72,29 @@ ${operandKeywords.assertionPredicate.map((word) => `    "${word}",`).join('\n')}
 static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
 ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
+
+${identifierCharacterRanges('TS_IDENTIFIER_START_RANGES', (character) => ts.isIdentifierStart(character, ts.ScriptTarget.Latest))}
+
+${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIdentifierPart(character, ts.ScriptTarget.Latest))}
+
+${identifierCharacterRanges('TS_WHITESPACE_RANGES', (character) => ts.isWhiteSpaceLike(character))}
 `;
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
   assert.equal(readFileSync(path, 'utf8'), header, 'Run bun run generate-keywords to update the scanner header.');
 } else if (!existsSync(path) || readFileSync(path, 'utf8') !== header) {
   writeFileSync(path, header);
+}
+
+function identifierCharacterRanges(name: string, contains: (character: number) => boolean): string {
+  const ranges: [number, number][] = [];
+  for (let character = 0; character <= 0x10_ff_ff; character++) {
+    if (!contains(character)) continue;
+    const last = ranges.at(-1);
+    if (last && last[1] === character - 1) last[1] = character;
+    else ranges.push([character, character]);
+  }
+  return `static const TSCharacterRange ${name}[] = {
+${ranges.map(([start, end]) => `    {0x${start.toString(16)}, 0x${end.toString(16)}},`).join('\n')}
+};`;
 }
