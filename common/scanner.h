@@ -108,6 +108,26 @@ enum TokenType {
     AS_ASSERTS_START,
     AS_ASSERTS_PREDICATE_START,
     TYPE_ARGUMENT_OPENING,
+    JSDOC_UNKNOWN_TYPE_END,
+    AS_CONST_ASSERTION,
+    AS_PARENTHESIZED_TYPE_BOUNDARY,
+    AS_LOOKUP_TYPE_BOUNDARY,
+    AS_CONSTRAINT_TYPE_BOUNDARY,
+    AS_CONSEQUENCE_TYPE_BOUNDARY,
+    AS_TYPE_IDENTIFIER,
+    AS_TYPE_REFERENCE_START,
+    AS_NON_ARRAY_TYPE_REFERENCE_START,
+    AS_TYPE_IDENTIFIER_BEFORE_ANGLE,
+    AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE,
+    AS_CONSTRUCTOR_TYPE_START,
+    AS_RESERVED_TYPE_IDENTIFIER,
+    AS_FORMAL_PARAMETER_BOUNDARY,
+    AS_NON_ARRAY_TYPE_IDENTIFIER,
+    AS_PUBLIC_IDENTIFIER,
+    AS_OVERRIDE_IDENTIFIER,
+    AS_PARAMETER_ARRAY_START,
+    AS_PRIVATE_IDENTIFIER,
+    AS_PROTECTED_IDENTIFIER,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -316,6 +336,7 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
             continue;
         }
         if (lexer->lookahead != '*') {
+            *scanned_content = true;
             return !consume && saw_comment_newline ? ACCEPT_AFTER_COMMENT_LINE_BREAK_BEFORE_SLASH : REJECT;
         }
         lexer->advance(lexer, skip_contents);
@@ -1522,16 +1543,44 @@ static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const ch
 static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word);
 static bool scan_type_identifier_escape(TSLexer *lexer);
 
+static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
+
 static bool scan_as_const_type(TSLexer *lexer, const bool *valid_symbols, const TSLexerCheckpoint *name_start);
+static bool whole_const_assertion_can_end(TSLexer *lexer, bool trivia, bool line_break);
 static bool scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break);
 
-static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage) {
+typedef enum {
+    ASSERTION_IDENTIFIER_INVALID,
+    ASSERTION_IDENTIFIER_WORD,
+    ASSERTION_IDENTIFIER_OTHER,
+} AssertionIdentifier;
+
+typedef struct {
+    bool valid;
+    TSSymbol symbol;
+    TSLexerCheckpoint start;
+    TSLexerCheckpoint end;
+} AssertionNameFallback;
+
+static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word, bool *escaped);
+static bool assertion_binding_word_is_reserved(const char *word);
+static bool scan_assertion_formal_parameter_boundary(TSLexer *lexer, const bool *valid_symbols);
+static bool assertion_type_identifier_allowed(const char *word, AssertionIdentifier kind, bool ascii_word, bool non_array);
+static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word);
+static bool scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start);
+
+static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage, AssertionNameFallback *fallback) {
     bool conditional_parameter = valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME];
     bool assertion_return = valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_START] || valid_symbols[AS_ASSERTS_PREDICATE_START];
-    bool unqualified = valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || conditional_parameter;
-    bool allow_type_arguments = valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START];
+    bool unqualified = valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || conditional_parameter;
+    bool allow_type_arguments = valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START];
     while (is_whitespace(lexer->lookahead)) skip(lexer);
     lexer->mark_end(lexer);
+    if (valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] && lexer->lookahead == ')') return scan_assertion_formal_parameter_boundary(lexer, valid_symbols);
+    if (valid_symbols[AS_PARAMETER_ARRAY_START] && lexer->lookahead == '[') {
+        lexer->result_symbol = AS_PARAMETER_ARRAY_START;
+        return true;
+    }
     TSLexerCheckpoint name_start;
     lexer->get_mark_end_checkpoint(lexer, &name_start);
     bool comment = false;
@@ -1540,14 +1589,33 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     bool ascii_word = true;
-    if (assertion_return || valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_QUALIFIED_NAME]) {
+    AssertionIdentifier name_kind = ASSERTION_IDENTIFIER_INVALID;
+    if (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START] || valid_symbols[AS_CONSTRUCTOR_TYPE_START] || valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE]) {
+        bool escaped = false;
+        if (private_name) return false;
+        name_kind = scan_assertion_identifier(lexer, word, &escaped);
+        if (name_kind == ASSERTION_IDENTIFIER_INVALID) return false;
+        ascii_word = name_kind == ASSERTION_IDENTIFIER_WORD && !escaped;
+    } else if (assertion_return || valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_ASSERTION] || valid_symbols[AS_CONST_QUALIFIED_NAME]) {
         if (private_name || !scan_type_identifier_name(lexer, word, sizeof(word), &ascii_word)) return false;
     } else {
         ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     }
-    if ((valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_QUALIFIED_NAME]) && ascii_word && strcmp(word, "const") == 0) return scan_as_const_type(lexer, valid_symbols, &name_start);
+    if (valid_symbols[AS_CONSTRUCTOR_TYPE_START] && name_kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "new") == 0) {
+        lexer->mark_start(lexer, &name_start);
+        lexer->mark_end_at(lexer, &name_start);
+        lexer->result_symbol = AS_CONSTRUCTOR_TYPE_START;
+        return true;
+    }
+    if ((valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_ASSERTION] || valid_symbols[AS_CONST_QUALIFIED_NAME]) && ascii_word && strcmp(word, "const") == 0) return scan_as_const_type(lexer, valid_symbols, &name_start);
     TSLexerCheckpoint name_end;
     lexer->get_checkpoint(lexer, &name_end);
+    if (fallback && (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) && assertion_type_identifier_allowed(word, name_kind, ascii_word, valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START])) {
+        fallback->symbol = assertion_type_identifier_symbol(valid_symbols, word, name_kind, ascii_word);
+        fallback->valid = valid_symbols[fallback->symbol];
+        fallback->start = name_start;
+        fallback->end = name_end;
+    }
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME] || conditional_parameter) && !private_name && ascii_word &&
         (strcmp(word, "bigint") == 0 || strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
         lexer->mark_end(lexer);
@@ -1650,6 +1718,10 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     }
     bool abstract_prefix = valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] && ascii_word && strcmp(word, "abstract") == 0;
     bool line_break = false;
+    if (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) {
+        if (!scan_expression_trivia(lexer, &line_break, NULL)) return false;
+        if (scan_assertion_reference_start(lexer, valid_symbols, word, name_kind, line_break, &name_start)) return true;
+    }
     if (assertion_return) {
         if (scan_assertion_return_prefix(lexer, valid_symbols, word, ascii_word, &name_start, &line_break)) return true;
         if (line_break && !heritage && !abstract_prefix) return false;
@@ -1658,7 +1730,12 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     if (unqualified && ascii_word) {
         static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "bigint", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
         for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
-            if (strcmp(word, keywords[i]) == 0) return false;
+            if (strcmp(word, keywords[i]) != 0) continue;
+            bool as_name = valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
+            bool non_array_name = valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
+            if (as_name && strcmp(word, "new") == 0) continue;
+            if (non_array_name && (strcmp(word, "infer") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0)) continue;
+            return false;
         }
     }
     for (;;) {
@@ -1691,9 +1768,57 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         if (!valid_symbols[CONST_GENERIC_NAME]) return false;
         lexer->result_symbol = CONST_GENERIC_NAME;
     } else {
-        if (unqualified && !valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE]) return false;
-        lexer->result_symbol = unqualified ? TYPE_IDENTIFIER_BEFORE_ANGLE : TYPE_REFERENCE_ARGUMENTS_START;
+        if (unqualified) {
+            if (valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE]) lexer->result_symbol = AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE;
+            else if (valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE]) lexer->result_symbol = AS_TYPE_IDENTIFIER_BEFORE_ANGLE;
+            else if (valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE]) lexer->result_symbol = TYPE_IDENTIFIER_BEFORE_ANGLE;
+            else return false;
+        } else lexer->result_symbol = TYPE_REFERENCE_ARGUMENTS_START;
     }
+    return true;
+}
+
+static bool is_type_operator_word(const char *word) {
+    return strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0;
+}
+
+static bool assertion_type_identifier_allowed(const char *word, AssertionIdentifier kind, bool ascii_word, bool non_array) {
+    if (kind == ASSERTION_IDENTIFIER_OTHER) return true;
+    if (kind != ASSERTION_IDENTIFIER_WORD || (!non_array && is_type_operator_word(word)) || strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0) return false;
+    return !is_nonreference_type_word(word) && (!ascii_word || strcmp(word, "const") != 0);
+}
+
+static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word) {
+    if (valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) return AS_NON_ARRAY_TYPE_IDENTIFIER;
+    if (ascii_word) {
+        if (strcmp(word, "public") == 0) return AS_PUBLIC_IDENTIFIER;
+        if (strcmp(word, "private") == 0) return AS_PRIVATE_IDENTIFIER;
+        if (strcmp(word, "protected") == 0) return AS_PROTECTED_IDENTIFIER;
+        if (strcmp(word, "override") == 0) return AS_OVERRIDE_IDENTIFIER;
+    }
+    return kind == ASSERTION_IDENTIFIER_WORD && assertion_binding_word_is_reserved(word) ? AS_RESERVED_TYPE_IDENTIFIER : AS_TYPE_IDENTIFIER;
+}
+
+static bool assertion_reference_word_allowed(const char *word, AssertionIdentifier kind, bool non_array, bool qualified) {
+    if (kind == ASSERTION_IDENTIFIER_OTHER) return true;
+    if (kind != ASSERTION_IDENTIFIER_WORD || (!non_array && is_type_operator_word(word))) return false;
+    static const char *const special[] = {"typeof", "import", "function", "void", "this", "null", "true", "false"};
+    if (is_type_probe_word(word, special, sizeof(special) / sizeof(special[0]))) return false;
+    return qualified || !is_nonreference_type_word(word);
+}
+
+static bool scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start) {
+    bool qualified = lexer->lookahead == '.';
+    if (!qualified && (line_break || lexer->lookahead != '<')) return false;
+    TSSymbol symbol = valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START] && assertion_reference_word_allowed(word, kind, true, qualified) ? AS_NON_ARRAY_TYPE_REFERENCE_START : AS_TYPE_REFERENCE_START;
+    if (!valid_symbols[symbol] || !assertion_reference_word_allowed(word, kind, symbol == AS_NON_ARRAY_TYPE_REFERENCE_START, qualified)) return false;
+    if (!qualified) {
+        advance(lexer);
+        if (lexer->lookahead == '=') return false;
+    }
+    lexer->mark_start(lexer, start);
+    lexer->mark_end_at(lexer, start);
+    lexer->result_symbol = symbol;
     return true;
 }
 
@@ -1741,9 +1866,20 @@ static bool scan_as_const_type(TSLexer *lexer, const bool *valid_symbols, const 
             return true;
         }
     }
+    if (valid_symbols[AS_CONST_ASSERTION] && whole_const_assertion_can_end(lexer, trivia, line_break)) {
+        lexer->result_symbol = AS_CONST_ASSERTION;
+        return true;
+    }
     if (!valid_symbols[AS_CONST_TYPE]) return false;
     lexer->result_symbol = AS_CONST_TYPE;
     return true;
+}
+
+static bool whole_const_assertion_can_end(TSLexer *lexer, bool trivia, bool line_break) {
+    if (!trivia) return true;
+    if (line_break || lexer->lookahead != '!') return const_assertion_type_can_end(lexer, line_break);
+    advance(lexer);
+    return lexer->lookahead == '=';
 }
 
 static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word) {
@@ -3302,11 +3438,56 @@ static bool scan_non_nullable_type_suffix(TSLexer *lexer) {
     return lexer->lookahead != '=';
 }
 
+static bool scan_assertion_formal_parameter_boundary(TSLexer *lexer, const bool *valid_symbols) {
+    if (!valid_symbols[AS_PARENTHESIZED_TYPE_BOUNDARY]) {
+        lexer->result_symbol = AS_FORMAL_PARAMETER_BOUNDARY;
+        return true;
+    }
+    TSLexerCheckpoint end;
+    lexer->get_mark_end_checkpoint(lexer, &end);
+    advance(lexer);
+    bool arrow = false;
+    if (scan_default_trivia(lexer, true, false) && lexer->lookahead == '=') {
+        advance(lexer);
+        arrow = lexer->lookahead == '>';
+    }
+    lexer->mark_end_at(lexer, &end);
+    lexer->result_symbol = arrow ? AS_FORMAL_PARAMETER_BOUNDARY : AS_PARENTHESIZED_TYPE_BOUNDARY;
+    return valid_symbols[lexer->result_symbol];
+}
+
+static bool scan_assertion_type_boundary(TSLexer *lexer, const bool *valid_symbols, bool line_break) {
+    static const struct { int32_t delimiter; TSSymbol symbol; } boundaries[] = {
+        {')', AS_PARENTHESIZED_TYPE_BOUNDARY},
+        {']', AS_LOOKUP_TYPE_BOUNDARY},
+        {'?', AS_CONSTRAINT_TYPE_BOUNDARY},
+        {':', AS_CONSEQUENCE_TYPE_BOUNDARY},
+    };
+    bool forbidden_suffix = line_break && (lexer->lookahead == '[' || lexer->lookahead == '!');
+    for (unsigned i = 0; i < sizeof(boundaries) / sizeof(boundaries[0]); i++) {
+        if (valid_symbols[boundaries[i].symbol] && (forbidden_suffix || lexer->lookahead == boundaries[i].delimiter)) {
+            lexer->result_symbol = boundaries[i].symbol;
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool line_break = false;
     bool comment = false;
     bool trivia = scan_expression_trivia(lexer, &line_break, &comment);
+    if (valid_symbols[JSDOC_UNKNOWN_TYPE_END] && trivia) {
+        lexer->result_symbol = JSDOC_UNKNOWN_TYPE_END;
+        switch (lexer->lookahead) {
+            case ',': case '}': case ')': case '>': case '=': return true;
+            case '|':
+                advance(lexer);
+                return lexer->lookahead != '|' && lexer->lookahead != '=';
+            default: break;
+        }
+    }
     if (valid_symbols[ASSERTION_BINDING_IDENTIFIER_START]) {
         return trivia && !comment && scan_assertion_binding_identifier_start(lexer, valid_symbols);
     }
@@ -3337,12 +3518,16 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
         lexer->result_symbol = CONST_ASSERTION_NON_NULLABLE_SUFFIX;
         return true;
     }
+    if (trivia && lexer->lookahead == '[' && valid_symbols[AS_PARAMETER_ARRAY_START]) {
+        lexer->result_symbol = AS_PARAMETER_ARRAY_START;
+        return true;
+    }
+    if (trivia && lexer->lookahead == ')' && valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY]) return scan_assertion_formal_parameter_boundary(lexer, valid_symbols);
+    if (trivia && scan_assertion_type_boundary(lexer, valid_symbols, line_break)) return true;
     return scan_assertion_type_end(lexer, valid_symbols, trivia, line_break);
 }
 
-static bool const_assertion_consequence_can_start(TSLexer *lexer) {
-    return lexer->lookahead != 'c' || !scan_word(lexer, "const", true);
-}
+static bool const_assertion_consequence_can_start(TSLexer *lexer);
 
 static bool type_argument_can_start(TSLexer *lexer) {
     switch (lexer->lookahead) {
@@ -3351,11 +3536,6 @@ static bool type_argument_can_start(TSLexer *lexer) {
     }
 }
 
-typedef enum {
-    ASSERTION_IDENTIFIER_INVALID,
-    ASSERTION_IDENTIFIER_WORD,
-    ASSERTION_IDENTIFIER_OTHER,
-} AssertionIdentifier;
 
 static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word, bool *escaped) {
     unsigned length = 0;
@@ -3370,6 +3550,13 @@ static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word,
         else if (!other) word[length++] = (char)character;
     }
     return first ? ASSERTION_IDENTIFIER_INVALID : other ? ASSERTION_IDENTIFIER_OTHER : ASSERTION_IDENTIFIER_WORD;
+}
+
+static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_start);
+
+static bool const_assertion_consequence_can_start(TSLexer *lexer) {
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+    return assertion_type_keyword_can_start(lexer, false);
 }
 
 static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *valid_symbols) {
@@ -3388,12 +3575,14 @@ static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *
     return !reserved || strcmp(word, "this") == 0;
 }
 
-static bool as_lookup_index_keyword_can_start(TSLexer *lexer) {
+static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_start) {
     char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind != ASSERTION_IDENTIFIER_WORD) return kind == ASSERTION_IDENTIFIER_OTHER;
     if (!assertion_binding_word_is_reserved(word)) return true;
+    if (parameter_start && (strcmp(word, "this") == 0 || strcmp(word, "const") == 0 || strcmp(word, "default") == 0 ||
+        strcmp(word, "export") == 0 || strcmp(word, "in") == 0)) return true;
     if (strcmp(word, "function") == 0) return true;
     if (escaped) return false;
     return strcmp(word, "void") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 ||
@@ -3402,8 +3591,15 @@ static bool as_lookup_index_keyword_can_start(TSLexer *lexer) {
 }
 
 static bool as_lookup_index_can_start(TSLexer *lexer) {
+    bool parenthesized = false;
+    while (lexer->lookahead == '(') {
+        parenthesized = true;
+        advance(lexer);
+        bool line_break = false;
+        if (!scan_expression_trivia(lexer, &line_break, NULL)) return false;
+    }
     if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
-        return as_lookup_index_keyword_can_start(lexer);
+        return assertion_type_keyword_can_start(lexer, parenthesized);
     }
     if (lexer->lookahead == '-') {
         advance(lexer);
@@ -3413,10 +3609,15 @@ static bool as_lookup_index_can_start(TSLexer *lexer) {
         return is_ascii_digit(lexer->lookahead);
     }
     switch (lexer->lookahead) {
-        case '(': case '[': case '{': case '<': case '|': case '&': case '?': case '!': case '*':
+        case ')': case '@': case '#': return parenthesized;
+        case '[': case '{': case '<': case '|': case '&': case '?': case '!': case '*':
         case '\'': case '"': case '`': return true;
         case '.':
             advance(lexer);
+            if (parenthesized && lexer->lookahead == '.') {
+                advance(lexer);
+                return lexer->lookahead == '.';
+            }
             return is_ascii_digit(lexer->lookahead);
         default: return is_ascii_digit(lexer->lookahead);
     }
@@ -3569,13 +3770,31 @@ static bool scan_type_angle_opening(TSLexer *lexer, const bool *valid_symbols) {
     return lexer->lookahead != 'c' || !scan_word(lexer, "const", false);
 }
 
+static bool scan_type_reference_name(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    AssertionNameFallback fallback = {0};
+    bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending, &fallback);
+    if (!result && fallback.valid) {
+        lexer->mark_start(lexer, &fallback.start);
+        lexer->mark_end_at(lexer, &fallback.end);
+        lexer->result_symbol = fallback.symbol;
+        result = true;
+    }
+    if (result && (lexer->result_symbol == TYPE_IDENTIFIER_BEFORE_ANGLE || lexer->result_symbol == CONST_GENERIC_NAME ||
+                   lexer->result_symbol == TYPE_REFERENCE_ARGUMENTS_START)) scanner->heritage_type_pending = false;
+    return result;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if ((valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] || valid_symbols[AS_PARAMETER_ARRAY_START]) &&
+        (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) &&
+        !valid_symbols[ERROR_RECOVERY]) return scan_type_reference_name(scanner, lexer, valid_symbols);
 
     if ((valid_symbols[CONST_ASSERTION_TYPE_SUFFIX] || valid_symbols[CONST_ASSERTION_NAME_END] ||
          valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
          valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] || valid_symbols[ASSERTION_BINDING_IDENTIFIER_START] ||
-         valid_symbols[AS_INFER_CONSTRAINT_END] || valid_symbols[NON_POSTFIX_TYPE_SUFFIX_END] ||
+         valid_symbols[AS_INFER_CONSTRAINT_END] || valid_symbols[NON_POSTFIX_TYPE_SUFFIX_END] || valid_symbols[JSDOC_UNKNOWN_TYPE_END] || valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] || valid_symbols[AS_PARAMETER_ARRAY_START] || valid_symbols[AS_PARENTHESIZED_TYPE_BOUNDARY] || valid_symbols[AS_LOOKUP_TYPE_BOUNDARY] || valid_symbols[AS_CONSTRAINT_TYPE_BOUNDARY] || valid_symbols[AS_CONSEQUENCE_TYPE_BOUNDARY] ||
          valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
          valid_symbols[NULLABLE_TYPE_START] || valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] || valid_symbols[AS_QUERY_NAME_END] || valid_symbols[AS_PARENTHESIZED_TYPE_END] || valid_symbols[AS_CONDITIONAL_LINE_BREAK] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
@@ -3821,12 +4040,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return ret;
     }
 
-    if ((valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_START] || valid_symbols[AS_ASSERTS_PREDICATE_START] || valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_QUALIFIED_NAME] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] || valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME] ||
+    if ((valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_START] || valid_symbols[AS_ASSERTS_PREDICATE_START] || valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_ASSERTION] || valid_symbols[AS_CONST_QUALIFIED_NAME] || valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START] || valid_symbols[AS_CONSTRUCTOR_TYPE_START] || valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[CONST_GENERIC_NAME] || valid_symbols[TYPE_REFERENCE_ARGUMENTS_START] || valid_symbols[TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] || valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME] ||
          ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && (lexer->lookahead == 'b' || lexer->lookahead == 'u' || lexer->lookahead == 'n'))) && !valid_symbols[ERROR_RECOVERY]) {
-        bool result = scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
-        if (result && (lexer->result_symbol == TYPE_IDENTIFIER_BEFORE_ANGLE || lexer->result_symbol == CONST_GENERIC_NAME ||
-                       lexer->result_symbol == TYPE_REFERENCE_ARGUMENTS_START)) scanner->heritage_type_pending = false;
-        return result;
+        return scan_type_reference_name(scanner, lexer, valid_symbols);
     }
 
     if (valid_symbols[AWAIT_YIELD_IDENTIFIER] && valid_symbols[LINE_BREAK_AFTER_AWAIT]) {
@@ -3872,7 +4088,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
     if ((valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME]) && !valid_symbols[ERROR_RECOVERY] &&
         (lexer->lookahead == 'b' || lexer->lookahead == 'u' || lexer->lookahead == 'n')) {
-        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending);
+        return scan_type_reference_arguments_start(lexer, valid_symbols, scanner->heritage_type_pending, NULL);
     }
     if (valid_symbols[CONST_ASSERTION_NON_NULLABLE_SUFFIX] && !valid_symbols[ERROR_RECOVERY] && !suffix_line_break &&
         (lexer->lookahead == '!' || lexer->lookahead == '/')) return scan_const_assertion_context(lexer, valid_symbols);

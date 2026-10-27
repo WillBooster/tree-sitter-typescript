@@ -8,6 +8,45 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
 const Sources = [
+  'const result = value as ? | const.Member;',
+  'const result = value as const.Member & !A;',
+  'const result = value as const.Member[!true];',
+  'const result = value as !infer.Member<Arg>[];',
+  'const result = value as keyof new.Member;',
+  'const result = value as (x) => const.Member;',
+  String.raw`const result = value as (\u0078) => const.Member;`,
+  String.raw`const result = value as (\u0074his) => const.Member;`,
+  'const result = value as (public [x]: T) => const.Member;',
+  'const result = value as (override []) => const.Member;',
+  'const result = value as (readonly []);',
+  'const result = value as (readonly []) => const.Member;',
+  'const result = value as -1!;',
+  'const result = value as const.Member | !true;',
+  'const result = value as const.Member | !A[Key];',
+  'const result = value as !const.Member[];',
+  'const result = value as !!const.Member!;',
+  'const result = value as infer U extends !this is A extends B ? C : D;',
+  'const result = value as infer U extends !asserts x is A extends B ? C : D;',
+  'const result = value as const.Member | !?infer U[];',
+  'const result = value as const.Member | !asserts x is infer U[Key];',
+  'const result = value as !this is infer U!;',
+  'const result = value as !!?keyof infer U[];',
+  'const result = value as !{ value: -1 };',
+  'const result = value as ![-1n];',
+  'const result = value as !Box<-1>;',
+  'const result = value as const.Member /* gap */ !;',
+  'const result = value as (const /* gap */ !);',
+  'const result = value as infer U extends ? | A ? C : D;',
+  'const result = value as A extends ? | const.Member ? C : D;',
+  'const result = value as const[];',
+  'const result = value as const!;',
+  'const result = value as const | A;',
+  'const result = value as const[number];',
+  'const result = value as keyof const;',
+  'const result = value as (const)[];',
+  'const result = value as const;',
+  String.raw`const result = value as \u0063onst.Member[];`,
+  String.raw`const result = value as \u0063onst;`,
   'const result = (value as () => asserts x is () => infer U[])++;',
   'const result = (value as new () => asserts x is infer U extends A | infer V[Key])++;',
   'const result = value as () => this is infer U[Key];',
@@ -47,6 +86,11 @@ const Sources = [
   'const result = value as () => asserts x is const.Member[any.Key];',
   'const result = value as () => A.Member[(const.Key)];',
   'const result = value as const.Member[(const.Key)];',
+  'const result = value as const.Member[((/* gap */ const.Key))];',
+  'const result = value as const.Member[(in.Key)];',
+  'const result = value as const.Member[(...args: A[]) => B];',
+  String.raw`const result = value as const.Member[(\u0074his: A) => B];`,
+  'const result = value as (class.Key);',
   'const result = value as () => unknown.Member[typeof Namespace.value];',
   'const result = value as () => any.Member;',
   'const result = value as new () => unknown.Member<Arg>;',
@@ -285,6 +329,27 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as A extends B ? infer : D;',
+  'const invalid = value as A extends B ? C : infer.Member;',
+  'const invalid = value as A extends B ? (infer) : D;',
+  'const invalid = value as ?readonly | A;',
+  'const invalid = value as unique function.Member;',
+  'const invalid = value as function.Member!;',
+  String.raw`const invalid = value as !\u0074ypeof;`,
+  String.raw`const invalid = value as !\u0061ny[];`,
+  String.raw`const invalid = value as A extends B ? C : \u006eull!;`,
+  String.raw`const invalid = value as \u0069nfer U;`,
+  'const invalid = value as +1!;',
+  'const invalid = value as const.Member | +1[];',
+  'const invalid = value as () => +1!;',
+  'const invalid = value as A extends +1! ? B : const.Member;',
+  'const invalid = value as !{ value: +1 };',
+  'const invalid = value as ![+1n];',
+  'const invalid = value as !Box<+1>;',
+  'const invalid = value as (const /*\n*/ !);',
+  'const invalid = value as A extends const /*\n*/ ! ? C : D;',
+  'const invalid = value as A extends B ? Name /*\n*/ ! : D;',
+  String.raw`const invalid = value as A extends B ? \u0063onst! : D;`,
   'const invalid = value as A extends () => asserts x is infer U extends infer V ? const.Member : infer W ? const.Member : D;',
   'const invalid = value as A extends () => this is infer U ? const.Member : D;',
   'const invalid = value as new () => asserts is;',
@@ -303,6 +368,9 @@ const InvalidContexts = [
   String.raw`const invalid = value as () => asserts \u0065num is const.M;`,
 
   'const invalid = value as () => any.Member[class.Key];',
+  'const invalid = value as const.Member[(class.Key)];',
+  'const invalid = value as () => A[(/* gap */ (class.Key))];',
+  String.raw`const invalid = value as A[(\u0063lass.Key)];`,
   'const invalid = value as A extends any.Member[+1] ? C : const.Last;',
   String.raw`const invalid = value as A extends any.Member[\u0063onst.Key] ? C : const.Last;`,
   'const invalid = value as () => A.Member[const.Key];',
@@ -380,33 +448,38 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves qualified const type ranges through ${dialect} edits`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
-        '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-        '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-        ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
-        ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
-        (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
-    );
-    const queries = configuredQueries(language, dialect);
-    const sources = [
-      ...Sources,
-      ...SyntaxControls,
-      ...(dialect === 'typescript' ? ['const result = <const>value;'] : []),
-    ].map((source) => source + Following);
-    const syntaxSources = new Set(SyntaxControls.map((source) => source + Following));
-    const invalidSources = InvalidContexts.map((source) => source + '\n' + Sources[0] + Following);
-    const captures = (tree: Tree): unknown =>
-      queries.map((configured) =>
-        configured
-          .captures(tree.rootNode)
-          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-      );
-    let source = sources[0]!;
+    const parser = new Parser();
+    const ownedQueries: Query[] = [];
     let tree: Tree | undefined;
     try {
+      parser.setLanguage(language);
+      const query = new Query(
+        language,
+        '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
+          '(required_parameter pattern: (pattern/array_pattern) @arrayBinding) (jsdoc_unknown_type) @unknownType ((type_identifier) @constType (#eq? @constType "const")) (as_expression "const" @wholeConst) ' +
+          '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
+          '(predefined_type "unique") @uniqueOperator (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
+          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (predefined_type "unique" (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
+          ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
+          (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
+      );
+      ownedQueries.push(query);
+      const queries = configuredQueries(language, dialect);
+      ownedQueries.push(...queries);
+      const sources = [
+        ...Sources,
+        ...SyntaxControls,
+        ...(dialect === 'typescript' ? ['const result = <const>value;'] : []),
+      ].map((source) => source + Following);
+      const syntaxSources = new Set(SyntaxControls.map((source) => source + Following));
+      const invalidSources = InvalidContexts.map((source) => source + '\n' + Sources[0] + Following);
+      const captures = (tree: Tree): unknown =>
+        queries.map((configured) =>
+          configured
+            .captures(tree.rootNode)
+            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+        );
+      let source = sources[0]!;
       tree = parser.parse(source)!;
       checkRanges(tree, source, dialect, query);
       for (const next of [...sources.slice(1), ...invalidSources, sources[0]!]) {
@@ -435,8 +508,7 @@ for (const dialect of ['typescript', 'tsx']) {
       }
     } finally {
       tree?.delete();
-      query.delete();
-      for (const configured of queries) configured.delete();
+      for (const query of ownedQueries) query.delete();
       parser.delete();
     }
   });
@@ -474,6 +546,10 @@ function checkRanges(
     predicate: [],
     predicateType: [],
     asserts: [],
+    unknownType: [],
+    arrayBinding: [],
+    constType: [],
+    wholeConst: [],
     comment: [],
     flowMaybe: [],
     flowMaybeOperand: [],
@@ -506,6 +582,22 @@ function checkRanges(
     nullableOperand: [],
   };
   const collect = (node: ts.Node): void => {
+    if (ts.isParameter(node) && ts.isArrayBindingPattern(node.name))
+      expected.arrayBinding!.push([node.name.getText(reference), node.name.getStart(reference), node.name.end]);
+    if (node.kind === ts.SyntaxKind.JSDocUnknownType)
+      expected.unknownType!.push([node.getText(reference), node.getStart(reference), node.end]);
+    if (ts.isTypeReferenceNode(node)) {
+      const name = ts.isQualifiedName(node.typeName) ? node.typeName.right : node.typeName;
+      if (
+        name.getText(reference) === 'const' &&
+        !(
+          (ts.isAsExpression(node.parent) || ts.isTypeAssertionExpression(node.parent)) &&
+          node.parent.type === node &&
+          node.getText(reference) === 'const'
+        )
+      )
+        expected.constType!.push([name.getText(reference), name.getStart(reference), name.end]);
+    }
     if (ts.isFunctionTypeNode(node)) {
       expected.functionType!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.functionReturn!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
@@ -556,8 +648,12 @@ function checkRanges(
       expected.nonNullable!.push([node.getText(reference), node.getStart(reference), node.end]);
       expected.nullableOperand!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
     }
-    if (ts.isAsExpression(node))
-      expected.assertedType!.push([node.type.getText(reference), node.type.getStart(reference), node.type.end]);
+    if (ts.isAsExpression(node)) {
+      const range: Ranges[number] = [node.type.getText(reference), node.type.getStart(reference), node.type.end];
+      expected.assertedType!.push(range);
+      if (ts.isTypeReferenceNode(node.type) && node.type.getText(reference) === 'const')
+        expected.wholeConst!.push(range);
+    }
     const operand = ts.isArrayTypeNode(node)
       ? node.elementType
       : ts.isIndexedAccessTypeNode(node)

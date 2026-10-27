@@ -1064,7 +1064,7 @@ type BrowserStats = {|
           (predefined_type))))))
 
 =======================================
-Literal types
+Literal types reject unary plus
 =======================================
 
 let x: 2
@@ -1092,9 +1092,54 @@ let x: false
             (literal_type
               (unary_expression
                 (number))))
+          (ERROR)
           (literal_type
-            (unary_expression
-              (number)))))))
+            (number))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (literal_type
+          (string
+            (string_fragment))))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (literal_type
+          (false))))))
+
+=======================================
+Literal types with valid signs
+=======================================
+
+let x: 2
+let x: 2 | -3 | 4
+let x: "string"
+let x: false
+
+---
+
+(program
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (literal_type
+          (number)))))
+  (lexical_declaration
+    (variable_declarator
+      (identifier)
+      (type_annotation
+        (union_type
+          (union_type
+            (literal_type
+              (number))
+            (literal_type
+              (unary_expression
+                (number))))
+          (literal_type
+            (number))))))
   (lexical_declaration
     (variable_declarator
       (identifier)

@@ -7,6 +7,10 @@ import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Statements = [
+  String.raw`function f(){ return /<(a|strong|b|em|i|h[1-6]|code|pre|ul|ol|li|blockquote|del|s|strike|img|hr)\b/i.test(value); }`,
+  'function f(){ return /<A>/i.test(value); }',
+  'const result = /<const/.test(value);',
+  'const result = `<A>${value}`;',
   'x = value as const.Member\n(b);',
   'x = value as A!\n(b);',
   'const result = value as A!\n(b);',
@@ -25,20 +29,155 @@ const Statements = [
 const Following = '\nconst following = 1;';
 
 for (const dialect of ['typescript', 'tsx']) {
+  test(`retains ${dialect} parameter fields while an assertion arrow is incomplete`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser();
+    const ownedQueries: Query[] = [];
+    try {
+      parser.setLanguage(language);
+      const query = new Query(language, '(required_parameter pattern: (pattern/identifier) @binding)');
+      ownedQueries.push(query);
+      const queries = configuredQueries(language, dialect);
+      ownedQueries.push(...queries);
+      for (const form of ['(x: T)', 'new (x: T)', '()']) {
+        const complete = `const result = value as ${form} => A;${Following}`;
+        const start = complete.indexOf(' => A');
+        const incomplete = complete.slice(0, start) + complete.slice(start + ' => A'.length);
+        let source = complete;
+        let tree = parser.parse(source)!;
+        try {
+          checkFormalFields(tree, source, dialect, true, query);
+          for (const [next, valid] of [
+            [incomplete, false],
+            [complete, true],
+          ] as const) {
+            const previous = tree;
+            const oldEnd = start + (valid ? 0 : ' => A'.length);
+            const newEnd = start + (valid ? ' => A'.length : 0);
+            tree = compareEditedTree(
+              parser,
+              previous,
+              next,
+              new Edit({
+                startIndex: start,
+                oldEndIndex: oldEnd,
+                newEndIndex: newEnd,
+                startPosition: position(source, start),
+                oldEndPosition: position(source, oldEnd),
+                newEndPosition: position(next, newEnd),
+              }),
+              (incremental, fresh) => {
+                checkFormalFields(incremental, next, dialect, valid, query);
+                checkFormalFields(fresh, next, dialect, valid, query);
+                for (const configured of queries)
+                  expect(
+                    configured
+                      .captures(incremental.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
+                  ).toEqual(
+                    configured
+                      .captures(fresh.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
+                  );
+              },
+              true
+            );
+            previous.delete();
+            source = next;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      for (const query of ownedQueries) query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`retains ${dialect} postfix boundaries when a comment gains a newline`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser();
+    const ownedQueries: Query[] = [];
+    try {
+      parser.setLanguage(language);
+      const queries = configuredQueries(language, dialect);
+      ownedQueries.push(...queries);
+      const captures = (tree: Tree): unknown =>
+        queries.map((query) =>
+          query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
+        );
+      for (const statement of [
+        'const result = (value as const.Member/* gap */!);',
+        'const result = value as A extends const/* gap */! ? C : D;',
+        'const result = value as A extends B ? Name/* gap */! : D;',
+        'const result = value as const.Member[(Name/* gap */!)];',
+      ]) {
+        let source = statement + Following;
+        let tree = parser.parse(source)!;
+        try {
+          for (const gap of ['\n', ' ']) {
+            const start = source.indexOf('/*') + 2;
+            const next = source.slice(0, start) + gap + source.slice(start + 1);
+            const valid = gap === ' ';
+            const check = (candidate: Tree): void => {
+              referenceFor(next, dialect, valid);
+              expect(candidate.rootNode.hasError, next).toBe(!valid);
+              expect(candidate.rootNode.lastNamedChild!.text).toBe('const following = 1;');
+            };
+            const previous = tree;
+            tree = compareEditedTree(
+              parser,
+              previous,
+              next,
+              new Edit({
+                startIndex: start,
+                oldEndIndex: start + 1,
+                newEndIndex: start + 1,
+                startPosition: position(source, start),
+                oldEndPosition: position(source, start + 1),
+                newEndPosition: position(next, start + 1),
+              }),
+              (incremental, fresh) => {
+                check(incremental);
+                check(fresh);
+                expect(captures(incremental)).toEqual(captures(fresh));
+              },
+              true
+            );
+            previous.delete();
+            source = next;
+          }
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      for (const query of ownedQueries) query.delete();
+      parser.delete();
+    }
+  });
+
   test(`retains assertion boundaries after small surrounding ${dialect} edits`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(as_expression) @as (call_expression) @call (subscript_expression) @subscript (expression_statement) @statement'
-    );
-    const configured = configuredQueries(language, dialect);
-    const captures = (tree: Tree): unknown =>
-      configured.map((item) =>
-        item.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-      );
+    const parser = new Parser();
+    const ownedQueries: Query[] = [];
     try {
+      parser.setLanguage(language);
+      const query = new Query(
+        language,
+        '(as_expression) @as (call_expression) @call (subscript_expression) @subscript (expression_statement) @statement (regex) @regex'
+      );
+      ownedQueries.push(query);
+      const configured = configuredQueries(language, dialect);
+      ownedQueries.push(...configured);
+      const captures = (tree: Tree): unknown =>
+        configured.map((item) =>
+          item.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
+        );
       for (const prefix of ['', 'const earlier = 1;\n']) {
         for (const statement of Statements) {
           let source = prefix + statement + Following;
@@ -90,8 +229,7 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
-      for (const item of configured) item.delete();
+      for (const query of ownedQueries) query.delete();
       parser.delete();
     }
   });
@@ -99,13 +237,16 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves tagged constructor fields through empty ${dialect} argument edits`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const queries = configuredQueries(language, dialect);
-    const captures = (tree: Tree): unknown =>
-      queries.map((query) =>
-        query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-      );
+    const parser = new Parser();
+    const ownedQueries: Query[] = [];
     try {
+      parser.setLanguage(language);
+      const queries = configuredQueries(language, dialect);
+      ownedQueries.push(...queries);
+      const captures = (tree: Tree): unknown =>
+        queries.map((query) =>
+          query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
+        );
       for (const constructor of [
         'F<Inner>`tag`',
         'F<Inner>`tag`.Member',
@@ -155,7 +296,7 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      for (const query of queries) query.delete();
+      for (const query of ownedQueries) query.delete();
       parser.delete();
     }
   });
@@ -197,6 +338,57 @@ function checkConstructorFields(tree: Tree, source: string, dialect: string, emp
   expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
 }
 
+function checkFormalFields(tree: Tree, source: string, dialect: string, valid: boolean, query: Query): void {
+  const reference = referenceFor(source, dialect, valid);
+  const types: (ts.FunctionTypeNode | ts.ConstructorTypeNode)[] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) types.push(node);
+    ts.forEachChild(node, collect);
+  };
+  collect(reference);
+  expect(types).toHaveLength(1);
+  const type = types[0]!;
+  const tokens = type.getChildren(reference);
+  const open = tokens.find((node) => node.kind === ts.SyntaxKind.OpenParenToken)!;
+  const close = tokens.find((node) => node.kind === ts.SyntaxKind.CloseParenToken)!;
+  const parameters = tree.rootNode.descendantsOfType('formal_parameters');
+  expect(parameters).toHaveLength(1);
+  const formal = parameters[0]!;
+  expect([formal.startIndex, formal.endIndex]).toEqual([open.getStart(reference), close.end]);
+  expect(
+    formal.namedChildren.map((node) => {
+      const pattern = node.childForFieldName('pattern')!;
+      const annotation = node.childForFieldName('type')!.namedChild(0)!;
+      return [
+        node.startIndex,
+        node.endIndex,
+        pattern.startIndex,
+        pattern.endIndex,
+        annotation.startIndex,
+        annotation.endIndex,
+      ];
+    })
+  ).toEqual(
+    type.parameters.map((node) => [
+      node.getStart(reference),
+      node.end,
+      node.name.getStart(reference),
+      node.name.end,
+      node.type!.getStart(reference),
+      node.type!.end,
+    ])
+  );
+  expect(query.captures(tree.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
+    type.parameters.map((node) => [node.name.getStart(reference), node.name.end])
+  );
+  const following = reference.statements.at(-1)!;
+  expect([tree.rootNode.lastNamedChild!.startIndex, tree.rootNode.lastNamedChild!.endIndex]).toEqual([
+    following.getStart(reference),
+    following.end,
+  ]);
+  expect(tree.rootNode.hasError).toBe(!valid);
+}
+
 function checkBoundaries(tree: Tree, source: string, dialect: string, query: Query): void {
   const reference = referenceFor(source, dialect);
   expect(tree.rootNode.hasError, source).toBe(false);
@@ -211,7 +403,9 @@ function checkBoundaries(tree: Tree, source: string, dialect: string, query: Que
           ? 'subscript'
           : ts.isExpressionStatement(node)
             ? 'statement'
-            : undefined;
+            : ts.isRegularExpressionLiteral(node)
+              ? 'regex'
+              : undefined;
     if (kind) expected.push([kind, node.getStart(reference), node.end]);
     ts.forEachChild(node, collect);
   };
@@ -226,7 +420,7 @@ function sortRanges(rows: unknown[][]): unknown[][] {
   return rows.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 }
 
-function referenceFor(source: string, dialect: string): ts.SourceFile {
+function referenceFor(source: string, dialect: string, valid = true): ts.SourceFile {
   const name = dialect === 'tsx' ? 'boundary.tsx' : 'boundary.ts';
   const reference = ts.createSourceFile(
     name,
@@ -239,6 +433,6 @@ function referenceFor(source: string, dialect: string): ts.SourceFile {
   const host = ts.createCompilerHost(options);
   host.getSourceFile = (file) => (file === name ? reference : undefined);
   const program = ts.createProgram([name], options, host);
-  expect(program.getSyntacticDiagnostics(reference), source).toHaveLength(0);
+  expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
   return reference;
 }

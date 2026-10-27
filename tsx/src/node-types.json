@@ -320,6 +320,10 @@
         "named": true
       },
       {
+        "type": "jsdoc_unknown_type",
+        "named": true
+      },
+      {
         "type": "literal_type",
         "named": true
       },
@@ -3303,6 +3307,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "jsdoc_unknown_type",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "jsx_attribute",
