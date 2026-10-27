@@ -83,6 +83,9 @@ enum TokenType {
     TYPE_ASSERTION_CONTEXT,
     ADJACENT_TYPE_ANGLES,
     IMPORT_TYPE_ARGUMENTS_START,
+    CLASS_EXTENDS_END,
+    CLASS_EXTENDS_YIELD_IDENTIFIER,
+    CLASS_EXTENDS_AWAIT_IDENTIFIER,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -108,6 +111,7 @@ static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 static bool scan_type_parameter_prefix(TSLexer *lexer);
 static bool scan_import_type_arguments_start(TSLexer *lexer);
+static bool scan_adjacent_type_angles_after_opening(TSLexer *lexer, const bool *valid_symbols);
 
 static inline void *external_scanner_create() { return ts_calloc(1, sizeof(Scanner)); }
 
@@ -825,6 +829,10 @@ static bool scan_adjacent_type_angles(TSLexer *lexer, const bool *valid_symbols)
     advance(lexer);
     if (lexer->lookahead == '!' && valid_symbols[HTML_COMMENT] && !valid_symbols[LOGICAL_OR] && !valid_symbols[ERROR_RECOVERY] &&
         !valid_symbols[ESCAPE_SEQUENCE] && !valid_symbols[REGEX_PATTERN]) return scan_html_comment(lexer, true);
+    return scan_adjacent_type_angles_after_opening(lexer, valid_symbols);
+}
+
+static bool scan_adjacent_type_angles_after_opening(TSLexer *lexer, const bool *valid_symbols) {
     if (lexer->lookahead != '<') return false;
     advance(lexer);
     if (lexer->lookahead == '=') return false;
@@ -1341,9 +1349,11 @@ static bool scan_yield(Scanner *scanner, TSLexer *lexer, const bool *valid_symbo
         advance(lexer);
     }
     if (is_identifier_part(lexer->lookahead)) return false;
-    bool identifier = (scanner->functions.depth || JAVASCRIPT_SCRIPT_GOAL) && !function_context_generator(&scanner->functions);
-    TSSymbol symbol = await_operand ? AWAIT_YIELD_IDENTIFIER : identifier ? YIELD_IDENTIFIER : YIELD_KEYWORD;
-    if (!valid_symbols[symbol]) return false;
+    bool identifier = (scanner->functions.depth || JAVASCRIPT_SCRIPT_GOAL || valid_symbols[CLASS_EXTENDS_YIELD_IDENTIFIER]) && !function_context_generator(&scanner->functions);
+    TSSymbol identifier_symbol = valid_symbols[CLASS_EXTENDS_YIELD_IDENTIFIER] ? CLASS_EXTENDS_YIELD_IDENTIFIER : YIELD_IDENTIFIER;
+    TSSymbol symbol = await_operand ? AWAIT_YIELD_IDENTIFIER : identifier ? identifier_symbol : YIELD_KEYWORD;
+    bool forbidden_identifier = symbol == YIELD_KEYWORD && valid_symbols[CLASS_EXTENDS_YIELD_IDENTIFIER];
+    if (!valid_symbols[symbol] && !forbidden_identifier) return false;
     lexer->mark_end(lexer);
     lexer->result_symbol = symbol;
     return true;
@@ -1355,8 +1365,11 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
     if (!scan_identifier(lexer, keyword, sizeof(keyword), false)) return false;
     if (strcmp(keyword, "async") == 0) return scan_async_start(lexer, keyword, sizeof(keyword), valid_symbols);
     if (strcmp(keyword, "await") != 0) return false;
-    bool identifier = await_is_identifier(scanner);
-    if (identifier ? !valid_symbols[AWAIT_IDENTIFIER] : !valid_symbols[AWAIT_KEYWORD]) return false;
+    bool identifier = await_is_identifier(scanner) || (valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] && !scanner->functions.depth);
+    TSSymbol identifier_symbol = valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] ? CLASS_EXTENDS_AWAIT_IDENTIFIER : AWAIT_IDENTIFIER;
+    TSSymbol symbol = identifier ? identifier_symbol : AWAIT_KEYWORD;
+    bool forbidden_identifier = !identifier && valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER];
+    if (!valid_symbols[symbol] && !forbidden_identifier) return false;
     lexer->mark_end(lexer);
     // Record the operand decision on both keyword and identifier tokens so restored nodes cannot keep stale roles.
     // Advancing without skipping after mark_end preserves the consuming keyword's start across probed comments.
@@ -1369,7 +1382,7 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
         char word[16] = {0};
         scan_identifier(lexer, word, sizeof(word), false);
     }
-    lexer->result_symbol = identifier ? AWAIT_IDENTIFIER : AWAIT_KEYWORD;
+    lexer->result_symbol = symbol;
     return true;
 }
 
@@ -3030,10 +3043,10 @@ static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, c
 }
 
 static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
-    if ((valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[CONSTRUCTOR_ASYNC_FUNCTION_START] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
+    if ((valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] || valid_symbols[CONSTRUCTOR_ASYNC_FUNCTION_START] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
         return scan_await_or_async(scanner, lexer, valid_symbols);
     }
-    if ((valid_symbols[YIELD_KEYWORD] || valid_symbols[YIELD_IDENTIFIER]) && lexer->lookahead == 'y') {
+    if ((valid_symbols[YIELD_KEYWORD] || valid_symbols[YIELD_IDENTIFIER] || valid_symbols[CLASS_EXTENDS_YIELD_IDENTIFIER]) && lexer->lookahead == 'y') {
         return scan_yield(scanner, lexer, valid_symbols, false);
     }
     if (valid_symbols[LET] && !valid_symbols[SINGLE_STATEMENT_CONTEXT] && lexer->lookahead == 'l') {
@@ -3197,8 +3210,69 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
     return finish_function_context(scanner, lexer, FUNCTION_SIGNATURE_END);
 }
 
+static bool scan_extends_type_argument_start(TSLexer *lexer) {
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+    char word[16] = {0};
+    if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
+    if (strcmp(word, "function") == 0 || strcmp(word, "import") == 0) {
+        if (!scan_default_trivia(lexer, true, false)) return false;
+        if (strcmp(word, "import") == 0) return lexer->lookahead == '(';
+        return lexer->lookahead != '.' && lexer->lookahead != '<';
+    }
+    static const char *const type_keywords[] = {"false", "new", "null", "true", "typeof"};
+    return !is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0])) ||
+           is_type_probe_word(word, type_keywords, sizeof(type_keywords) / sizeof(type_keywords[0]));
+}
+
+static bool scan_class_extends_end(TSLexer *lexer, const bool *valid_symbols) {
+    bool allow_html_comment = valid_symbols[HTML_COMMENT];
+    lexer->mark_end(lexer);
+    TSLexerCheckpoint end;
+    lexer->get_mark_end_checkpoint(lexer, &end);
+    bool saw_newline = false;
+    while (is_whitespace(lexer->lookahead)) {
+        saw_newline |= is_line_terminator(lexer->lookahead);
+        skip(lexer);
+    }
+    switch (lexer->lookahead) {
+        case '<':
+            advance(lexer);
+            if (allow_html_comment && lexer->lookahead == '!') return scan_html_comment(lexer, true);
+            if (lexer->lookahead == '<') return scan_adjacent_type_angles_after_opening(lexer, valid_symbols);
+            if (scan_extends_type_argument_start(lexer)) return false;
+            break;
+        case '-':
+            if (allow_html_comment && scan_html_comment(lexer, false)) return true;
+            break;
+        case '/':
+            advance(lexer);
+            if (lexer->lookahead == '/' || lexer->lookahead == '*') return false;
+            break;
+        case 'f':
+            if (!saw_newline && scan_word(lexer, "function")) return false;
+            break;
+        case '.': case '[': case '(': case '`': case '!': case ',':
+            return false;
+        case '?':
+            advance(lexer);
+            if (lexer->lookahead == '.') return false;
+            break;
+        default:
+            break;
+    }
+    lexer->mark_end_at(lexer, &end);
+    lexer->result_symbol = CLASS_EXTENDS_END;
+    return true;
+}
+
 static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bool *valid_symbols) {
     Scanner *scanner = (Scanner *)payload;
+
+    if (valid_symbols[CLASS_EXTENDS_END] && !valid_symbols[ERROR_RECOVERY] &&
+        !(valid_symbols[TEMPLATE_CHARS] && valid_symbols[AUTOMATIC_SEMICOLON])) {
+        return scan_class_extends_end(lexer, valid_symbols);
+    }
 
     if (valid_symbols[IMPORT_TYPE_ARGUMENTS_START] && !valid_symbols[ERROR_RECOVERY]) {
         while (is_whitespace(lexer->lookahead)) skip(lexer);
@@ -3416,7 +3490,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (!ret && !scanned_content && valid_symbols[AWAIT_YIELD_IDENTIFIER] && valid_symbols[LINE_BREAK_AFTER_AWAIT] && lexer->lookahead == 'y') {
             return scan_yield(scanner, lexer, valid_symbols, true);
         }
-        if (!ret && !scanned_content && (valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
+        if (!ret && !scanned_content && (valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
             return scan_contextual_keyword(scanner, lexer, valid_symbols);
         }
         if (!ret && !scanned_content && valid_symbols[LET] && !valid_symbols[SINGLE_STATEMENT_CONTEXT] && lexer->lookahead == 'l') {
@@ -3453,7 +3527,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         (lexer->lookahead == 'g' || lexer->lookahead == '\\')) {
         return scan_global_declaration_start(lexer);
     }
-    if ((valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
+    if ((valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
         return scan_contextual_keyword(scanner, lexer, valid_symbols);
     }
     if ((lexer->lookahead == '(' || lexer->lookahead == '<' || lexer->lookahead == '{') && scan_function_context(scanner, lexer, valid_symbols)) return true;

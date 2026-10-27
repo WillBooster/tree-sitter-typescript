@@ -99,6 +99,9 @@ module.exports = function defineGrammar(dialect) {
       $._type_assertion_context,
       $._adjacent_type_angles,
       $._import_type_arguments_start,
+      $._class_extends_end,
+      $._class_extends_yield_identifier,
+      $._class_extends_await_identifier,
     ],
 
     supertypes: ($, previous) => [
@@ -117,10 +120,13 @@ module.exports = function defineGrammar(dialect) {
       $._implements_keyword_qualified_primary_type,
       $._implements_keyword_bare_type,
       $._implements_keyword_bare_primary_type,
+      $._extends_expression,
+      $._extends_primary,
     ],
 
     precedences: ($, previous) => [
       ...withTypeArgumentsTarget($, previous),
+      ['member', 'template_call', 'new', 'call', $._extends_expression],
       ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
       // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
       // expression (`<T>a<B>` before a line break and `[0]`).
@@ -194,6 +200,9 @@ module.exports = function defineGrammar(dialect) {
     ],
 
     conflicts: ($, previous) => [
+      [$._extends_expression, $._extends_call],
+      [$._extends_primary, $._extends_call, $._extends_instantiation],
+      [$._extends_primary, $._extends_call, $._extends_new, $._extends_argumentless_new, $._extends_instantiation],
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
       [$.call_expression, $._type_query_call_expression_in_type_annotation],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
@@ -395,79 +404,16 @@ module.exports = function defineGrammar(dialect) {
           field('body', $.statement_block)
         ),
 
-      call_expression: ($) =>
-        choice(
-          prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
-          // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
-          // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call. A tag with type arguments
-          // is parsed like a generic call. Optional type arguments in the `template_call` alternative below would make
-          // the parser commit to a tagged template at the `<` of `f<T>(x)`.
-          prec.dynamic(
-            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
-            prec(
-              'generic_call',
-              seq(
-                field('function', $._type_arguments_target),
-                field('type_arguments', $.type_arguments),
-                field('arguments', choice($.arguments, $.template_string))
-              )
-            )
-          ),
-          prec('template_call', seq(field('function', $.primary_expression), field('arguments', $.template_string))),
-          prec(
-            'member',
-            seq(
-              field('function', $.primary_expression),
-              field('optional_chain', $.optional_chain),
-              field('type_arguments', optional($.type_arguments)),
-              field('arguments', $.arguments)
-            )
-          ),
-          // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`). Without
-          // a precedence, GLR also keeps the reading in which it is the object of `?.[0]` or `?.x`.
-          seq(
-            field('function', $.instantiation_expression),
-            field('optional_chain', $.optional_chain),
-            field('type_arguments', optional($.type_arguments)),
-            field('arguments', $.arguments)
-          )
-        ),
+      call_expression: ($) => callExpression($),
 
       // JavaScript's constructor chain ends where its scanner emits `_argumentless_new_end`, before a `<` is read.
       // TypeScript's constructor takes type arguments, `!`, and instantiation expressions, whose readings GLR keeps until
       // the type-arguments-end tokens decide them, so it stays a primary expression.
-      new_expression: ($) =>
-        choice(
-          prec('new', seq('new', field('constructor', $.primary_expression), field('arguments', $.arguments))),
-          prec.dynamic(
-            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
-            prec(
-              'new',
-              seq(
-                'new',
-                field('constructor', $._type_arguments_target),
-                field('type_arguments', $.type_arguments),
-                field('arguments', $.arguments)
-              )
-            )
-          )
-        ),
+      new_expression: ($) => newExpression($),
 
       // TypeScript reads `new A<B>c` as comparisons, but `new A<B>` before a line break and `c` as a `new` with type
       // arguments, which also take precedence over an extends clause's (`class C extends new A<B>, D {}`).
-      _argumentless_new_expression: ($) =>
-        choice(
-          prec.right('new', seq('new', field('constructor', $.primary_expression))),
-          prec.dynamic(
-            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
-            seq(
-              'new',
-              field('constructor', $._type_arguments_target),
-              field('type_arguments', $.type_arguments),
-              $._new_type_arguments_end
-            )
-          )
-        ),
+      _argumentless_new_expression: ($) => argumentlessNewExpression($),
 
       assignment_expression: ($) =>
         prec.right(
@@ -508,23 +454,11 @@ module.exports = function defineGrammar(dialect) {
 
       // The primary expressions that type arguments in an expression may follow: TypeScript gives the type arguments
       // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.
-      _type_arguments_target: ($) => {
-        const members = JavaScript.grammar.rules.primary_expression.members.filter(
-          (member) =>
-            (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
-            (dialect !== 'typescript' || member.name !== '_jsx_element')
-        );
-        return choice(
-          ...members.map((member) => replaceSymbol(member, '_reserved_identifier', $._expression_reserved_identifier)),
-          $.non_null_expression
-        );
-      },
+      _type_arguments_target: ($) => typeArgumentsTarget($, dialect),
 
-      _expression_reserved_identifier: () =>
-        choice(
-          ...TYPESCRIPT_CONTEXTUAL_KEYWORDS.filter((word) => word !== 'new'),
-          JavaScript.grammar.rules._reserved_identifier
-        ),
+      _expression_reserved_identifier: () => expressionReservedIdentifier(),
+
+      _extends_reserved_identifier: ($) => heritageRule($, expressionReservedIdentifier()),
 
       expression: ($, previous) => {
         const choices = [$.as_expression, $.satisfies_expression, $.instantiation_expression, $.internal_module];
@@ -935,35 +869,49 @@ module.exports = function defineGrammar(dialect) {
       satisfies_expression: ($) =>
         prec.left('binary', seq($.expression, 'satisfies', $.type, optional($._type_assertion_context))),
 
-      instantiation_expression: ($) => {
-        const instantiation = (end) =>
-          prec('instantiation', seq($._type_arguments_target, field('type_arguments', $.type_arguments), end));
-        return choice(
-          prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
-          prec.dynamic(
-            DYNAMIC_PRECEDENCE.INSTANTIATION_BEFORE_EXPRESSION,
-            instantiation($._type_arguments_end_before_expression)
-          )
-        );
-      },
+      instantiation_expression: ($) => instantiationExpression($),
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
       import_require_clause: ($) => seq($.identifier, '=', 'require', '(', field('source', $.string), ')'),
 
-      extends_clause: ($) => seq('extends', commaSep1($._extends_clause_single)),
+      extends_clause: ($) => seq('extends', commaSep1($._extends_clause_single), $._class_extends_end),
 
       _extends_clause_single: ($) =>
         prec(
           'extends',
           choice(
-            field('value', $.expression),
+            field('value', alias($._extends_expression, $.expression)),
             prec.dynamic(
               DYNAMIC_PRECEDENCE.EXTENDS_TYPE_ARGUMENTS,
-              seq(field('value', $.expression), field('type_arguments', $.type_arguments))
+              seq(field('value', alias($._extends_expression, $.expression)), field('type_arguments', $.type_arguments))
             )
           )
         ),
+
+      _extends_expression: ($) =>
+        choice(
+          alias($._extends_primary, $.primary_expression),
+          alias($._extends_instantiation, $.instantiation_expression)
+        ),
+
+      _extends_primary: ($) => choice($._extends_target, alias($._extends_argumentless_new, $.new_expression)),
+
+      _extends_target: ($) => heritageRule($, typeArgumentsTarget($, dialect, true)),
+
+      _extends_call: ($) => heritageRule($, callExpression($)),
+
+      _extends_member: ($) => heritageRule($, JavaScript.grammar.rules.member_expression),
+
+      _extends_subscript: ($) => heritageRule($, JavaScript.grammar.rules.subscript_expression),
+
+      _extends_new: ($) => heritageRule($, newExpression($)),
+
+      _extends_argumentless_new: ($) => heritageRule($, argumentlessNewExpression($)),
+
+      _extends_instantiation: ($) => heritageRule($, instantiationExpression($)),
+
+      _extends_non_null: ($) => heritageRule($, prec('member', seq($.primary_expression, '!'))),
 
       implements_clause: ($) =>
         seq(
@@ -2014,6 +1962,130 @@ function typeQueryMember($, generic) {
       'property',
       choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
     )
+  );
+}
+
+function callExpression($) {
+  return choice(
+    prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
+    // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
+    // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call. A tag with type arguments
+    // is parsed like a generic call. Optional type arguments in the `template_call` alternative below would make
+    // the parser commit to a tagged template at the `<` of `f<T>(x)`.
+    prec.dynamic(
+      DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+      prec(
+        'generic_call',
+        seq(
+          field('function', $._type_arguments_target),
+          field('type_arguments', $.type_arguments),
+          field('arguments', choice($.arguments, $.template_string))
+        )
+      )
+    ),
+    prec('template_call', seq(field('function', $.primary_expression), field('arguments', $.template_string))),
+    prec(
+      'member',
+      seq(
+        field('function', $.primary_expression),
+        field('optional_chain', $.optional_chain),
+        field('type_arguments', optional($.type_arguments)),
+        field('arguments', $.arguments)
+      )
+    ),
+    // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`). Without
+    // a precedence, GLR also keeps the reading in which it is the object of `?.[0]` or `?.x`.
+    seq(
+      field('function', $.instantiation_expression),
+      field('optional_chain', $.optional_chain),
+      field('type_arguments', optional($.type_arguments)),
+      field('arguments', $.arguments)
+    )
+  );
+}
+
+function newExpression($) {
+  return choice(
+    prec('new', seq('new', field('constructor', $.primary_expression), field('arguments', $.arguments))),
+    prec.dynamic(
+      DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+      prec(
+        'new',
+        seq(
+          'new',
+          field('constructor', $._type_arguments_target),
+          field('type_arguments', $.type_arguments),
+          field('arguments', $.arguments)
+        )
+      )
+    )
+  );
+}
+
+function argumentlessNewExpression($) {
+  return choice(
+    prec.right('new', seq('new', field('constructor', $.primary_expression))),
+    prec.dynamic(
+      DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+      seq(
+        'new',
+        field('constructor', $._type_arguments_target),
+        field('type_arguments', $.type_arguments),
+        $._new_type_arguments_end
+      )
+    )
+  );
+}
+
+function instantiationExpression($) {
+  const instantiation = (end) =>
+    prec('instantiation', seq($._type_arguments_target, field('type_arguments', $.type_arguments), end));
+  return choice(
+    prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
+    prec.dynamic(
+      DYNAMIC_PRECEDENCE.INSTANTIATION_BEFORE_EXPRESSION,
+      instantiation($._type_arguments_end_before_expression)
+    )
+  );
+}
+
+function typeArgumentsTarget($, dialect, heritage = false) {
+  const excluded = heritage ? ['arrow_function', '_jsx_element'] : dialect === 'typescript' ? ['_jsx_element'] : [];
+  const members = JavaScript.grammar.rules.primary_expression.members.filter(
+    (member) =>
+      (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
+      !excluded.includes(member.name)
+  );
+  return choice(
+    ...members.map((member) => replaceSymbol(member, '_reserved_identifier', $._expression_reserved_identifier)),
+    $.non_null_expression
+  );
+}
+
+function heritageRule($, rule) {
+  const aliases = {
+    expression: alias($._extends_expression, $.expression),
+    primary_expression: alias($._extends_primary, $.primary_expression),
+    _type_arguments_target: $._extends_target,
+    _expression_reserved_identifier: $._extends_reserved_identifier,
+    _yield_identifier: $._class_extends_yield_identifier,
+    _await_keyword: $._class_extends_await_identifier,
+    _await_identifier: $._class_extends_await_identifier,
+    call_expression: alias($._extends_call, $.call_expression),
+    member_expression: alias($._extends_member, $.member_expression),
+    subscript_expression: alias($._extends_subscript, $.subscript_expression),
+    new_expression: alias($._extends_new, $.new_expression),
+    _argumentless_new_expression: $._extends_argumentless_new,
+    instantiation_expression: alias($._extends_instantiation, $.instantiation_expression),
+    non_null_expression: alias($._extends_non_null, $.non_null_expression),
+  };
+  return mapRule(rule, (part) => (part.type === 'SYMBOL' ? (aliases[part.name] ?? part) : part));
+}
+
+function expressionReservedIdentifier() {
+  return choice(
+    ...TYPESCRIPT_CONTEXTUAL_KEYWORDS.filter((word) => word !== 'new'),
+    JavaScript.grammar.rules._reserved_identifier
   );
 }
 
