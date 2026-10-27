@@ -6627,8 +6627,13 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "SYMBOL",
-                      "name": "expression"
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_postfix_expression_target"
+                      },
+                      "named": true,
+                      "value": "expression"
                     },
                     {
                       "type": "SYMBOL",
@@ -6704,8 +6709,13 @@
                 "type": "FIELD",
                 "name": "function",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "primary_expression"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_postfix_primary_expression"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
                 }
               },
               {
@@ -6832,8 +6842,13 @@
                 "type": "FIELD",
                 "name": "constructor",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "primary_expression"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_constructor_member_target"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
                 }
               },
               {
@@ -6864,9 +6879,26 @@
                   "type": "FIELD",
                   "name": "constructor",
                   "content": {
-                    "type": "SYMBOL",
-                    "name": "_type_arguments_target"
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_constructor_member_target"
+                    },
+                    "named": true,
+                    "value": "primary_expression"
                   }
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_argumentless_new_end"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
                 },
                 {
                   "type": "FIELD",
@@ -7207,10 +7239,6 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "_jsx_element"
-        },
-        {
-          "type": "SYMBOL",
           "name": "parenthesized_expression"
         },
         {
@@ -7233,7 +7261,7 @@
               "type": "ALIAS",
               "content": {
                 "type": "SYMBOL",
-                "name": "_reserved_identifier"
+                "name": "_expression_reserved_identifier"
               },
               "named": true,
               "value": "identifier"
@@ -7325,12 +7353,13 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "_constructor_atom"
-        },
-        {
-          "type": "SYMBOL",
-          "name": "new_expression"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_member_target"
+          },
+          "named": true,
+          "value": "primary_expression"
         },
         {
           "type": "ALIAS",
@@ -7340,33 +7369,6 @@
           },
           "named": true,
           "value": "new_expression"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_constructor_member"
-          },
-          "named": true,
-          "value": "member_expression"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_constructor_subscript"
-          },
-          "named": true,
-          "value": "subscript_expression"
-        },
-        {
-          "type": "ALIAS",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_constructor_tag"
-          },
-          "named": true,
-          "value": "call_expression"
         }
       ]
     },
@@ -7431,10 +7433,10 @@
               "type": "ALIAS",
               "content": {
                 "type": "SYMBOL",
-                "name": "_constructor_chain_base"
+                "name": "_constructor_expression_target"
               },
               "named": true,
-              "value": "primary_expression"
+              "value": "expression"
             }
           },
           {
@@ -7483,10 +7485,10 @@
               "type": "ALIAS",
               "content": {
                 "type": "SYMBOL",
-                "name": "_constructor_chain_base"
+                "name": "_constructor_expression_target"
               },
               "named": true,
-              "value": "primary_expression"
+              "value": "expression"
             }
           },
           {
@@ -7509,58 +7511,122 @@
       }
     },
     "_constructor_tag": {
-      "type": "PREC",
-      "value": "template_call",
-      "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "FIELD",
-            "name": "function",
-            "content": {
-              "type": "ALIAS",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_constructor_chain_base"
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "PREC",
+          "value": "template_call",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "FIELD",
+                "name": "function",
+                "content": {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_constructor_chain_base"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
+                }
               },
-              "named": true,
-              "value": "primary_expression"
-            }
-          },
-          {
-            "type": "FIELD",
-            "name": "arguments",
+              {
+                "type": "FIELD",
+                "name": "arguments",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "template_string"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "type": "PREC_DYNAMIC",
+          "value": 3,
+          "content": {
+            "type": "PREC",
+            "value": "generic_call",
             "content": {
-              "type": "SYMBOL",
-              "name": "template_string"
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "FIELD",
+                  "name": "function",
+                  "content": {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_constructor_member_target"
+                    },
+                    "named": true,
+                    "value": "primary_expression"
+                  }
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_argumentless_new_end"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "FIELD",
+                  "name": "type_arguments",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "type_arguments"
+                  }
+                },
+                {
+                  "type": "FIELD",
+                  "name": "arguments",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "template_string"
+                  }
+                }
+              ]
             }
           }
-        ]
-      }
+        }
+      ]
     },
     "_argumentless_new_expression": {
       "type": "CHOICE",
       "members": [
         {
-          "type": "PREC_RIGHT",
-          "value": "new",
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "new"
-              },
-              {
-                "type": "FIELD",
-                "name": "constructor",
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "new"
+            },
+            {
+              "type": "FIELD",
+              "name": "constructor",
+              "content": {
+                "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
-                  "name": "primary_expression"
-                }
+                  "name": "_constructor"
+                },
+                "named": true,
+                "value": "primary_expression"
               }
-            ]
-          }
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_argumentless_new_end"
+            }
+          ]
         },
         {
           "type": "PREC_DYNAMIC",
@@ -7576,9 +7642,26 @@
                 "type": "FIELD",
                 "name": "constructor",
                 "content": {
-                  "type": "SYMBOL",
-                  "name": "_type_arguments_target"
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_constructor_member_target"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
                 }
+              },
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_argumentless_new_end"
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
               },
               {
                 "type": "FIELD",
@@ -7760,17 +7843,13 @@
             "type": "FIELD",
             "name": "object",
             "content": {
-              "type": "CHOICE",
-              "members": [
-                {
-                  "type": "SYMBOL",
-                  "name": "expression"
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "primary_expression"
-                }
-              ]
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_postfix_expression_target"
+              },
+              "named": true,
+              "value": "expression"
             }
           },
           {
@@ -8639,8 +8718,22 @@
                 "type": "FIELD",
                 "name": "operator",
                 "content": {
-                  "type": "STRING",
-                  "value": "<"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "<"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_type_argument_opening"
+                      },
+                      "named": false,
+                      "value": "<"
+                    }
+                  ]
                 }
               },
               {
@@ -12791,6 +12884,340 @@
         }
       ]
     },
+    "_postfix_primary_expression": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "parenthesized_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_identifier"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_await_yield_identifier"
+          },
+          "named": true,
+          "value": "identifier"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_expression_reserved_identifier"
+              },
+              "named": true,
+              "value": "identifier"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_async_keyword"
+              },
+              "named": true,
+              "value": "identifier"
+            }
+          ]
+        },
+        {
+          "type": "SYMBOL",
+          "name": "this"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "super"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "number"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "string"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "template_string"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "regex"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "true"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "false"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "null"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "object"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "array"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "function_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "generator_function"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "class"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "meta_property"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "subscript_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "member_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "call_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "new_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "non_null_expression"
+        }
+      ]
+    },
+    "_postfix_expression_target": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_postfix_primary_expression"
+          },
+          "named": true,
+          "value": "primary_expression"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "instantiation_expression"
+        }
+      ]
+    },
+    "_constructor_member_target": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_constructor_atom"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "new_expression"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_member"
+          },
+          "named": true,
+          "value": "member_expression"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_subscript"
+          },
+          "named": true,
+          "value": "subscript_expression"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_tag"
+          },
+          "named": true,
+          "value": "call_expression"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_non_null_expression"
+          },
+          "named": true,
+          "value": "non_null_expression"
+        }
+      ]
+    },
+    "_constructor_non_null_expression": {
+      "type": "PREC",
+      "value": "member",
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "SYMBOL",
+              "name": "_constructor"
+            },
+            "named": true,
+            "value": "primary_expression"
+          },
+          {
+            "type": "STRING",
+            "value": "!"
+          }
+        ]
+      }
+    },
+    "_constructor_expression_target": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_chain_base"
+          },
+          "named": true,
+          "value": "primary_expression"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_constructor_instantiation_expression"
+          },
+          "named": true,
+          "value": "instantiation_expression"
+        }
+      ]
+    },
+    "_constructor_instantiation_expression": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "PREC_DYNAMIC",
+          "value": -1,
+          "content": {
+            "type": "PREC",
+            "value": "instantiation",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_constructor_member_target"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_argumentless_new_end"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "FIELD",
+                  "name": "type_arguments",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "type_arguments"
+                  }
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_arguments_end"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "PREC_DYNAMIC",
+          "value": 1,
+          "content": {
+            "type": "PREC",
+            "value": "instantiation",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_constructor_member_target"
+                  },
+                  "named": true,
+                  "value": "primary_expression"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_argumentless_new_end"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "FIELD",
+                  "name": "type_arguments",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "type_arguments"
+                  }
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_arguments_end_before_expression"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
     "_type_arguments_target": {
       "type": "CHOICE",
       "members": [
@@ -13187,8 +13614,22 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_argument_opening"
+              },
+              "named": false,
+              "value": "<"
+            }
+          ]
         },
         {
           "type": "CHOICE",
@@ -15216,25 +15657,34 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "CHOICE",
+                "type": "SEQ",
                 "members": [
                   {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_as_type"
-                    },
-                    "named": true,
-                    "value": "type"
+                    "type": "CHOICE",
+                    "members": [
+                      {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_as_type"
+                        },
+                        "named": true,
+                        "value": "type"
+                      },
+                      {
+                        "type": "ALIAS",
+                        "content": {
+                          "type": "SYMBOL",
+                          "name": "_as_function_type"
+                        },
+                        "named": true,
+                        "value": "type"
+                      }
+                    ]
                   },
                   {
-                    "type": "ALIAS",
-                    "content": {
-                      "type": "SYMBOL",
-                      "name": "_as_function_type"
-                    },
-                    "named": true,
-                    "value": "type"
+                    "type": "SYMBOL",
+                    "name": "_qualified_const_assertion_end"
                   }
                 ]
               },
@@ -15424,13 +15874,27 @@
                   "value": "asserts"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_type_predicate"
-                  },
-                  "named": true,
-                  "value": "type_predicate"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type_predicate"
+                      },
+                      "named": true,
+                      "value": "type_predicate"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_this_type_predicate"
+                      },
+                      "named": true,
+                      "value": "type_predicate"
+                    }
+                  ]
                 }
               ]
             }
@@ -15525,19 +15989,33 @@
                   "type": "CHOICE",
                   "members": [
                     {
-                      "type": "ALIAS",
-                      "content": {
-                        "type": "SYMBOL",
-                        "name": "_as_type"
-                      },
-                      "named": true,
-                      "value": "type"
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_as_type"
+                          },
+                          "named": true,
+                          "value": "type"
+                        },
+                        {
+                          "type": "ALIAS",
+                          "content": {
+                            "type": "SYMBOL",
+                            "name": "_as_function_type"
+                          },
+                          "named": true,
+                          "value": "type"
+                        }
+                      ]
                     },
                     {
                       "type": "ALIAS",
                       "content": {
                         "type": "SYMBOL",
-                        "name": "_as_function_type"
+                        "name": "_qualified_const_assertion_type"
                       },
                       "named": true,
                       "value": "type"
@@ -15545,13 +16023,36 @@
                   ]
                 },
                 {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type_predicate"
+                      },
+                      "named": true,
+                      "value": "type_predicate"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_this_type_predicate"
+                      },
+                      "named": true,
+                      "value": "type_predicate"
+                    }
+                  ]
+                },
+                {
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_qualified_const_assertion_type"
+                    "name": "_as_asserts_type"
                   },
                   "named": true,
-                  "value": "type"
+                  "value": "asserts"
                 }
               ]
             }
@@ -15644,10 +16145,6 @@
                     },
                     "named": true,
                     "value": "identifier"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "this"
                   },
                   {
                     "type": "ALIAS",
@@ -16025,6 +16522,319 @@
                   ]
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    "_as_postfix_asserts_type": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_as_asserts_start"
+        },
+        {
+          "type": "STRING",
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_non_postfix_asserts_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_const_assertion_type_suffix"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_const_assertion_non_nullable_suffix"
+            }
+          ]
+        }
+      ]
+    },
+    "_as_non_postfix_asserts_predicate": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_as_asserts_predicate_start"
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
+            {
+              "type": "FIELD",
+              "name": "name",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "RESERVED",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "identifier"
+                    },
+                    "context_name": "assertion_bindings"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "out"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "as"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "satisfies"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "undefined"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "keyof"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "infer"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "readonly"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "abstract"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "asserts"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "is"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_contextual_type_identifier"
+                        }
+                      ]
+                    },
+                    "named": true,
+                    "value": "identifier"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "this"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "CHOICE",
+                      "members": [
+                        {
+                          "type": "SYMBOL",
+                          "name": "predefined_type"
+                        },
+                        {
+                          "type": "STRING",
+                          "value": "unique"
+                        }
+                      ]
+                    },
+                    "named": true,
+                    "value": "identifier"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "STRING",
+              "value": "is"
+            },
+            {
+              "type": "FIELD",
+              "name": "type",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_non_postfix_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_non_postfix_function_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "_as_this_type_predicate": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_as_this_type_predicate_start"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_assertion_binding_identifier_start"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "this"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "is"
+        },
+        {
+          "type": "FIELD",
+          "name": "type",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_function_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_qualified_const_assertion_type"
+                },
+                "named": true,
+                "value": "type"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "_as_postfix_this_type_predicate": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_as_this_type_predicate_start"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_assertion_binding_identifier_start"
+            },
+            {
+              "type": "FIELD",
+              "name": "name",
+              "content": {
+                "type": "SYMBOL",
+                "name": "this"
+              }
+            },
+            {
+              "type": "STRING",
+              "value": "is"
+            },
+            {
+              "type": "FIELD",
+              "name": "type",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_non_postfix_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_non_postfix_function_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "_const_assertion_type_suffix"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "_const_assertion_non_nullable_suffix"
             }
           ]
         }
@@ -17171,6 +17981,10 @@
           "value": "primary_type"
         },
         {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
+        },
+        {
           "type": "STRING",
           "value": "["
         },
@@ -17191,6 +18005,10 @@
           },
           "named": true,
           "value": "primary_type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
         },
         {
           "type": "STRING",
@@ -17809,6 +18627,10 @@
           "value": "primary_type"
         },
         {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
+        },
+        {
           "type": "STRING",
           "value": "["
         },
@@ -17829,6 +18651,10 @@
           },
           "named": true,
           "value": "primary_type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
         },
         {
           "type": "STRING",
@@ -18103,6 +18929,24 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -18233,6 +19077,24 @@
           },
           "named": true,
           "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
         },
         {
           "type": "ALIAS",
@@ -19811,6 +20673,24 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -20122,6 +21002,24 @@
           },
           "named": true,
           "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
         },
         {
           "type": "ALIAS",
@@ -20552,8 +21450,17 @@
             }
           },
           {
-            "type": "SYMBOL",
-            "name": "_qualified_const_assertion_end"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_qualified_const_assertion_end"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_non_postfix_type_suffix_end"
+              }
+            ]
           }
         ]
       }
@@ -20638,29 +21545,52 @@
               "type": "CHOICE",
               "members": [
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_non_postfix_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_non_postfix_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_non_postfix_function_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 },
                 {
                   "type": "ALIAS",
                   "content": {
                     "type": "SYMBOL",
-                    "name": "_as_non_postfix_function_type"
+                    "name": "_as_non_postfix_type_predicate"
                   },
                   "named": true,
-                  "value": "type"
+                  "value": "type_predicate"
                 }
               ]
             }
           },
           {
-            "type": "SYMBOL",
-            "name": "_qualified_const_assertion_end"
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_qualified_const_assertion_end"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_non_postfix_type_suffix_end"
+              }
+            ]
           }
         ]
       }
@@ -20746,10 +21676,6 @@
                     },
                     "named": true,
                     "value": "identifier"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "this"
                   },
                   {
                     "type": "ALIAS",
@@ -20947,8 +21873,17 @@
                 ]
               },
               {
-                "type": "SYMBOL",
-                "name": "_as_infer_constraint_end"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_infer_constraint_end"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_non_postfix_type_suffix_end"
+                  }
+                ]
               }
             ]
           }
@@ -22274,6 +23209,24 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -22529,6 +23482,24 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_as_const_type"
           },
           "named": false,
@@ -22759,6 +23730,10 @@
           "value": "primary_type"
         },
         {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
+        },
+        {
           "type": "STRING",
           "value": "["
         },
@@ -22779,6 +23754,10 @@
           },
           "named": true,
           "value": "primary_type"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_const_assertion_type_suffix"
         },
         {
           "type": "STRING",
@@ -23218,6 +24197,24 @@
           },
           "named": true,
           "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_asserts_type"
+          },
+          "named": true,
+          "value": "asserts"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_this_type_predicate"
+          },
+          "named": true,
+          "value": "type_predicate"
         },
         {
           "type": "ALIAS",
@@ -24548,16 +25545,35 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_argument_opening"
+              },
+              "named": false,
+              "value": "<"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "<"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_argument_start"
+                }
+              ]
+            }
+          ]
         },
         {
           "type": "SEQ",
           "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_type_argument_start"
-            },
             {
               "type": "SYMBOL",
               "name": "type"
@@ -28186,8 +29202,31 @@
           "type": "CHOICE",
           "members": [
             {
-              "type": "STRING",
-              "value": "<"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_type_argument_opening"
+                  },
+                  "named": false,
+                  "value": "<"
+                },
+                {
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "<"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "_type_argument_start"
+                    }
+                  ]
+                }
+              ]
             },
             {
               "type": "SEQ",
@@ -28197,8 +29236,31 @@
                   "name": "_adjacent_type_angles"
                 },
                 {
-                  "type": "STRING",
-                  "value": "<"
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_type_argument_opening"
+                      },
+                      "named": false,
+                      "value": "<"
+                    },
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "<"
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_type_argument_start"
+                        }
+                      ]
+                    }
+                  ]
                 }
               ]
             }
@@ -28207,10 +29269,6 @@
         {
           "type": "SEQ",
           "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_type_argument_start"
-            },
             {
               "type": "SYMBOL",
               "name": "type"
@@ -28259,16 +29317,35 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_argument_opening"
+              },
+              "named": false,
+              "value": "<"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "<"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_type_argument_start"
+                }
+              ]
+            }
+          ]
         },
         {
           "type": "SEQ",
           "members": [
-            {
-              "type": "SYMBOL",
-              "name": "_type_argument_start"
-            },
             {
               "type": "SYMBOL",
               "name": "type"
@@ -28317,8 +29394,22 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_argument_opening"
+              },
+              "named": false,
+              "value": "<"
+            }
+          ]
         },
         {
           "type": "SEQ",
@@ -28762,8 +29853,22 @@
       "type": "SEQ",
       "members": [
         {
-          "type": "STRING",
-          "value": "<"
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "STRING",
+              "value": "<"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_type_argument_opening"
+              },
+              "named": false,
+              "value": "<"
+            }
+          ]
         },
         {
           "type": "SEQ",
@@ -29563,6 +30668,23 @@
   ],
   "conflicts": [
     [
+      "expression",
+      "call_expression",
+      "_postfix_expression_target"
+    ],
+    [
+      "_postfix_expression_target",
+      "_type_arguments_target"
+    ],
+    [
+      "primary_expression",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_type_arguments_target"
+    ],
+    [
       "_const_assertion_predefined_type",
       "predefined_type"
     ],
@@ -29588,6 +30710,17 @@
       "_type_arguments_target",
       "_const_assertion_predefined_type",
       "predefined_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_const_assertion_predefined_type",
+      "predefined_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_const_assertion_predefined_type",
+      "predefined_type",
+      "_postfix_primary_expression"
     ],
     [
       "_as_primitive_type_name",
@@ -29644,16 +30777,54 @@
       "_type_arguments_target"
     ],
     [
+      "arrow_function",
+      "method_definition",
+      "_postfix_primary_expression"
+    ],
+    [
+      "arrow_function",
+      "method_definition",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "_type_query_identifier"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_type_query_identifier"
+    ],
+    [
+      "_type_arguments_target",
+      "_type_query_identifier",
+      "_postfix_primary_expression"
     ],
     [
       "_type_arguments_target",
       "internal_module"
     ],
     [
+      "_postfix_primary_expression",
+      "internal_module"
+    ],
+    [
+      "_type_arguments_target",
+      "internal_module",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "module"
+    ],
+    [
+      "_postfix_primary_expression",
+      "module"
+    ],
+    [
+      "_type_arguments_target",
+      "module",
+      "_postfix_primary_expression"
     ],
     [
       "import_specifier",
@@ -29681,7 +30852,33 @@
       "_property_name"
     ],
     [
+      "_postfix_primary_expression",
+      "_property_name"
+    ],
+    [
       "_type_arguments_target",
+      "_property_name",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_property_name"
+    ],
+    [
+      "_type_arguments_target",
+      "await_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "await_expression"
+    ],
+    [
+      "_type_arguments_target",
+      "await_expression",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
       "await_expression"
     ],
     [
@@ -29690,7 +30887,36 @@
       "_property_name"
     ],
     [
+      "_postfix_primary_expression",
+      "await_expression",
+      "_property_name"
+    ],
+    [
       "_type_arguments_target",
+      "await_expression",
+      "_property_name",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "await_expression",
+      "_property_name"
+    ],
+    [
+      "_type_arguments_target",
+      "arrow_function"
+    ],
+    [
+      "_postfix_primary_expression",
+      "arrow_function"
+    ],
+    [
+      "_type_arguments_target",
+      "arrow_function",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
       "arrow_function"
     ],
     [
@@ -29699,7 +30925,36 @@
       "_property_name"
     ],
     [
+      "_postfix_primary_expression",
+      "arrow_function",
+      "_property_name"
+    ],
+    [
       "_type_arguments_target",
+      "arrow_function",
+      "_property_name",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "arrow_function",
+      "_property_name"
+    ],
+    [
+      "_type_arguments_target",
+      "method_definition"
+    ],
+    [
+      "_postfix_primary_expression",
+      "method_definition"
+    ],
+    [
+      "_type_arguments_target",
+      "method_definition",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
       "method_definition"
     ],
     [
@@ -29707,11 +30962,50 @@
       "rest_pattern"
     ],
     [
+      "_postfix_primary_expression",
+      "rest_pattern"
+    ],
+    [
+      "_type_arguments_target",
+      "rest_pattern",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "rest_pattern"
+    ],
+    [
       "_type_arguments_target",
       "pattern"
     ],
     [
+      "_postfix_primary_expression",
+      "pattern"
+    ],
+    [
       "_type_arguments_target",
+      "pattern",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
+      "pattern"
+    ],
+    [
+      "_type_arguments_target",
+      "for_in_clause"
+    ],
+    [
+      "_postfix_primary_expression",
+      "for_in_clause"
+    ],
+    [
+      "_type_arguments_target",
+      "for_in_clause",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_postfix_primary_expression",
       "for_in_clause"
     ],
     [
@@ -29743,6 +31037,122 @@
       "_lexical_binding_identifier"
     ],
     [
+      "for_in_clause",
+      "_constructor_atom"
+    ],
+    [
+      "for_in_clause",
+      "_constructor_atom",
+      "_type_arguments_target"
+    ],
+    [
+      "for_in_clause",
+      "_constructor_atom",
+      "_postfix_primary_expression"
+    ],
+    [
+      "for_in_clause",
+      "_constructor_atom",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor_atom",
+      "_type_arguments_target"
+    ],
+    [
+      "_constructor_atom",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor_atom",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor",
+      "_type_arguments_target"
+    ],
+    [
+      "_constructor",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor",
+      "primary_expression"
+    ],
+    [
+      "_constructor_chain_base",
+      "_argumentless_new_expression"
+    ],
+    [
+      "new_expression",
+      "_constructor",
+      "_constructor_tag",
+      "_argumentless_new_expression",
+      "_constructor_instantiation_expression"
+    ],
+    [
+      "new_expression",
+      "_argumentless_new_expression",
+      "_constructor_instantiation_expression"
+    ],
+    [
+      "new_expression",
+      "_constructor_chain_base",
+      "_argumentless_new_expression",
+      "_constructor_instantiation_expression"
+    ],
+    [
+      "_constructor_import",
+      "call_expression"
+    ],
+    [
+      "_constructor_function_expression",
+      "function_expression"
+    ],
+    [
+      "_constructor_generator_function",
+      "generator_function"
+    ],
+    [
+      "_constructor_atom",
+      "await_expression",
+      "_type_arguments_target"
+    ],
+    [
+      "_constructor_atom",
+      "await_expression",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor_atom",
+      "await_expression",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor_atom",
+      "arrow_function",
+      "_type_arguments_target"
+    ],
+    [
+      "_constructor_atom",
+      "arrow_function",
+      "_postfix_primary_expression"
+    ],
+    [
+      "_constructor_atom",
+      "arrow_function",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
       "_field_name",
       "_property_name"
     ],
@@ -29764,6 +31174,19 @@
       "_type_arguments_target"
     ],
     [
+      "nested_identifier",
+      "nested_type_identifier",
+      "_generic_nested_type_identifier",
+      "_postfix_primary_expression"
+    ],
+    [
+      "nested_identifier",
+      "nested_type_identifier",
+      "_generic_nested_type_identifier",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
       "_call_signature",
       "function_type"
     ],
@@ -29776,13 +31199,42 @@
       "_parameter_name"
     ],
     [
+      "_postfix_primary_expression",
+      "_parameter_name"
+    ],
+    [
+      "_type_arguments_target",
+      "_parameter_name",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "_parameter_name",
       "primary_type"
     ],
     [
+      "_postfix_primary_expression",
+      "_parameter_name",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_parameter_name",
+      "primary_type",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "literal_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "literal_type"
+    ],
+    [
+      "_type_arguments_target",
+      "literal_type",
+      "_postfix_primary_expression"
     ],
     [
       "_type_arguments_target",
@@ -29790,22 +31242,73 @@
       "rest_pattern"
     ],
     [
+      "_postfix_primary_expression",
+      "literal_type",
+      "rest_pattern"
+    ],
+    [
+      "_type_arguments_target",
+      "literal_type",
+      "rest_pattern",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "predefined_type",
       "rest_pattern"
     ],
     [
+      "_postfix_primary_expression",
+      "predefined_type",
+      "rest_pattern"
+    ],
+    [
+      "_type_arguments_target",
+      "predefined_type",
+      "rest_pattern",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "primary_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "primary_type",
+      "_postfix_primary_expression"
     ],
     [
       "_type_arguments_target",
       "predefined_type"
     ],
     [
+      "_postfix_primary_expression",
+      "predefined_type"
+    ],
+    [
+      "_type_arguments_target",
+      "predefined_type",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "pattern",
       "primary_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "pattern",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "pattern",
+      "primary_type",
+      "_postfix_primary_expression"
     ],
     [
       "_parameter_name",
@@ -29906,6 +31409,17 @@
       "_const_assertion_operator_operand"
     ],
     [
+      "_postfix_primary_expression",
+      "_as_primary_type",
+      "_const_assertion_operator_operand"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_const_assertion_operator_operand",
+      "_postfix_primary_expression"
+    ],
+    [
       "_as_primary_type",
       "_const_assertion_operator_operand",
       "_parameter_name"
@@ -29929,6 +31443,19 @@
       "_as_primitive_type_name",
       "_as_primitive_generic_name",
       "_as_primitive_nested_identifier"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_primitive_type_name",
+      "_as_primitive_generic_name",
+      "_as_primitive_nested_identifier"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primitive_type_name",
+      "_as_primitive_generic_name",
+      "_as_primitive_nested_identifier",
+      "_postfix_primary_expression"
     ],
     [
       "_as_type_predicate",
@@ -29985,9 +31512,33 @@
       "primary_type"
     ],
     [
+      "_postfix_primary_expression",
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "primary_type",
+      "_postfix_primary_expression"
+    ],
+    [
       "_type_arguments_target",
       "_as_primary_type",
       "primary_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_primary_type",
+      "primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "primary_type",
+      "_postfix_primary_expression"
     ],
     [
       "_as_primary_type",
@@ -30003,6 +31554,17 @@
       "_as_primary_type"
     ],
     [
+      "pattern",
+      "_postfix_primary_expression",
+      "_as_primary_type"
+    ],
+    [
+      "pattern",
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_postfix_primary_expression"
+    ],
+    [
       "_as_primary_type",
       "_parameter_name"
     ],
@@ -30010,6 +31572,17 @@
       "_type_arguments_target",
       "_as_primary_type",
       "_parameter_name"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_primary_type",
+      "_parameter_name"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_parameter_name",
+      "_postfix_primary_expression"
     ],
     [
       "_as_primary_type",
@@ -30032,11 +31605,31 @@
     [
       "_type_arguments_target",
       "_as_primary_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_primary_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_postfix_primary_expression"
     ],
     [
       "_type_arguments_target",
       "_as_primary_type",
       "_ordinary_assertion_postfix_type"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_primary_type",
+      "_ordinary_assertion_postfix_type",
+      "_postfix_primary_expression"
     ],
     [
       "_as_type",
@@ -30070,6 +31663,15 @@
     [
       "_type_arguments_target",
       "_as_type_query_member"
+    ],
+    [
+      "_postfix_primary_expression",
+      "_as_type_query_member"
+    ],
+    [
+      "_type_arguments_target",
+      "_as_type_query_member",
+      "_postfix_primary_expression"
     ],
     [
       "_as_import_call",
@@ -30117,6 +31719,17 @@
       "_type_arguments_target"
     ],
     [
+      "rest_pattern",
+      "primary_type",
+      "_postfix_primary_expression"
+    ],
+    [
+      "rest_pattern",
+      "primary_type",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
       "object",
       "object_type"
     ],
@@ -30158,12 +31771,34 @@
     ],
     [
       "array_pattern",
+      "pattern",
+      "_postfix_primary_expression"
+    ],
+    [
+      "array_pattern",
+      "pattern",
+      "_type_arguments_target",
+      "_postfix_primary_expression"
+    ],
+    [
+      "array_pattern",
       "pattern"
     ],
     [
       "array_pattern",
       "_type_arguments_target",
       "predefined_type"
+    ],
+    [
+      "array_pattern",
+      "_postfix_primary_expression",
+      "predefined_type"
+    ],
+    [
+      "array_pattern",
+      "_type_arguments_target",
+      "predefined_type",
+      "_postfix_primary_expression"
     ],
     [
       "jsx_namespace_name",
@@ -30191,6 +31826,12 @@
     [
       "primary_expression",
       "call_expression",
+      "instantiation_expression"
+    ],
+    [
+      "primary_expression",
+      "call_expression",
+      "new_expression",
       "instantiation_expression"
     ],
     [
@@ -30299,6 +31940,26 @@
     [
       {
         "type": "STRING",
+        "value": "assign"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "assign"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
         "value": "member"
       },
       {
@@ -30321,6 +31982,46 @@
     [
       {
         "type": "STRING",
+        "value": "member"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "template_call"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "new"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "call"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
         "value": "declaration"
       },
       {
@@ -30332,6 +32033,40 @@
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "statement_block"
+      },
+      {
+        "type": "STRING",
+        "value": "object"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "statement_block"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      },
+      {
+        "type": "STRING",
+        "value": "object"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       },
       {
         "type": "SYMBOL",
@@ -30385,7 +32120,57 @@
     [
       {
         "type": "SYMBOL",
+        "name": "export_statement"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "export_statement"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "lexical_declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "lexical_declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "lexical_declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "for_lexical_declaration"
       },
       {
         "type": "SYMBOL",
@@ -30399,7 +32184,17 @@
       },
       {
         "type": "SYMBOL",
-        "name": "_type_arguments_target"
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "for_lexical_declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -32925,6 +34720,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_index_type_query"
       },
       {
@@ -32960,6 +34785,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -33005,6 +34860,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_index_type_query"
       },
       {
@@ -33045,6 +34930,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_index_type_query"
       },
       {
@@ -33085,6 +35000,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_non_postfix_constraint_index_type_query"
       },
       {
@@ -33120,6 +35065,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -33155,6 +35130,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "index_type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_readonly_type"
       },
       {
@@ -35025,6 +37030,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_readonly_type"
       },
       {
@@ -35060,6 +37095,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -35105,6 +37170,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_readonly_type"
       },
       {
@@ -35145,6 +37240,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_readonly_type"
       },
       {
@@ -35185,6 +37310,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_non_postfix_constraint_readonly_type"
       },
       {
@@ -35220,6 +37375,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -35255,6 +37440,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_intersection_type"
       },
       {
@@ -36765,6 +38980,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_intersection_type"
       },
       {
@@ -36800,6 +39045,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -36845,6 +39120,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_intersection_type"
       },
       {
@@ -36880,6 +39185,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -36925,6 +39260,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_scoped_intersection_type"
       },
       {
@@ -36965,6 +39330,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_non_postfix_constraint_intersection_type"
       },
       {
@@ -37000,6 +39395,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -37035,6 +39460,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "intersection_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_union_type"
       },
       {
@@ -37915,6 +40370,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_union_type"
       },
       {
@@ -37950,6 +40435,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -37995,6 +40510,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_union_type"
       },
       {
@@ -38030,6 +40575,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -38075,6 +40650,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_scoped_union_type"
       },
       {
@@ -38115,6 +40720,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_scoped_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_non_postfix_constraint_union_type"
       },
       {
@@ -38150,6 +40785,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -38185,6 +40850,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "union_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_conditional_type"
       },
       {
@@ -38475,6 +41170,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_conditional_type"
       },
       {
@@ -38515,6 +41240,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_conditional_type"
       },
       {
@@ -38550,6 +41305,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -38585,6 +41370,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "conditional_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_arrow_function_type"
       },
       {
@@ -38725,6 +41540,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_arrow_function_type"
       },
       {
@@ -38765,6 +41610,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_non_postfix_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_arrow_function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "function_type"
       },
       {
@@ -38790,6 +41665,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "function_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -38855,6 +41760,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_constructor_type"
       },
       {
@@ -38895,6 +41830,36 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_non_postfix_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "constructor_type"
       },
       {
@@ -38924,6 +41889,36 @@
     ],
     [
       {
+        "type": "SYMBOL",
+        "name": "constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "constructor_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
+      }
+    ],
+    [
+      {
         "type": "STRING",
         "value": "binary"
       },
@@ -38950,6 +41945,36 @@
       {
         "type": "SYMBOL",
         "name": "_as_non_postfix_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "binary"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_asserts_predicate"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "binary"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_postfix_this_type_predicate"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "binary"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_as_this_type_predicate"
       }
     ],
     [
@@ -38965,11 +41990,31 @@
     [
       {
         "type": "SYMBOL",
+        "name": "mapped_type_clause"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "accessibility_modifier"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "accessibility_modifier"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -38984,12 +42029,32 @@
     ],
     [
       {
+        "type": "STRING",
+        "value": "unary_void"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
         "type": "SYMBOL",
         "name": "extends_clause"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "extends_clause"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -39010,6 +42075,16 @@
       {
         "type": "SYMBOL",
         "name": "expression"
+      }
+    ],
+    [
+      {
+        "type": "STRING",
+        "value": "declaration"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
       }
     ],
     [
@@ -42591,11 +45666,31 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_as_non_postfix_readonly_type"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_as_non_postfix_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -42611,11 +45706,31 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_as_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_constraint_readonly_type"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -42631,11 +45746,41 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_const_assertion_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_const_assertion_non_postfix_constraint_readonly_type"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_const_assertion_non_postfix_constraint_readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "readonly_type"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -42650,6 +45795,26 @@
       {
         "type": "SYMBOL",
         "name": "expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "subscript_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_expression_target"
       }
     ],
     [
@@ -50729,6 +53894,16 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_type_query_member_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_type_query_subscript_expression"
       },
       {
@@ -50749,11 +53924,31 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_type_query_subscript_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "_type_query_call_expression"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "_type_query_call_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -50769,7 +53964,37 @@
     [
       {
         "type": "SYMBOL",
+        "name": "_type_query_instantiation_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "type_query"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "override_modifier"
       },
       {
         "type": "SYMBOL",
@@ -50783,7 +54008,7 @@
       },
       {
         "type": "SYMBOL",
-        "name": "_type_arguments_target"
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -50839,11 +54064,31 @@
     [
       {
         "type": "SYMBOL",
+        "name": "new_expression"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
         "name": "meta_property"
       },
       {
         "type": "SYMBOL",
         "name": "_type_arguments_target"
+      }
+    ],
+    [
+      {
+        "type": "SYMBOL",
+        "name": "meta_property"
+      },
+      {
+        "type": "SYMBOL",
+        "name": "_postfix_primary_expression"
       }
     ],
     [
@@ -51220,6 +54465,10 @@
     },
     {
       "type": "SYMBOL",
+      "name": "_non_postfix_type_suffix_end"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_nonconditional_infer_name_end"
     },
     {
@@ -51248,11 +54497,19 @@
     },
     {
       "type": "SYMBOL",
+      "name": "_as_this_type_predicate_start"
+    },
+    {
+      "type": "SYMBOL",
       "name": "_as_asserts_start"
     },
     {
       "type": "SYMBOL",
       "name": "_as_asserts_predicate_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_type_argument_opening"
     }
   ],
   "inline": [
@@ -51283,8 +54540,14 @@
     "expression",
     "primary_expression",
     "pattern",
+    "_constructor",
+    "_constructor_chain_base",
     "type",
     "primary_type",
+    "_postfix_primary_expression",
+    "_postfix_expression_target",
+    "_constructor_expression_target",
+    "_constructor_member_target",
     "_default_export_declaration",
     "_decorated_export_declaration",
     "_decorated_export_ambient_class_declaration",

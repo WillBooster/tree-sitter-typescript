@@ -8,6 +8,24 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
 const Sources = [
+  'const result = (value as () => asserts x is () => infer U[])++;',
+  'const result = (value as new () => asserts x is infer U extends A | infer V[Key])++;',
+  'const result = value as () => this is infer U[Key];',
+  'const result = value as A extends () => this is infer U ? C : D;',
+  'const result = value as A extends () => this is infer U\n? const.Member : D;',
+  'const result = value as asserts is;',
+  'const result = value as const.Member[asserts is];',
+  'const result = value as A extends keyof infer is ? const.Member : D;',
+
+  'const result = (value as () => asserts x is ([A]) | infer U[])++;',
+  'const result = value as () => asserts x is A | infer U[Key];',
+  'const result = value as new () => asserts x[Key];',
+  'const result = value as new () => asserts is [A];',
+  'const result = value as new () => x is const.Member;',
+  'const result = value as new () => asserts x is const.Member;',
+  'const result = (value as const.Member[])\n(b);',
+  'const result = (value as A!)\n[0];',
+
   'const result = value as () => asserts x[K];',
   'const result = value as () => asserts x | const.M;',
   'const result = value as () => asserts x[] & const.M;',
@@ -267,6 +285,17 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as A extends () => asserts x is infer U extends infer V ? const.Member : infer W ? const.Member : D;',
+  'const invalid = value as A extends () => this is infer U ? const.Member : D;',
+  'const invalid = value as new () => asserts is;',
+  'const invalid = (value as A!\n(1));',
+  'const invalid = (value as A!\n[0]);',
+  'const invalid = (value as const.Member[]\n(1));',
+  'const invalid = (value as const.Member[]\n[0]);',
+  'const invalid = (value as (const.Member)\n(1));',
+  'const invalid = (value as (const.Member)\n[0]);',
+  'const invalid = (value as readonly const.Member[]\n[0]);',
+
   String.raw`const invalid = value as keyof infer \u0063onst;`,
   String.raw`const invalid = value as A extends infer \u{63}lass ? const.M : D;`,
   String.raw`const invalid = value as infer \u0074his;`,

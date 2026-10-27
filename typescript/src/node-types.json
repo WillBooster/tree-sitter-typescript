@@ -364,6 +364,10 @@
         "named": true
       },
       {
+        "type": "type_predicate",
+        "named": true
+      },
+      {
         "type": "type_query",
         "named": true
       },
@@ -1687,7 +1691,15 @@
         "required": true,
         "types": [
           {
+            "type": "asserts",
+            "named": true
+          },
+          {
             "type": "type",
+            "named": true
+          },
+          {
+            "type": "type_predicate",
             "named": true
           }
         ]
@@ -3152,99 +3164,7 @@
       "required": false,
       "types": [
         {
-          "type": "array",
-          "named": true
-        },
-        {
-          "type": "arrow_function",
-          "named": true
-        },
-        {
-          "type": "call_expression",
-          "named": true
-        },
-        {
-          "type": "class",
-          "named": true
-        },
-        {
-          "type": "false",
-          "named": true
-        },
-        {
-          "type": "function_expression",
-          "named": true
-        },
-        {
-          "type": "generator_function",
-          "named": true
-        },
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "member_expression",
-          "named": true
-        },
-        {
-          "type": "meta_property",
-          "named": true
-        },
-        {
-          "type": "new_expression",
-          "named": true
-        },
-        {
-          "type": "non_null_expression",
-          "named": true
-        },
-        {
-          "type": "null",
-          "named": true
-        },
-        {
-          "type": "number",
-          "named": true
-        },
-        {
-          "type": "object",
-          "named": true
-        },
-        {
-          "type": "parenthesized_expression",
-          "named": true
-        },
-        {
-          "type": "regex",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        },
-        {
-          "type": "subscript_expression",
-          "named": true
-        },
-        {
-          "type": "super",
-          "named": true
-        },
-        {
-          "type": "template_string",
-          "named": true
-        },
-        {
-          "type": "this",
-          "named": true
-        },
-        {
-          "type": "true",
-          "named": true
-        },
-        {
-          "type": "undefined",
+          "type": "primary_expression",
           "named": true
         }
       ]
@@ -4845,7 +4765,27 @@
         "required": true,
         "types": [
           {
+            "type": "call_expression",
+            "named": true
+          },
+          {
             "type": "expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "subscript_expression",
+            "named": true
+          },
+          {
+            "type": "this",
             "named": true
           }
         ]
