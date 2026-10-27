@@ -3215,10 +3215,17 @@ static bool scan_extends_type_argument_start(TSLexer *lexer) {
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
-    if (strcmp(word, "function") == 0 || strcmp(word, "import") == 0) {
+    if (strcmp(word, "import") == 0) {
+        return scan_default_trivia(lexer, true, false) && lexer->lookahead == '(';
+    }
+    static const char *const declaration_keywords[] = {"interface", "enum", "let", "function", "async"};
+    if (is_type_probe_word(word, declaration_keywords, sizeof(declaration_keywords) / sizeof(declaration_keywords[0]))) {
         if (!scan_default_trivia(lexer, true, false)) return false;
-        if (strcmp(word, "import") == 0) return lexer->lookahead == '(';
-        return lexer->lookahead != '.' && lexer->lookahead != '<';
+        if (strcmp(word, "function") == 0 && (lexer->lookahead == '.' || lexer->lookahead == '<' || lexer->lookahead == '*')) return false;
+        if (strcmp(word, "let") == 0 && lexer->lookahead == '{') return false;
+        if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+        char next[16] = {0};
+        return scan_identifier(lexer, next, sizeof(next), false) && strcmp(next, "extends") == 0;
     }
     static const char *const type_keywords[] = {"false", "new", "null", "true", "typeof"};
     return !is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0])) ||
