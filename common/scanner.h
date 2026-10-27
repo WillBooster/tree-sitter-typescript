@@ -3211,12 +3211,12 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 }
 
 static bool scan_extends_type_argument_start(TSLexer *lexer) {
-    if (!scan_default_trivia(lexer, true, true)) return false;
+    if (!scan_default_trivia(lexer, true, false)) return false;
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
     if (strcmp(word, "function") == 0 || strcmp(word, "import") == 0) {
-        if (!scan_default_trivia(lexer, true, true)) return false;
+        if (!scan_default_trivia(lexer, true, false)) return false;
         if (strcmp(word, "import") == 0) return lexer->lookahead == '(';
         return lexer->lookahead != '.' && lexer->lookahead != '<';
     }

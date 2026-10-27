@@ -8,6 +8,12 @@ import { loadCurrentWasmBuild } from './wasmBuild';
 const ValidBases = [
   'Base',
   'Base<T>',
+  'Base<-1>',
+  'Base<-1n>',
+  'factory<-1>()',
+  'Base< <T>() => T>',
+  'Base</* comment */ -1>',
+  'Base<// comment\n-1n>',
   'Base!',
   'Base!<T>',
   'factory<T>()',
