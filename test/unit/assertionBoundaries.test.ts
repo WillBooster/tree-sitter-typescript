@@ -517,6 +517,13 @@ for (const dialect of ['typescript', 'tsx']) {
         'a as Box<in>!;',
         'a as !Box<class.Member>;',
         'a as Box<A>!;',
+        'a as const.M | | A;',
+        'a as const.M & & A;',
+        'a as const.M & | A;',
+        'a as A extends const.M | | B ? C : D;',
+        'a as const.M | & A;',
+        'a as A & B;',
+        'a as A | & B;',
       ]) {
         const valid =
           ts.transpileModule(source, { fileName: `a.${dialect === 'tsx' ? 'tsx' : 'ts'}`, reportDiagnostics: true })

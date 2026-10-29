@@ -134,6 +134,7 @@ enum TokenType {
     AS_UNIQUE_OPERAND_START,
     AS_QUERY_ROOT_START,
     AS_COMPOUND_TYPE_OPERAND_START,
+    AS_INTERSECTION_TYPE_OPERAND_START,
 };
 
 static bool scan_let(TSLexer *lexer);
@@ -3606,7 +3607,7 @@ static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbo
         return !query_end || valid_symbols[AS_QUERY_NAME_END];
     }
     if (valid_symbols[CONST_ASSERTION_CONSEQUENCE_START] || valid_symbols[TYPE_ARGUMENT_START] ||
-        valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] || valid_symbols[AS_UNIQUE_OPERAND_START] || valid_symbols[AS_QUERY_ROOT_START] || valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[NULLABLE_TYPE_START]) {
+        valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] || valid_symbols[AS_UNIQUE_OPERAND_START] || valid_symbols[AS_QUERY_ROOT_START] || valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START] || valid_symbols[NULLABLE_TYPE_START]) {
         return trivia && scan_assertion_type_start(lexer, valid_symbols);
     }
     if (valid_symbols[NON_POSTFIX_TYPE_SUFFIX_END] && trivia && !line_break && lexer->lookahead == '[') {
@@ -3784,7 +3785,9 @@ static bool unique_operand_can_start(TSLexer *lexer) {
     return scan_expression_trivia(lexer, &line_break, NULL) && lexer->lookahead == '.';
 }
 
-static bool assertion_compound_type_operand_can_start(TSLexer *lexer) {
+static bool assertion_compound_type_operand_can_start(TSLexer *lexer, bool intersection) {
+    // TypeScript lets only `&` lead a union operand, and nothing lead an intersection operand.
+    if (lexer->lookahead == '|' || (intersection && lexer->lookahead == '&')) return false;
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
     TSLexerCheckpoint start;
     lexer->get_mark_end_checkpoint(lexer, &start);
@@ -3805,9 +3808,10 @@ static bool assertion_compound_type_operand_can_start(TSLexer *lexer) {
 }
 
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols) {
-    if (valid_symbols[AS_COMPOUND_TYPE_OPERAND_START]) {
-        lexer->result_symbol = AS_COMPOUND_TYPE_OPERAND_START;
-        return assertion_compound_type_operand_can_start(lexer);
+    if (valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START]) {
+        bool intersection = valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START] && !valid_symbols[AS_COMPOUND_TYPE_OPERAND_START];
+        lexer->result_symbol = intersection ? AS_INTERSECTION_TYPE_OPERAND_START : AS_COMPOUND_TYPE_OPERAND_START;
+        return assertion_compound_type_operand_can_start(lexer, intersection);
     }
     if (valid_symbols[AS_QUERY_ROOT_START]) {
         lexer->result_symbol = AS_QUERY_ROOT_START;
@@ -4102,7 +4106,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
          valid_symbols[TYPE_ARGUMENT_CONTINUATION_START] || valid_symbols[AS_LOOKUP_INDEX_START] || valid_symbols[AS_UNIQUE_OPERAND_START] || valid_symbols[ASSERTION_BINDING_IDENTIFIER_START] ||
          valid_symbols[AS_INFER_CONSTRAINT_END] || valid_symbols[NON_POSTFIX_TYPE_SUFFIX_END] || valid_symbols[JSDOC_UNKNOWN_TYPE_END] || valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] || valid_symbols[AS_PARENTHESIZED_TYPE_BOUNDARY] || valid_symbols[AS_LOOKUP_TYPE_BOUNDARY] || valid_symbols[AS_CONSTRAINT_TYPE_BOUNDARY] || valid_symbols[AS_CONSEQUENCE_TYPE_BOUNDARY] ||
          valid_symbols[NONCONDITIONAL_INFER_NAME_END] ||
-         valid_symbols[NULLABLE_TYPE_START] || valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] || valid_symbols[AS_QUERY_NAME_END] || valid_symbols[AS_QUERY_ROOT_START] || valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_PARENTHESIZED_TYPE_END] || valid_symbols[AS_CONDITIONAL_LINE_BREAK] ||
+         valid_symbols[NULLABLE_TYPE_START] || valid_symbols[AS_QUERY_TYPE_ARGUMENTS_START] || valid_symbols[AS_QUERY_NAME_END] || valid_symbols[AS_QUERY_ROOT_START] || valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START] || valid_symbols[AS_PARENTHESIZED_TYPE_END] || valid_symbols[AS_CONDITIONAL_LINE_BREAK] ||
          valid_symbols[QUALIFIED_CONST_ASSERTION_END]) &&
         !valid_symbols[ERROR_RECOVERY]) return scan_const_assertion_context(lexer, valid_symbols);
 

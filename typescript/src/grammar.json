@@ -19077,7 +19077,7 @@
                 "members": [
                   {
                     "type": "SYMBOL",
-                    "name": "_as_compound_type_operand_start"
+                    "name": "_as_intersection_type_operand_start"
                   },
                   {
                     "type": "ALIAS",
@@ -19107,7 +19107,7 @@
                   "members": [
                     {
                       "type": "SYMBOL",
-                      "name": "_as_compound_type_operand_start"
+                      "name": "_as_intersection_type_operand_start"
                     },
                     {
                       "type": "ALIAS",
@@ -19619,7 +19619,7 @@
                 "members": [
                   {
                     "type": "SYMBOL",
-                    "name": "_as_compound_type_operand_start"
+                    "name": "_as_intersection_type_operand_start"
                   },
                   {
                     "type": "ALIAS",
@@ -19649,7 +19649,7 @@
                   "members": [
                     {
                       "type": "SYMBOL",
-                      "name": "_as_compound_type_operand_start"
+                      "name": "_as_intersection_type_operand_start"
                     },
                     {
                       "type": "ALIAS",
@@ -20219,7 +20219,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "CHOICE",
@@ -20264,7 +20264,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "ALIAS",
@@ -20289,7 +20289,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_as_compound_type_operand_start"
+                  "name": "_as_intersection_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -22596,7 +22596,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "ALIAS",
@@ -22627,7 +22627,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "ALIAS",
@@ -22652,7 +22652,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_as_compound_type_operand_start"
+                  "name": "_as_intersection_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -23463,7 +23463,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "ALIAS",
@@ -23488,7 +23488,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_as_compound_type_operand_start"
+                  "name": "_as_intersection_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -24322,7 +24322,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "_as_compound_type_operand_start"
+                "name": "_as_intersection_type_operand_start"
               },
               {
                 "type": "ALIAS",
@@ -24347,7 +24347,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "_as_compound_type_operand_start"
+                  "name": "_as_intersection_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -25526,7 +25526,7 @@
                 "members": [
                   {
                     "type": "SYMBOL",
-                    "name": "_as_compound_type_operand_start"
+                    "name": "_as_intersection_type_operand_start"
                   },
                   {
                     "type": "ALIAS",
@@ -25556,7 +25556,7 @@
                   "members": [
                     {
                       "type": "SYMBOL",
-                      "name": "_as_compound_type_operand_start"
+                      "name": "_as_intersection_type_operand_start"
                     },
                     {
                       "type": "ALIAS",
@@ -51903,6 +51903,10 @@
     {
       "type": "SYMBOL",
       "name": "_as_compound_type_operand_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_as_intersection_type_operand_start"
     }
   ],
   "inline": [
