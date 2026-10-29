@@ -1603,89 +1603,102 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership when decimal type operands change', (name) => {
-    const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
-    try {
-      for (const optional of ['', '?']) {
-        for (const type of [
-          'keyof VALUE',
-          'readonly VALUE[]',
-          '{x:keyof VALUE}',
-          '{[K in keyof VALUE]:number}',
-          '`x${keyof VALUE}`',
-          'keyof (()=>VALUE)',
-          'keyof (()=> | VALUE)',
-          'keyof (()=> & VALUE)',
-          '{x:()=> | VALUE}',
-          '{x:()=> & VALUE}',
-          '{[K in keyof (()=> | VALUE)]:number}',
-          '`x${keyof (()=> & VALUE)}`',
-        ]) {
-          let source = `type F=(${name}${optional}:${type.replace('VALUE', '.5')})=>number;`;
-          let tree: Tree | undefined;
-          let before = '.5';
-          try {
-            tree = parser.parse(source)!;
-            expect(tree.rootNode.hasError).toBe(false);
-            for (const replacement of [
-              '.25',
-              '-.5',
-              '+.5',
-              '- /* sign */ .5',
-              '+ /* sign */ 1',
-              String.raw`\u0078`,
-              String.raw`\u{78}`,
-              String.raw`\u0061\u0073`,
-              '*',
-              '.5',
-            ]) {
-              const start = source.indexOf(before),
-                end = start + before.length;
-              const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(false);
-                    expect(
-                      namesQuery
-                        .captures(current.rootNode)
-                        .filter(({ node }) => node.text === name)
-                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                    ).toEqual([[name, 8, 8 + name.length]]);
-                  }
-                },
-                true
-              );
-              previous.delete();
-              source = next;
-              before = replacement;
+  test.each(['unknown', 'never', 'unique'])(
+    'preserves %s bindings for valid decimal types and rejects invalid edits',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const type of [
+            'keyof VALUE',
+            'readonly VALUE[]',
+            '{x:keyof VALUE}',
+            '{[K in keyof VALUE]:number}',
+            '`x${keyof VALUE}`',
+            'keyof (()=>VALUE)',
+            'keyof (()=> | VALUE)',
+            'keyof (()=> & VALUE)',
+            '{x:()=> | VALUE}',
+            '{x:()=> & VALUE}',
+            '{[K in keyof (()=> | VALUE)]:number}',
+            '`x${keyof (()=> & VALUE)}`',
+          ]) {
+            let source = `type F=(${name}${optional}:${type.replace('VALUE', '.5')})=>number;`;
+            let tree: Tree | undefined;
+            let before = '.5';
+            try {
+              tree = parser.parse(source)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              for (const replacement of [
+                '.25',
+                '-.5',
+                '+.5',
+                '- /* sign */ .5',
+                '+ /* sign */ 1',
+                String.raw`\u0078`,
+                String.raw`\u{78}`,
+                String.raw`\u0061\u0073`,
+                '*',
+                '.5',
+              ]) {
+                const start = source.indexOf(before),
+                  end = start + before.length;
+                const next = source.slice(0, start) + replacement + source.slice(end);
+                const reference = ts.createSourceFile('parameters.ts', next, ts.ScriptTarget.Latest, true);
+                const options = { noLib: true, noResolve: true };
+                const host = ts.createCompilerHost(options);
+                host.getSourceFile = (fileName) => (fileName === 'parameters.ts' ? reference : undefined);
+                const valid =
+                  ts.createProgram(['parameters.ts'], options, host).getSyntacticDiagnostics(reference).length === 0;
+                const previous = tree;
+                tree = compareEditedTree(
+                  parser,
+                  previous,
+                  next,
+                  new Edit({
+                    startIndex: start,
+                    oldEndIndex: end,
+                    newEndIndex: start + replacement.length,
+                    startPosition: position(source, start),
+                    oldEndPosition: position(source, end),
+                    newEndPosition: position(next, start + replacement.length),
+                  }),
+                  (incremental, fresh) => {
+                    expectQueryAgreement(namesQuery, incremental, fresh);
+                    expectQueryAgreement(query!, incremental, fresh);
+                    for (const current of [incremental, fresh]) {
+                      expect(current.rootNode.hasError).toBe(!valid);
+                      const captures = namesQuery.captures(current.rootNode).filter(({ node }) => node.text === name);
+                      if (valid)
+                        expect(captures.map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
+                          [name, 8, 8 + name.length],
+                        ]);
+                      for (const { node } of captures)
+                        expect([node.text, node.startIndex, node.endIndex]).toEqual([name, 8, 8 + name.length]);
+                      expectNodeRanges(current.rootNode, next);
+                    }
+                  },
+                  true
+                );
+                previous.delete();
+                source = next;
+                before = replacement;
+              }
+            } finally {
+              tree?.delete();
             }
-          } finally {
-            tree?.delete();
           }
         }
+      } finally {
+        namesQuery.delete();
+        parser.delete();
       }
-    } finally {
-      namesQuery.delete();
-      parser.delete();
     }
-  });
+  );
   test.each(['unknown', 'never', 'unique'])('requires return operands after leading markers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
     const namesQuery = new Query(

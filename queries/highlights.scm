@@ -35,5 +35,7 @@
   "satisfies"
 ] @keyword
 
+(unique_type "unique" @keyword)
+
 (type_parameter
   ["in" "out"] @keyword)

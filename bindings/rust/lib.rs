@@ -14,7 +14,7 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The supported [willbooster-tree-sitter] runtime is version 15.0.0 or later within 15.x.
+//! Grammar version 18.x supports the [willbooster-tree-sitter] runtime version 15.0.0 or later within 15.x.
 //!
 //! [`Parser`]: https://docs.rs/willbooster-tree-sitter/15.0.0/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/

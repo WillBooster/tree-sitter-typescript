@@ -21,6 +21,11 @@ so this package defines two grammars: `typescript` in `typescript/` and `tsx` in
 [@willbooster/tree-sitter-javascript](https://www.npmjs.com/package/@willbooster/tree-sitter-javascript) and ports its
 external scanner in `common/scanner.h`. The npm package bundles the base grammar in `javascript/grammar.js`, so production installs can regenerate both dialects without installing a separate JavaScript parser binary. The `tsx` grammar also parses JavaScript with [Flow](https://flow.org/) type annotations.
 
+Grammar extensions must use grammar definitions and scanner sources from the same release. The Rust crate
+publishes `common/scanner.h`; the npm package publishes the matching grammar definitions. Regenerate downstream
+parsers and rebuild scanner integrations when upgrading the grammar. The bundled native and Wasm languages
+already pair these components.
+
 An error-free tree does not guarantee TypeScript validity. These grammars accept adjacent opening angles in
 heritage references such as `class C implements Foo<<T>() => T> {}` and `number<<T>() => T>`, which TypeScript
 rejects. Separated angles (`number< <T>() => T>`) and a parenthesized argument (`number<(<T>() => T)>`) are valid.
@@ -84,7 +89,7 @@ fuzzed with. Use version 15.0.0 or later within 15.x:
 
 ```sh
 cargo add willbooster-tree-sitter@15.0.0 --rename tree-sitter
-cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
+cargo add willbooster-tree-sitter-typescript@18.0.0 --rename tree-sitter-typescript
 ```
 
 ```rust

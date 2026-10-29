@@ -1,6 +1,8 @@
 // oxlint-disable unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads the grammar as CommonJS.
 const JavaScript = require('../javascript/grammar');
 
+const TYPE_MODULE_KEYWORDS = ['in', 'out', 'abstract', 'as', 'satisfies', 'is', 'asserts', 'bigint'];
+
 const TYPESCRIPT_CONTEXTUAL_TYPE_NAMES = [
   'accessor',
   'declare',
@@ -33,11 +35,28 @@ const TYPESCRIPT_CONTEXTUAL_KEYWORDS = [
   'new',
 ];
 
-function withTypeArgumentsTarget($, lists) {
-  return lists.map((list) =>
-    list.map((entry) =>
-      entry.type === 'SYMBOL' && entry.name === 'primary_expression' ? $._type_arguments_target : entry
-    )
+function constructorObjectTarget(rule, target) {
+  return {
+    ...rule,
+    content: {
+      ...rule.content,
+      members: rule.content.members.map((member) =>
+        member.type === 'FIELD' && member.name === 'object' ? { ...member, content: target } : member
+      ),
+    },
+  };
+}
+
+function withPrimaryExpressionTargets($, lists, typeArgumentsOnly = []) {
+  return lists.flatMap((list) =>
+    list.some((entry) => entry.type === 'SYMBOL' && entry.name === 'primary_expression')
+      ? (list.some((entry) => typeArgumentsOnly.includes(entry.name))
+          ? [$._type_arguments_target]
+          : [$._type_arguments_target, $._postfix_primary_expression]
+        ).map((target) =>
+          list.map((entry) => (entry.type === 'SYMBOL' && entry.name === 'primary_expression' ? target : entry))
+        )
+      : [list]
   );
 }
 
@@ -63,11 +82,18 @@ const DYNAMIC_PRECEDENCE = {
   // A leading `|` or `&` in a type, which TypeScript allows only at the start of a type: `a < b || c > (d)` compares
   // rather than calling `a` with `b | | c`.
   LEADING_TYPE_OPERATOR: -4,
+  // Prefer assertion-only type continuations over value postfix readings such as `value as T!`.
+  QUALIFIED_ASSERTION_TYPE: 1,
 };
 
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
     name: dialect,
+
+    extras: ($, previous) => [
+      ...previous.filter((rule) => rule.type !== 'PATTERN'),
+      /[\s\p{Zs}\u0085\uFEFF\u2028\u2029\u200B]/u,
+    ],
 
     externals: ($, previous) => [
       ...previous,
@@ -102,17 +128,100 @@ module.exports = function defineGrammar(dialect) {
       $._class_extends_end,
       $._class_extends_yield_identifier,
       $._class_extends_await_identifier,
+      $._const_assertion_type_suffix,
+      $._const_assertion_non_nullable_suffix,
+      $._const_assertion_name_end,
+      $._const_assertion_consequence_start,
+      $._qualified_const_assertion_end,
+      $._as_const_type,
+      $._as_const_qualified_name,
+      $._const_generic_name,
+      $._type_argument_start,
+      $._type_argument_continuation_start,
+      $._as_lookup_index_start,
+      $._assertion_binding_identifier_start,
+      $._as_infer_constraint_end,
+      $._non_postfix_type_suffix_end,
+      $._nonconditional_infer_name_end,
+      $._nullable_type_start,
+      $._as_query_type_arguments_start,
+      $._as_query_name_end,
+      $._as_parenthesized_type_end,
+      $._as_conditional_line_break,
+      $._as_type_predicate_start,
+      $._as_this_type_predicate_start,
+      $._as_asserts_start,
+      $._as_asserts_predicate_start,
+      $._type_argument_opening,
+      $._jsdoc_unknown_type_end,
+      $._as_const_assertion,
+      $._as_parenthesized_type_boundary,
+      $._as_lookup_type_boundary,
+      $._as_constraint_type_boundary,
+      $._as_consequence_type_boundary,
+      $._as_type_identifier,
+      $._as_type_reference_start,
+      $._as_non_array_type_reference_start,
+      $._as_type_identifier_before_angle,
+      $._as_non_array_type_identifier_before_angle,
+      $._as_constructor_type_start,
+      $._as_reserved_type_identifier,
+      $._as_formal_parameter_boundary,
+      $._as_non_array_type_identifier,
+      $._as_public_identifier,
+      $._as_override_identifier,
+      $._as_parameter_array_start,
+      $._as_private_identifier,
+      $._as_protected_identifier,
+      $._as_unique_operand_start,
+      $._as_query_root_start,
+      $._as_compound_type_operand_start,
+      $._as_intersection_type_operand_start,
     ],
 
     supertypes: ($, previous) => [
-      // Keeps JavaScript's constructor chain, unreachable here (see `new_expression`), out of grammar.json.
-      ...previous.filter((rule) => !['_constructor', '_constructor_chain_base'].includes(rule.name)),
+      ...previous,
       $.type,
       $.primary_type,
+      $._postfix_primary_expression,
+      $._postfix_expression_target,
+      $._constructor_expression_target,
+      $._constructor_member_target,
       $._default_export_declaration,
       $._decorated_export_declaration,
       $._decorated_export_ambient_class_declaration,
       $._conditional_right_type,
+      $._as_type,
+      $._as_const_assertion_type,
+      $._as_const_assertion_primary_type,
+      $._as_function_type,
+      $._as_non_postfix_function_type,
+      $._as_non_postfix_type,
+      $._as_non_postfix_primary_type,
+      $._as_non_postfix_operator_primary_type,
+      $._as_non_postfix_readonly_operand,
+      $._as_primary_type,
+      $._as_constraint_type,
+      $._as_constraint_primary_type,
+      $._qualified_const_assertion_type,
+      $._const_assertion_primary_type,
+      $._const_assertion_postfix_type,
+      $._const_assertion_non_array_type,
+      $._const_assertion_non_postfix_non_array_type,
+      $._const_assertion_constraint_scoped_type,
+      $._const_assertion_constraint_scoped_primary_type,
+      $._const_assertion_operator_operand,
+      $._const_assertion_readonly_operand,
+      $._const_assertion_constraint_operator_operand,
+      $._const_assertion_constraint_readonly_operand,
+      $._const_assertion_constraint_type,
+      $._const_assertion_constraint_primary_type,
+      $._const_assertion_constraint_postfix_type,
+      $._ordinary_assertion_postfix_type,
+      $._const_assertion_non_postfix_constraint_type,
+      $._const_assertion_non_postfix_constraint_primary_type,
+      $._const_assertion_non_postfix_constraint_operator_primary_type,
+      $._const_assertion_non_postfix_constraint_readonly_operand,
       $._conditional_parameter_pattern,
       $._implements_keyword_type,
       $._implements_keyword_primary_type,
@@ -124,85 +233,94 @@ module.exports = function defineGrammar(dialect) {
       $._extends_primary,
     ],
 
-    precedences: ($, previous) => [
-      ...withTypeArgumentsTarget($, previous),
-      ['member', 'template_call', 'new', 'call', $._extends_expression],
-      ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
-      // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
-      // expression (`<T>a<B>` before a line break and `[0]`).
-      ['member', 'unary'],
-      [$.update_expression, 'unary'],
-      ['extends', 'instantiation'],
-      ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
-      // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
-      // `==`, `&`, `&&`, `||`, and `??`.
-      [
-        'binary_exp',
-        'binary_times',
-        'binary_plus',
-        'binary_shift',
-        'binary_relation',
-        'binary',
-        'binary_equality',
-        'bitwise_and',
-        'bitwise_xor',
-        'bitwise_or',
-        'logical_and',
-        'logical_or',
-        'ternary',
-      ],
-      [
-        $.index_type_query,
-        $.readonly_type,
-        $.intersection_type,
-        $.union_type,
-        $.conditional_type,
-        $.function_type,
-        $.constructor_type,
-        'binary',
-        $.type_predicate,
-      ],
-      [$.mapped_type_clause, $._type_arguments_target],
-      [$.accessibility_modifier, $._type_arguments_target],
-      ['unary_void', $.expression],
-      [$.extends_clause, $._type_arguments_target],
-      ['unary', 'assign'],
-      ['declaration', $.expression],
-      [$.predefined_type, $.unary_expression],
-      [$.type, $.flow_maybe_type],
-      [$.tuple_type, $.array_type, $.pattern, $.type],
-      [$.array_type, $.lookup_type, $.index_type_query, $.readonly_type],
-      [$.readonly_type, $.pattern],
-      [$.readonly_type, $._type_arguments_target],
-      [$.type_query, $.subscript_expression, $.expression],
-      [$.type_query, $._type_query_subscript_expression],
-      [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
-      // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
-      [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
-      [$.nested_type_identifier, $.predefined_type],
-      [$._generic_nested_type_identifier, $.predefined_type],
-      [$.as_expression, $.satisfies_expression, $.primary_type],
-      [$._type_query_member_expression, $.member_expression],
-      [$._type_query_member_expression, $._type_arguments_target],
-      [$._type_query_subscript_expression, $.subscript_expression],
-      [$._type_query_subscript_expression, $._type_arguments_target],
-      [$._type_query_call_expression, $._type_arguments_target],
-      [$._type_query_instantiation_expression, $._type_arguments_target],
-      [$.type_query, $._type_arguments_target],
-      [$.override_modifier, $._type_arguments_target],
-      [$.decorator_call_expression, $.decorator],
-      [$.literal_type, $.pattern],
-      [$.predefined_type, $.pattern],
-      [$.call_expression, $._type_query_call_expression],
-      [$.new_expression, $._type_arguments_target],
-      [$.meta_property, $._type_arguments_target],
-      [$.construct_signature, $._property_name],
-    ],
+    precedences: ($, previous) =>
+      assertionTypePrecedences($, [
+        ...withPrimaryExpressionTargets($, previous),
+        ['member', 'template_call', 'new', 'call', $._extends_expression],
+        ['call', 'instantiation', 'unary', $.await_expression, 'binary', $.arrow_function],
+        // A type assertion's operand takes the member accesses and subscripts that follow it, also after an instantiation
+        // expression (`<T>a<B>` before a line break and `[0]`).
+        ['member', 'unary'],
+        [$.update_expression, 'unary'],
+        ['extends', 'instantiation'],
+        ['new', 'generic_call', 'instantiation', 'unary', 'binary'],
+        // `as` and `satisfies` bind like the relational operators: looser than `**`, `*`, `+`, and `<<`, and tighter than
+        // `==`, `&`, `&&`, `||`, and `??`.
+        [
+          'binary_exp',
+          'binary_times',
+          'binary_plus',
+          'binary_shift',
+          'binary_relation',
+          'binary',
+          'binary_equality',
+          'bitwise_and',
+          'bitwise_xor',
+          'bitwise_or',
+          'logical_and',
+          'logical_or',
+          'ternary',
+        ],
+        [
+          $.index_type_query,
+          $.readonly_type,
+          $.intersection_type,
+          $.union_type,
+          $.conditional_type,
+          $.function_type,
+          $.constructor_type,
+          'binary',
+          $.type_predicate,
+        ],
+        [$.mapped_type_clause, $._type_arguments_target],
+        [$.accessibility_modifier, $._type_arguments_target],
+        ['unary_void', $.expression],
+        [$.extends_clause, $._type_arguments_target],
+        ['unary', 'assign'],
+        ['declaration', $.expression],
+        [$.predefined_type, $.unary_expression],
+        [$.type, $.flow_maybe_type],
+        [$.tuple_type, $.array_type, $.pattern, $.type],
+        [$.array_type, $.lookup_type, $.index_type_query, $.readonly_type],
+        [$.readonly_type, $.pattern],
+        [$.readonly_type, $._type_arguments_target],
+        [$.type_query, $.subscript_expression, $.expression],
+        [$.type_query, $._type_query_subscript_expression],
+        [$.nested_type_identifier, $.generic_type, $.primary_type, $.lookup_type, $.index_type_query, $.type],
+        // A qualified type name takes every `.` and name that follow it: `x as a.b.C` is not `(x as a.b).C`.
+        [$.nested_identifier, $._in_nested_identifier, $.nested_type_identifier],
+        [$._const_assertion_type_name, $.primary_type],
+        [$._const_assertion_generic_name, $.primary_type],
+        [$._const_assertion_nested_identifier, $.primary_type],
+        [$.nested_type_identifier, $.predefined_type],
+        [$._generic_nested_type_identifier, $.predefined_type],
+        [$.as_expression, $.satisfies_expression, $.primary_type],
+        [$._type_query_member_expression, $.member_expression],
+        [$._type_query_member_expression, $._type_arguments_target],
+        [$._type_query_subscript_expression, $.subscript_expression],
+        [$._type_query_subscript_expression, $._type_arguments_target],
+        [$._type_query_call_expression, $._type_arguments_target],
+        [$._type_query_instantiation_expression, $._type_arguments_target],
+        [$.type_query, $._type_arguments_target],
+        [$.override_modifier, $._type_arguments_target],
+        [$.decorator_call_expression, $.decorator],
+        [$.literal_type, $.pattern],
+        [$.predefined_type, $.pattern],
+        [$.call_expression, $._type_query_call_expression],
+        [$.new_expression, $._type_arguments_target],
+        [$.meta_property, $._type_arguments_target],
+        [$.construct_signature, $._property_name],
+      ]),
 
     conflicts: ($, previous) => [
       [$._extends_expression, $._extends_call],
       [$._extends_primary, $._extends_call, $._extends_instantiation],
       [$._extends_primary, $._extends_call, $._extends_new, $._extends_argumentless_new, $._extends_instantiation],
+      [$._type_arguments_target, $._const_assertion_non_array_type],
+      [$._type_arguments_target, $._const_assertion_predefined_type],
+      [$.expression, $.call_expression, $._postfix_expression_target],
+      [$._postfix_primary_expression, $._type_arguments_target],
+      [$._const_assertion_predefined_type, $.predefined_type],
       [$.member_expression, $._type_query_member_expression_in_type_annotation],
       [$.call_expression, $._type_query_call_expression_in_type_annotation],
       [$._arrow_predefined_parent_start, $._arrow_predefined_function_start],
@@ -216,14 +334,24 @@ module.exports = function defineGrammar(dialect) {
       [$.asserts, $.primary_type],
       [$.arrow_function, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $._type_query_identifier],
+      [$._postfix_primary_expression, $._type_query_identifier],
+      [$._type_arguments_target, $._type_query_identifier, $._postfix_primary_expression],
       [$._type_arguments_target, $.internal_module],
       [$._type_arguments_target, $.module],
       [$.import_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier, $._module_export_name],
       [$.export_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier],
-      ...withTypeArgumentsTarget($, previous),
+      ...withPrimaryExpressionTargets($, previous, ['pattern', 'rest_pattern']),
       [$.for_in_clause, $._lexical_binding_identifier],
+      [$.for_in_clause, $._constructor_atom],
+      [
+        $.new_expression,
+        $._constructor,
+        $._constructor_tag,
+        $._argumentless_new_expression,
+        $._constructor_instantiation_expression,
+      ],
       [$._field_name, $._property_name],
       [$._property_name, $.public_field_definition],
 
@@ -233,15 +361,18 @@ module.exports = function defineGrammar(dialect) {
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
       [$._call_signature, $.function_type],
-      [$._call_signature, $.constructor_type],
 
       [$._type_arguments_target, $._parameter_name],
+      [$._postfix_primary_expression, $._parameter_name],
       [$._type_arguments_target, $._parameter_name, $.primary_type],
       [$._type_arguments_target, $.literal_type],
+      [$._postfix_primary_expression, $.literal_type],
       [$._type_arguments_target, $.literal_type, $.rest_pattern],
       [$._type_arguments_target, $.predefined_type, $.rest_pattern],
       [$._type_arguments_target, $.primary_type],
+      [$._postfix_primary_expression, $.primary_type],
       [$._type_arguments_target, $.predefined_type],
+      [$._postfix_primary_expression, $.predefined_type],
       [$._type_arguments_target, $.pattern, $.primary_type],
       [$._parameter_name, $.primary_type],
       [$.pattern, $.primary_type],
@@ -249,6 +380,35 @@ module.exports = function defineGrammar(dialect) {
       [$.rest_pattern, $.primary_expression],
       [$.for_in_clause, $.primary_expression],
 
+      [$._const_assertion_constraint_primary_type, $._const_assertion_constraint_scoped_primary_type],
+      [$._const_assertion_constraint_scoped_type, $._const_assertion_constraint_type],
+      [$._const_assertion_constraint_scoped_type, $._const_assertion_constraint_type],
+      [$._const_assertion_non_postfix_constraint_infer_type, $._const_assertion_constraint_infer_type],
+      [$._as_infer_type],
+      [$.array, $.array_pattern, $._as_guarded_tuple_type],
+      [$.array, $._as_guarded_tuple_type],
+      [$.formal_parameters, $._as_formal_parameters],
+      [$._as_type, $._qualified_const_assertion_type],
+      [$._as_constraint_type, $._const_assertion_constraint_type, $._const_assertion_constraint_scoped_type],
+      [$._as_primary_type, $._const_assertion_primary_type],
+      [
+        $._as_constraint_primary_type,
+        $._const_assertion_constraint_primary_type,
+        $._const_assertion_constraint_scoped_primary_type,
+      ],
+      [$._ordinary_assertion_postfix_type, $.accessibility_modifier],
+      [$._ordinary_assertion_postfix_type, $.override_modifier],
+      [$._type_arguments_target, $._const_assertion_operator_operand],
+      [$._as_infer_type, $._as_non_postfix_infer_type],
+      [
+        $._type_arguments_target,
+        $._as_primitive_type_name,
+        $._as_primitive_generic_name,
+        $._as_primitive_nested_identifier,
+      ],
+      [$._as_constraint_primary_type, $._const_assertion_constraint_primary_type],
+      [$._type_arguments_target, $._as_primary_type],
+      [$.call_expression, $._as_import_call],
       [$._tuple_label, $.primary_type],
       [$._tuple_label, $.literal_type],
       [$._tuple_label, $.index_type_query],
@@ -279,15 +439,7 @@ module.exports = function defineGrammar(dialect) {
             [$.jsx_opening_element, $.jsx_self_closing_element, $.type_parameter],
             [$.jsx_namespace_name, $.primary_type],
           ]),
-      [
-        $.primary_expression,
-        $.call_expression,
-        $._argumentless_new_expression,
-        $.new_expression,
-        $.instantiation_expression,
-      ],
       [$.primary_expression, $.call_expression, $.instantiation_expression],
-      [$.expression, $.call_expression],
       [$.new_expression, $._argumentless_new_expression, $._property_name],
     ],
 
@@ -295,12 +447,25 @@ module.exports = function defineGrammar(dialect) {
       $._expression_reserved_identifier,
       ...previous.filter((rule) => !['_formal_parameter', '_call_signature'].includes(rule.name)),
       $._type_identifier,
+      $._infer_type_identifier,
+      $._as_identifier,
+      $._as_non_array_identifier,
       $._type_reference_identifier,
       $._contextual_type_identifier,
       $._jsx_start_opening_element,
     ],
 
+    reserved: {
+      as_type_names: () => ['const'],
+      assertion_bindings: () => [...JavaScript.grammar.reserved.global, 'enum'],
+    },
+
     rules: {
+      // TypeScript's scanner reads U+0085 as whitespace, so a name cannot contain it.
+      identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
+
+      private_property_identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
+
       labeled_statement: ($) =>
         prec.dynamic(
           -1,
@@ -404,16 +569,166 @@ module.exports = function defineGrammar(dialect) {
           field('body', $.statement_block)
         ),
 
-      call_expression: ($) => callExpression($),
+      call_expression: ($) =>
+        choice(
+          prec(
+            'call',
+            seq(
+              field('function', choice(alias($._postfix_expression_target, $.expression), $.import)),
+              field('arguments', $.arguments)
+            )
+          ),
+          // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
+          // could also read the input, as in `a < b > (c)`, TypeScript reads a generic call. A tag with type arguments
+          // is parsed like a generic call. Optional type arguments in the `template_call` alternative below would make
+          // the parser commit to a tagged template at the `<` of `f<T>(x)`.
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            prec(
+              'generic_call',
+              seq(
+                field('function', $._type_arguments_target),
+                field('type_arguments', $.type_arguments),
+                field('arguments', choice($.arguments, $.template_string))
+              )
+            )
+          ),
+          prec(
+            'template_call',
+            seq(
+              field('function', alias($._postfix_primary_expression, $.primary_expression)),
+              field('arguments', $.template_string)
+            )
+          ),
+          prec(
+            'member',
+            seq(
+              field('function', $.primary_expression),
+              field('optional_chain', $.optional_chain),
+              field('type_arguments', optional($.type_arguments)),
+              field('arguments', $.arguments)
+            )
+          ),
+          // An instantiation expression is no primary expression, but it may be called through `?.` (`f<T>?.(x)`). Without
+          // a precedence, GLR also keeps the reading in which it is the object of `?.[0]` or `?.x`.
+          seq(
+            field('function', $.instantiation_expression),
+            field('optional_chain', $.optional_chain),
+            field('type_arguments', optional($.type_arguments)),
+            field('arguments', $.arguments)
+          )
+        ),
 
-      // JavaScript's constructor chain ends where its scanner emits `_argumentless_new_end`, before a `<` is read.
-      // TypeScript's constructor takes type arguments, `!`, and instantiation expressions, whose readings GLR keeps until
-      // the type-arguments-end tokens decide them, so it stays a primary expression.
-      new_expression: ($) => newExpression($),
+      _postfix_primary_expression: ($) =>
+        choice(
+          ...expressionMembers($, dialect, JavaScript.grammar.rules.primary_expression.members, [
+            'arrow_function',
+            '_argumentless_new_expression',
+          ]),
+          $.non_null_expression
+        ),
+      _postfix_expression_target: ($) =>
+        choice(alias($._postfix_primary_expression, $.primary_expression), $.instantiation_expression),
+      subscript_expression: ($) =>
+        prec.right(
+          'member',
+          seq(
+            field('object', alias($._postfix_expression_target, $.expression)),
+            optional(field('optional_chain', $.optional_chain)),
+            '[',
+            field('index', $._expressions),
+            ']'
+          )
+        ),
+
+      _constructor_atom: ($, previous) => choice(...expressionMembers($, dialect, previous.members)),
+      _constructor: ($) =>
+        choice(
+          alias($._constructor_member_target, $.primary_expression),
+          alias($._argumentless_new_expression, $.new_expression)
+        ),
+      _constructor_member_target: ($) =>
+        choice(
+          ...expressionMembers($, dialect, JavaScript.grammar.rules._constructor.members, [
+            '_argumentless_new_expression',
+          ]),
+          alias($._constructor_non_null_expression, $.non_null_expression)
+        ),
+      _constructor_non_null_expression: ($) => prec('member', seq(alias($._constructor, $.primary_expression), '!')),
+      _constructor_expression_target: ($) =>
+        choice(
+          alias($._constructor_chain_base, $.primary_expression),
+          alias($._constructor_instantiation_expression, $.instantiation_expression)
+        ),
+      _constructor_member: ($, previous) =>
+        constructorObjectTarget(previous, alias($._constructor_expression_target, $.expression)),
+      _constructor_subscript: ($, previous) =>
+        constructorObjectTarget(previous, alias($._constructor_expression_target, $.expression)),
+      _constructor_tag: ($, previous) =>
+        choice(
+          previous,
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            prec(
+              'generic_call',
+              seq(
+                field('function', alias($._constructor_member_target, $.primary_expression)),
+                optional($._argumentless_new_end),
+                field('type_arguments', $.type_arguments),
+                field('arguments', $.template_string)
+              )
+            )
+          )
+        ),
+      _constructor_instantiation_expression: ($) =>
+        instantiationExpression(
+          $,
+          alias($._constructor_member_target, $.primary_expression),
+          optional($._argumentless_new_end)
+        ),
+
+      // Unparenthesized calls cannot be constructor targets; scoped instantiations can feed constructor member chains.
+      new_expression: ($) =>
+        choice(
+          prec(
+            'new',
+            seq(
+              'new',
+              field('constructor', alias($._constructor_member_target, $.primary_expression)),
+              field('arguments', $.arguments)
+            )
+          ),
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            prec(
+              'new',
+              seq(
+                'new',
+                field('constructor', alias($._constructor_member_target, $.primary_expression)),
+                optional($._argumentless_new_end),
+                field('type_arguments', $.type_arguments),
+                field('arguments', $.arguments)
+              )
+            )
+          )
+        ),
 
       // TypeScript reads `new A<B>c` as comparisons, but `new A<B>` before a line break and `c` as a `new` with type
       // arguments, which also take precedence over an extends clause's (`class C extends new A<B>, D {}`).
-      _argumentless_new_expression: ($) => argumentlessNewExpression($),
+      _argumentless_new_expression: ($) =>
+        choice(
+          seq('new', field('constructor', alias($._constructor, $.primary_expression)), $._argumentless_new_end),
+          prec.dynamic(
+            DYNAMIC_PRECEDENCE.TYPE_ARGUMENTS,
+            seq(
+              'new',
+              field('constructor', alias($._constructor_member_target, $.primary_expression)),
+              optional($._argumentless_new_end),
+              field('type_arguments', $.type_arguments),
+              $._new_type_arguments_end
+            )
+          )
+        ),
 
       assignment_expression: ($) =>
         prec.right(
@@ -426,7 +741,7 @@ module.exports = function defineGrammar(dialect) {
       _lhs_expression: ($, previous) =>
         choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
 
-      binary_expression: withShiftPrefix,
+      binary_expression: withTypeAngleOperators,
 
       await_expression: (_, previous) => {
         const members = previous.content.content.members;
@@ -454,7 +769,13 @@ module.exports = function defineGrammar(dialect) {
 
       // The primary expressions that type arguments in an expression may follow: TypeScript gives the type arguments
       // after `new A` to the `new` (`new A<T>()`, `new new A<T>()`), so a `new` without arguments takes none.
-      _type_arguments_target: ($) => typeArgumentsTarget($, dialect),
+      _type_arguments_target: ($) =>
+        choice(
+          ...expressionMembers($, dialect, JavaScript.grammar.rules.primary_expression.members, [
+            '_argumentless_new_expression',
+          ]),
+          $.non_null_expression
+        ),
 
       _expression_reserved_identifier: () => expressionReservedIdentifier(),
 
@@ -542,7 +863,7 @@ module.exports = function defineGrammar(dialect) {
 
       _jsx_start_opening_element: ($) =>
         seq(
-          '<',
+          typeAngleOpening($),
           optional(
             seq(
               choice(
@@ -861,15 +1182,608 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       type_assertion: ($) =>
-        prec.left('unary', seq(alias($._unprefixed_type_arguments, $.type_arguments), $.expression)),
+        prec.left('unary', seq(alias($._assertion_type_arguments, $.type_arguments), $.expression)),
 
       as_expression: ($) =>
-        prec.left('binary', seq($.expression, 'as', choice('const', $.type), optional($._type_assertion_context))),
+        prec.left(
+          'binary',
+          seq(
+            $.expression,
+            'as',
+            choice(
+              seq(alias($._as_const_assertion_type, $.type), $._qualified_const_assertion_end),
+              seq(ordinaryAssertionType($), $._qualified_const_assertion_end),
+              prec.dynamic(
+                DYNAMIC_PRECEDENCE.QUALIFIED_ASSERTION_TYPE,
+                seq(alias($._qualified_const_assertion_type, $.type), $._qualified_const_assertion_end)
+              )
+            ),
+            optional($._type_assertion_context)
+          )
+        ),
+
+      _as_type: ($) =>
+        choice(alias($._as_primary_type, $.primary_type), alias($._const_assertion_readonly_type, $.readonly_type)),
+      _as_const_assertion_type: ($) => alias($._as_const_assertion_primary_type, $.primary_type),
+      _as_const_assertion_primary_type: ($) => alias($._as_const_assertion, 'const'),
+      _as_function_type: ($) =>
+        choice(alias($._as_arrow_function_type, $.function_type), alias($._as_constructor_type, $.constructor_type)),
+      _as_formal_parameters: ($) => assertionFormalParameters($),
+      _as_required_array_parameter: ($) => requiredParameter($, $._as_modifier_array_parameter_name),
+      _as_optional_array_parameter: ($) => optionalParameter($, $._as_modifier_array_parameter_name),
+      _as_modifier_array_parameter_name: ($) =>
+        seq(
+          repeat(field('decorator', $.decorator)),
+          choice(
+            seq($.accessibility_modifier, optional($.override_modifier), optional('readonly')),
+            seq($.override_modifier, optional('readonly')),
+            'readonly'
+          ),
+          choice($._const_assertion_type_suffix, $._as_parameter_array_start),
+          field('pattern', $.pattern)
+        ),
+      _as_guarded_tuple_type: ($) => tupleType($, $._as_parameter_array_start),
+      _as_arrow_function_type: ($) =>
+        functionType($, {
+          type: assertionType($),
+          predicate: choice(
+            alias($._as_type_predicate, $.type_predicate),
+            alias($._as_this_type_predicate, $.type_predicate)
+          ),
+          asserts: alias($._as_asserts_type, $.asserts),
+          parameters: assertionFunctionParameters($),
+          end: $._qualified_const_assertion_end,
+        }),
+      _as_constructor_type: ($) =>
+        constructorType($, {
+          start: $._as_constructor_type_start,
+          type: assertionType($),
+          predicate: choice(
+            alias($._as_type_predicate, $.type_predicate),
+            alias($._as_this_type_predicate, $.type_predicate)
+          ),
+          asserts: alias($._as_asserts_type, $.asserts),
+          parameters: assertionFunctionParameters($),
+          end: $._qualified_const_assertion_end,
+        }),
+      _as_type_predicate: ($) =>
+        seq(
+          $._as_type_predicate_start,
+          typePredicate(
+            $,
+            assertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start,
+            false
+          )
+        ),
+      _as_asserts_predicate: ($) =>
+        seq(
+          $._as_asserts_predicate_start,
+          typePredicate(
+            $,
+            assertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start
+          )
+        ),
+      _as_bare_asserts_type: ($) =>
+        seq(
+          $._as_asserts_start,
+          assertsType($, false, reserved('assertion_bindings', $.identifier), $._assertion_binding_identifier_start)
+        ),
+      _as_postfix_asserts_type: ($) =>
+        seq(
+          $._as_asserts_start,
+          'asserts',
+          alias($._as_non_postfix_asserts_predicate, $.type_predicate),
+          choice($._const_assertion_type_suffix, $._const_assertion_non_nullable_suffix)
+        ),
+      _as_non_postfix_asserts_predicate: ($) =>
+        seq(
+          $._as_asserts_predicate_start,
+          typePredicate(
+            $,
+            nonPostfixAssertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start
+          )
+        ),
+      _as_this_type_predicate: ($) => assertionThisTypePredicate($, assertionType($)),
+      _as_postfix_this_type_predicate: ($) =>
+        seq(
+          assertionThisTypePredicate($, nonPostfixAssertionType($)),
+          choice($._const_assertion_type_suffix, $._const_assertion_non_nullable_suffix)
+        ),
+      _as_asserts_type: ($) => seq($._as_asserts_start, 'asserts', alias($._as_asserts_predicate, $.type_predicate)),
+
+      _as_infer_type: ($) =>
+        choice(
+          seq('infer', $._infer_type_identifier),
+          prec.right(
+            seq('infer', $._infer_type_identifier, 'extends', assertionConstraintType($), $._as_infer_constraint_end)
+          )
+        ),
+      _as_primary_type: ($) => choice(...ordinaryAssertionPrimaryTypes($)),
+      _as_parenthesized_type: ($) =>
+        seq('(', ordinaryAssertionType($), $._as_parenthesized_type_boundary, ')', $._as_parenthesized_type_end),
+      _as_primitive_type_name: ($) => primitiveQualifiedTypeName($, false),
+      _as_primitive_generic_name: ($) => primitiveQualifiedTypeName($, true),
+      _as_primitive_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field('name', alias($._as_primitive_generic_name, $.nested_type_identifier)),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
+      _as_primitive_nested_identifier: ($) =>
+        assertionNestedIdentifier(
+          $,
+          alias(primitiveNamespaceWords($), $.identifier),
+          $._as_primitive_nested_identifier
+        ),
+
+      _as_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            genericTypeName(
+              $,
+              $._as_type_identifier_before_angle,
+              $._as_generic_import_member,
+              $._as_type_reference_start
+            ),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
+      _as_non_array_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            genericTypeName(
+              $,
+              $._as_non_array_type_identifier_before_angle,
+              $._as_generic_import_member,
+              $._as_non_array_type_reference_start
+            ),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
+      _as_nested_type_identifier: ($) => seq($._as_type_reference_start, nestedTypeIdentifier($, false)),
+      _as_non_array_nested_type_identifier: ($) =>
+        seq($._as_non_array_type_reference_start, nestedTypeIdentifier($, false)),
+      _as_type_query: ($) =>
+        prec.right(
+          seq(
+            'typeof',
+            $._as_query_root_start,
+            choice(
+              seq(assertionQueryName($), $._as_query_name_end),
+              seq(alias($._as_import_call, $.call_expression), $._as_query_name_end),
+              seq(alias($._as_import_member, $.member_expression), $._as_query_name_end),
+              alias($._typed_import_type, $.call_expression),
+              alias($._as_type_query_instantiation, $.instantiation_expression),
+              alias($._as_import_query_instantiation, $.instantiation_expression)
+            )
+          )
+        ),
+      _as_type_query_member: ($) =>
+        seq(
+          assertionQueryName($, 'object'),
+          '.',
+          $._as_query_name_end,
+          field('property', reserved('properties', alias($.identifier, $.property_identifier)))
+        ),
+      _as_type_query_instantiation: ($) =>
+        seq(
+          assertionQueryName($, 'function'),
+          $._as_query_type_arguments_start,
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
+        ),
+      _as_import_call: ($) => seq(field('function', $.import), field('arguments', $.arguments)),
+      _as_import_query_instantiation: ($) =>
+        seq(
+          field('function', alias($._as_generic_import_member, $.member_expression)),
+          field('type_arguments', alias($._unprefixed_type_arguments, $.type_arguments))
+        ),
+      _as_import_member: ($) => assertionImportMember($, false),
+      _as_generic_import_member: ($) => assertionImportMember($, true),
+      _as_union_type: ($) => binaryType($, '|', alias($._as_type, $.type), $._as_compound_type_operand_start),
+      _as_intersection_type: ($) =>
+        binaryType($, '&', alias($._as_type, $.type), $._as_intersection_type_operand_start),
+      _as_conditional_type: ($) =>
+        assertionConditionalType($, alias($._as_type, $.type), {
+          right: ordinaryAssertionConstraintType($),
+          consequence: ordinaryAssertionType($),
+          alternative: ordinaryAssertionType($),
+        }),
+
+      _as_constraint_type: ($) =>
+        choice(
+          alias($._as_constraint_primary_type, $.primary_type),
+          alias($._const_assertion_constraint_readonly_type, $.readonly_type)
+        ),
+      _as_constraint_primary_type: ($) => choice(...ordinaryAssertionPrimaryTypes($, true)),
+      _as_identifier: ($) =>
+        alias(
+          choice(
+            $._as_type_identifier,
+            $._as_reserved_type_identifier,
+            $._as_public_identifier,
+            $._as_private_identifier,
+            $._as_protected_identifier,
+            $._as_override_identifier
+          ),
+          $.type_identifier
+        ),
+      _as_non_array_identifier: ($) => alias($._as_non_array_type_identifier, $.type_identifier),
+      _as_constraint_union_type: ($) =>
+        binaryType($, '|', alias($._as_constraint_type, $.type), $._as_compound_type_operand_start),
+      _as_constraint_intersection_type: ($) =>
+        binaryType($, '&', alias($._as_constraint_type, $.type), $._as_intersection_type_operand_start),
+      _qualified_const_assertion_type: ($) =>
+        choice(
+          alias($._const_assertion_primary_type, $.primary_type),
+          alias($._const_assertion_readonly_type, $.readonly_type),
+          alias($._as_infer_type, $.infer_type)
+        ),
+      _const_assertion_primary_type: ($) =>
+        choice(
+          ...constAssertionPostfixTypes($),
+          ...constAssertionPrefixTypes($),
+          alias($._const_assertion_union_type, $.union_type),
+          alias($._const_assertion_intersection_type, $.intersection_type),
+          alias($._const_assertion_conditional_type, $.conditional_type)
+        ),
+
+      _const_assertion_postfix_type: ($) => choice(...constAssertionPostfixTypes($)),
+
+      _const_assertion_array_type: ($) =>
+        seq(alias($._const_assertion_postfix_type, $.primary_type), $._const_assertion_type_suffix, '[', ']'),
+
+      _const_assertion_lookup_type: ($) =>
+        seq(
+          alias($._const_assertion_postfix_type, $.primary_type),
+          $._const_assertion_type_suffix,
+          '[',
+          $._as_lookup_index_start,
+          assertionType($),
+          $._as_lookup_type_boundary,
+          ']'
+        ),
+
+      _const_assertion_union_type: ($) => assertionBinaryType($, '|'),
+
+      _const_assertion_intersection_type: ($) => assertionBinaryType($, '&'),
+
+      _const_assertion_conditional_type: ($) => constAssertionConditionalType($),
+
+      _const_assertion_parenthesized_type: ($) =>
+        seq('(', alias($._qualified_const_assertion_type, $.type), $._as_parenthesized_type_boundary, ')'),
+
+      non_nullable_type: ($) =>
+        prec.left(
+          'member',
+          seq(
+            alias($._const_assertion_constraint_postfix_type, $.primary_type),
+            $._const_assertion_non_nullable_suffix,
+            '!'
+          )
+        ),
+
+      _const_assertion_predefined_type: () =>
+        choice(
+          'any',
+          'number',
+          'boolean',
+          'string',
+          'symbol',
+          'bigint',
+          'void',
+          'unknown',
+          'never',
+          'object',
+          alias(seq('unique', 'symbol'), 'unique symbol')
+        ),
+
+      _const_assertion_postfix_prefix_non_nullable_type: ($) =>
+        prec.right(seq('!', alias($._const_assertion_non_array_type, $.primary_type))),
+      _const_assertion_non_postfix_prefix_non_nullable_type: ($) =>
+        prec.right(
+          seq(
+            '!',
+            alias($._const_assertion_non_postfix_non_array_type, $.primary_type),
+            $._qualified_const_assertion_end
+          )
+        ),
+      _const_assertion_non_postfix_non_array_type: ($) =>
+        choice(
+          alias($._const_assertion_non_postfix_prefix_non_nullable_type, $.non_nullable_type),
+          alias($._const_assertion_nullable_type, $.flow_maybe_type),
+          alias($._as_this_type_predicate, $.type_predicate),
+          alias($._as_asserts_type, $.asserts)
+        ),
+      _const_assertion_non_array_type: ($) =>
+        choice(
+          ...assertionPostfixTypes($, true),
+          alias($._as_bare_asserts_type, $.asserts),
+          alias($._as_postfix_asserts_type, $.asserts),
+          alias($._as_postfix_this_type_predicate, $.type_predicate),
+          alias($._as_postfix_nullable_type, $.flow_maybe_type),
+          alias($._as_const_type, $.type_identifier),
+          $.jsdoc_unknown_type,
+          alias($._const_assertion_unqualified_generic_type, $.generic_type),
+          alias($._const_assertion_type_name, $.nested_type_identifier),
+          alias($._const_assertion_generic_type, $.generic_type),
+          alias($._const_assertion_parenthesized_type, $.parenthesized_type),
+          alias($._const_assertion_postfix_prefix_non_nullable_type, $.non_nullable_type)
+        ),
+      jsdoc_unknown_type: ($) => seq('?', $._jsdoc_unknown_type_end),
+      _as_postfix_nullable_type: ($) =>
+        seq(
+          '?',
+          $._nullable_type_start,
+          nonPostfixAssertionType($),
+          choice($._const_assertion_type_suffix, $._const_assertion_non_nullable_suffix)
+        ),
+
+      _const_assertion_index_type_query: ($) =>
+        prec.right(
+          seq(
+            'keyof',
+            typeOperatorOperand(
+              $,
+              $._const_assertion_operator_operand,
+              $._const_assertion_readonly_type,
+              $._as_infer_type
+            )
+          )
+        ),
+
+      _const_assertion_operator_operand: ($) =>
+        choice(...ordinaryAssertionPostfixTypes($), ...constAssertionPostfixTypes($), ...constAssertionPrefixTypes($)),
+      _const_assertion_readonly_type: ($) =>
+        prec.right(seq('readonly', alias($._const_assertion_readonly_operand, $.type))),
+      _const_assertion_readonly_operand: ($) =>
+        typeOperatorOperand($, $._const_assertion_operator_operand, $._const_assertion_readonly_type, $._as_infer_type),
+
+      _const_assertion_unique_type: ($) => assertionUniqueType($, $._const_assertion_readonly_operand),
+
+      _const_assertion_nullable_type: ($) =>
+        prec.right(seq('?', $._nullable_type_start, assertionType($), $._qualified_const_assertion_end)),
+
+      _const_assertion_constraint_scoped_type: ($) =>
+        choice(
+          alias($._const_assertion_constraint_scoped_primary_type, $.primary_type),
+          alias($._const_assertion_constraint_readonly_type, $.readonly_type),
+          alias($._const_assertion_constraint_infer_type, $.infer_type)
+        ),
+      _const_assertion_constraint_scoped_primary_type: ($) =>
+        choice(
+          ...constAssertionPostfixTypes($),
+          ...constraintPrefixTypes($),
+          alias($._const_assertion_constraint_scoped_union_type, $.union_type),
+          alias($._const_assertion_constraint_scoped_intersection_type, $.intersection_type)
+        ),
+      _const_assertion_constraint_scoped_union_type: ($) => constraintBinaryType($, '|'),
+      _const_assertion_constraint_scoped_intersection_type: ($) => constraintBinaryType($, '&'),
+
+      _const_assertion_constraint_type: ($) =>
+        choice(
+          alias($._const_assertion_constraint_primary_type, $.primary_type),
+          alias($._const_assertion_constraint_readonly_type, $.readonly_type),
+          alias($._const_assertion_constraint_infer_type, $.infer_type)
+        ),
+
+      _as_non_postfix_function_type: ($) =>
+        choice(
+          alias($._as_non_postfix_arrow_function_type, $.function_type),
+          alias($._as_non_postfix_constructor_type, $.constructor_type)
+        ),
+      _as_non_postfix_arrow_function_type: ($) =>
+        functionType($, {
+          type: nonPostfixAssertionType($),
+          predicate: alias($._as_non_postfix_type_predicate, $.type_predicate),
+          asserts: false,
+          parameters: assertionFunctionParameters($),
+          end: choice($._qualified_const_assertion_end, $._non_postfix_type_suffix_end),
+        }),
+      _as_non_postfix_constructor_type: ($) =>
+        constructorType($, {
+          start: $._as_constructor_type_start,
+          type: nonPostfixAssertionType($),
+          predicate: alias($._as_non_postfix_type_predicate, $.type_predicate),
+          parameters: assertionFunctionParameters($),
+          end: choice($._qualified_const_assertion_end, $._non_postfix_type_suffix_end),
+        }),
+      _as_non_postfix_type_predicate: ($) =>
+        seq(
+          $._as_type_predicate_start,
+          typePredicate(
+            $,
+            nonPostfixAssertionType($),
+            reserved('assertion_bindings', $.identifier),
+            $._assertion_binding_identifier_start,
+            false
+          )
+        ),
+      _as_non_postfix_type: ($) =>
+        choice(
+          alias($._as_non_postfix_primary_type, $.primary_type),
+          alias($._as_non_postfix_readonly_type, $.readonly_type),
+          alias($._as_non_postfix_infer_type, $.infer_type)
+        ),
+      _as_non_postfix_primary_type: ($) =>
+        choice(
+          alias($._as_non_postfix_union_type, $.union_type),
+          alias($._as_non_postfix_intersection_type, $.intersection_type),
+          alias($._as_non_postfix_index_type_query, $.index_type_query),
+          alias($._as_non_postfix_unique_type, $.unique_type),
+          alias($._as_non_postfix_conditional_type, $.conditional_type)
+        ),
+      _as_non_postfix_infer_type: ($) =>
+        choice(
+          seq('infer', $._infer_type_identifier),
+          prec.right(
+            seq(
+              'infer',
+              $._infer_type_identifier,
+              'extends',
+              nonPostfixConstraintType($),
+              choice($._as_infer_constraint_end, $._non_postfix_type_suffix_end)
+            )
+          )
+        ),
+      _as_non_postfix_readonly_type: ($) =>
+        prec.right(seq('readonly', alias($._as_non_postfix_readonly_operand, $.type))),
+      _as_non_postfix_readonly_operand: ($) => nonPostfixOperatorOperand($),
+      _as_non_postfix_operator_primary_type: ($) =>
+        choice(
+          alias($._as_non_postfix_index_type_query, $.index_type_query),
+          alias($._as_non_postfix_unique_type, $.unique_type)
+        ),
+      _as_non_postfix_union_type: ($) =>
+        nonPostfixConstraintBinaryType($, '|', $._as_non_postfix_type, assertionOperand($)),
+      _as_non_postfix_intersection_type: ($) =>
+        nonPostfixConstraintBinaryType($, '&', $._as_non_postfix_type, assertionOperand($)),
+      _as_non_postfix_index_type_query: ($) => prec.right(seq('keyof', nonPostfixOperatorOperand($))),
+      _as_non_postfix_unique_type: ($) => assertionUniqueType($, $._as_non_postfix_readonly_operand),
+      _as_non_postfix_conditional_type: ($) => nonPostfixConditionalType($),
+
+      _const_assertion_non_postfix_constraint_type: ($) =>
+        choice(
+          alias($._const_assertion_non_postfix_constraint_primary_type, $.primary_type),
+          alias($._const_assertion_non_postfix_constraint_readonly_type, $.readonly_type),
+          alias($._const_assertion_non_postfix_constraint_infer_type, $.infer_type)
+        ),
+      _const_assertion_non_postfix_constraint_primary_type: ($) =>
+        choice(
+          alias($._const_assertion_non_postfix_constraint_union_type, $.union_type),
+          alias($._const_assertion_non_postfix_constraint_intersection_type, $.intersection_type),
+          alias($._const_assertion_non_postfix_constraint_index_type_query, $.index_type_query),
+          alias($._const_assertion_non_postfix_constraint_unique_type, $.unique_type)
+        ),
+      _const_assertion_non_postfix_constraint_infer_type: ($) =>
+        choice(
+          seq('infer', $._infer_type_identifier, $._nonconditional_infer_name_end),
+          prec.right(seq('infer', $._infer_type_identifier, 'extends', nonPostfixConstraintType($)))
+        ),
+      _const_assertion_non_postfix_constraint_union_type: ($) => nonPostfixConstraintBinaryType($, '|'),
+      _const_assertion_non_postfix_constraint_intersection_type: ($) => nonPostfixConstraintBinaryType($, '&'),
+      _const_assertion_non_postfix_constraint_readonly_type: ($) =>
+        prec.right(seq('readonly', alias($._const_assertion_non_postfix_constraint_readonly_operand, $.type))),
+      _const_assertion_non_postfix_constraint_readonly_operand: ($) => nonPostfixConstraintOperatorOperand($),
+      _const_assertion_non_postfix_constraint_operator_primary_type: ($) =>
+        choice(
+          alias($._const_assertion_non_postfix_constraint_index_type_query, $.index_type_query),
+          alias($._const_assertion_non_postfix_constraint_unique_type, $.unique_type)
+        ),
+      _const_assertion_non_postfix_constraint_index_type_query: ($) =>
+        prec.right(seq('keyof', nonPostfixConstraintOperatorOperand($))),
+      _const_assertion_non_postfix_constraint_unique_type: ($) =>
+        assertionUniqueType($, $._const_assertion_non_postfix_constraint_readonly_operand),
+      _infer_type_identifier: ($) =>
+        seq(
+          $._assertion_binding_identifier_start,
+          alias(reserved('assertion_bindings', $.identifier), $.type_identifier)
+        ),
+
+      _const_assertion_constraint_primary_type: ($) =>
+        choice(
+          alias($._const_assertion_non_postfix_prefix_non_nullable_type, $.non_nullable_type),
+          $.predefined_type,
+          alias($._const_assertion_constraint_unique_type, $.unique_type),
+          alias($._const_assertion_nullable_type, $.flow_maybe_type),
+          ...ordinaryAssertionPostfixTypes($),
+          ...constAssertionPostfixTypes($),
+          alias($._const_assertion_constraint_union_type, $.union_type),
+          alias($._const_assertion_constraint_intersection_type, $.intersection_type),
+          alias($._const_assertion_constraint_index_type_query, $.index_type_query)
+        ),
+
+      _const_assertion_constraint_postfix_type: ($) =>
+        choice(...ordinaryAssertionPostfixTypes($), ...constAssertionPostfixTypes($)),
+
+      _ordinary_assertion_postfix_type: ($) => choice(...ordinaryAssertionPostfixTypes($)),
+      _ordinary_assertion_array_type: ($) =>
+        seq(alias($._ordinary_assertion_postfix_type, $.primary_type), $._const_assertion_type_suffix, '[', ']'),
+      _ordinary_assertion_lookup_type: ($) =>
+        seq(
+          alias($._ordinary_assertion_postfix_type, $.primary_type),
+          $._const_assertion_type_suffix,
+          '[',
+          $._as_lookup_index_start,
+          assertionType($),
+          $._as_lookup_type_boundary,
+          ']'
+        ),
+
+      _const_assertion_constraint_union_type: ($) =>
+        binaryType($, '|', alias($._const_assertion_constraint_type, $.type), $._as_compound_type_operand_start),
+      _const_assertion_constraint_intersection_type: ($) =>
+        binaryType($, '&', alias($._const_assertion_constraint_type, $.type), $._as_intersection_type_operand_start),
+      _const_assertion_constraint_index_type_query: ($) =>
+        prec.right(
+          seq(
+            'keyof',
+            typeOperatorOperand(
+              $,
+              $._const_assertion_constraint_operator_operand,
+              $._const_assertion_constraint_readonly_type,
+              $._const_assertion_constraint_infer_type
+            )
+          )
+        ),
+      _const_assertion_constraint_unique_type: ($) =>
+        assertionUniqueType($, $._const_assertion_constraint_readonly_operand),
+      _const_assertion_constraint_operator_operand: ($) =>
+        choice(...ordinaryAssertionPostfixTypes($), ...constAssertionPostfixTypes($), ...constraintPrefixTypes($)),
+      _const_assertion_constraint_readonly_type: ($) =>
+        prec.right(seq('readonly', alias($._const_assertion_constraint_readonly_operand, $.type))),
+      _const_assertion_constraint_readonly_operand: ($) =>
+        typeOperatorOperand(
+          $,
+          $._const_assertion_constraint_operator_operand,
+          $._const_assertion_constraint_readonly_type,
+          $._const_assertion_constraint_infer_type
+        ),
+      _const_assertion_constraint_infer_type: ($) =>
+        choice(
+          seq('infer', $._infer_type_identifier, $._nonconditional_infer_name_end),
+          prec.right(seq('infer', $._infer_type_identifier, 'extends', assertionConstraintType($)))
+        ),
+      _const_assertion_unqualified_generic_type: ($) =>
+        prec(
+          'call',
+          seq(field('name', alias($._const_generic_name, $.type_identifier)), field('type_arguments', $.type_arguments))
+        ),
+
+      _const_assertion_generic_type: ($) =>
+        prec(
+          'call',
+          seq(
+            field('name', alias($._const_assertion_generic_name, $.nested_type_identifier)),
+            field('type_arguments', $.type_arguments)
+          )
+        ),
+
+      _const_assertion_type_name: ($) =>
+        prec('member', seq(constAssertionTypeName($, false), $._const_assertion_name_end)),
+
+      _const_assertion_generic_name: ($) => constAssertionTypeName($, true),
+
+      _const_assertion_nested_identifier: ($) =>
+        assertionNestedIdentifier(
+          $,
+          alias($._as_const_qualified_name, $.identifier),
+          $._const_assertion_nested_identifier
+        ),
 
       satisfies_expression: ($) =>
         prec.left('binary', seq($.expression, 'satisfies', $.type, optional($._type_assertion_context))),
 
-      instantiation_expression: ($) => instantiationExpression($),
+      instantiation_expression: ($) => instantiationExpression($, $._type_arguments_target),
 
       class_heritage: ($) => choice(seq($.extends_clause, optional($.implements_clause)), $.implements_clause),
 
@@ -897,19 +1811,30 @@ module.exports = function defineGrammar(dialect) {
 
       _extends_primary: ($) => choice($._extends_target, alias($._extends_argumentless_new, $.new_expression)),
 
-      _extends_target: ($) => heritageRule($, typeArgumentsTarget($, dialect, true)),
+      _extends_target: ($) =>
+        heritageRule(
+          $,
+          choice(
+            ...expressionMembers($, dialect, JavaScript.grammar.rules.primary_expression.members, [
+              '_argumentless_new_expression',
+              'arrow_function',
+              '_jsx_element',
+            ]),
+            $.non_null_expression
+          )
+        ),
 
-      _extends_call: ($) => heritageRule($, callExpression($)),
+      _extends_call: ($) => heritageRule($, heritageCallExpression($)),
 
       _extends_member: ($) => heritageRule($, JavaScript.grammar.rules.member_expression),
 
       _extends_subscript: ($) => heritageRule($, JavaScript.grammar.rules.subscript_expression),
 
-      _extends_new: ($) => heritageRule($, newExpression($)),
+      _extends_new: ($) => heritageRule($, heritageNewExpression($)),
 
-      _extends_argumentless_new: ($) => heritageRule($, argumentlessNewExpression($)),
+      _extends_argumentless_new: ($) => heritageRule($, heritageArgumentlessNewExpression($)),
 
-      _extends_instantiation: ($) => heritageRule($, instantiationExpression($)),
+      _extends_instantiation: ($) => heritageRule($, instantiationExpression($, $._type_arguments_target)),
 
       _extends_non_null: ($) => heritageRule($, prec('member', seq($.primary_expression, '!'))),
 
@@ -1023,7 +1948,8 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      _implements_keyword_arguments: ($) => seq('<', commaSep1($.type), $._keyword_heritage_arguments_end, '>'),
+      _implements_keyword_arguments: ($) =>
+        seq(guardedTypeArgumentOpening($), guardedTypeArgumentList($), $._keyword_heritage_arguments_end, '>'),
 
       ambient_declaration: ($) =>
         seq(
@@ -1193,27 +2119,46 @@ module.exports = function defineGrammar(dialect) {
           $._semicolon
         ),
 
-      accessibility_modifier: () => choice('public', 'private', 'protected'),
-
-      override_modifier: () => 'override',
-
-      required_parameter: ($) =>
-        seq($._parameter_name, field('type', optional($.type_annotation)), optional($._initializer)),
-
-      optional_parameter: ($) =>
-        seq(
-          $._parameter_name,
-          choice('?', alias($._comment_optional_parameter_marker, '?')),
-          field('type', optional($.type_annotation)),
-          optional($._initializer)
+      accessibility_modifier: ($) =>
+        choice(
+          'public',
+          'private',
+          'protected',
+          alias($._as_public_identifier, 'public'),
+          alias($._as_private_identifier, 'private'),
+          alias($._as_protected_identifier, 'protected')
         ),
+
+      override_modifier: ($) => choice('override', alias($._as_override_identifier, 'override')),
+
+      required_parameter: ($) => requiredParameter($),
+      optional_parameter: ($) => optionalParameter($),
 
       array_pattern: ($, previous) =>
         mapRule(previous, (part) =>
           part.type === 'SYMBOL' && part.name === 'pattern' ? choice($.pattern, alias('bigint', $.identifier)) : part
         ),
 
-      pattern: ($, previous) => choice(previous, alias($._predefined_parameter_name, $.identifier)),
+      pattern: ($, previous) =>
+        choice(
+          {
+            ...previous,
+            content: choice(
+              previous.content,
+              alias(
+                choice(
+                  $._as_type_identifier,
+                  $._as_public_identifier,
+                  $._as_private_identifier,
+                  $._as_protected_identifier,
+                  $._as_override_identifier
+                ),
+                $.identifier
+              )
+            ),
+          },
+          alias($._predefined_parameter_name, $.identifier)
+        ),
 
       _parameter_name: ($) =>
         seq(
@@ -1240,46 +2185,7 @@ module.exports = function defineGrammar(dialect) {
           field('arguments', $.arguments)
         ),
 
-      asserts: ($) =>
-        seq(
-          'asserts',
-          choice(
-            $.type_predicate,
-            seq(
-              choice(
-                $.identifier,
-                alias(
-                  choice(
-                    'out',
-                    'as',
-                    'satisfies',
-                    'is',
-                    $.undefined,
-                    'keyof',
-                    'infer',
-                    'readonly',
-                    'abstract',
-                    'asserts',
-                    'any',
-                    'number',
-                    'boolean',
-                    'string',
-                    'symbol',
-                    'bigint',
-                    'unknown',
-                    'never',
-                    'object',
-                    'unique',
-                    $._contextual_type_identifier
-                  ),
-                  $.identifier
-                ),
-                $.this
-              ),
-              optional($._bare_assertion_context)
-            )
-          )
-        ),
+      asserts: ($) => assertsType($),
 
       asserts_annotation: ($) => seq(seq(':', $.asserts)),
 
@@ -1344,44 +2250,9 @@ module.exports = function defineGrammar(dialect) {
           $.type
         ),
 
-      constructor_type: ($) =>
-        prec.left(
-          seq(
-            optional(seq($._abstract_constructor_prefix, 'abstract')),
-            'new',
-            field('type_parameters', optional($.type_parameters)),
-            field('parameters', $.formal_parameters),
-            '=>',
-            field('type', $.type)
-          )
-        ),
+      constructor_type: ($) => constructorType($),
 
-      primary_type: ($) =>
-        choice(
-          $.parenthesized_type,
-          $.predefined_type,
-          $._type_reference_identifier,
-          $.nested_type_identifier,
-          $.generic_type,
-          $.object_type,
-          $.array_type,
-          $.tuple_type,
-          $.flow_maybe_type,
-          $.type_query,
-          $.index_type_query,
-          prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
-          prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression)),
-          prec(-1, alias($._typed_import_type, $.call_expression)),
-          alias($.this, $.this_type),
-          $.existential_type,
-          $.literal_type,
-          $.lookup_type,
-          $.conditional_type,
-          $.template_literal_type,
-          $.intersection_type,
-          $.union_type,
-          'const'
-        ),
+      primary_type: ($) => choice(...primaryTypes($)),
 
       template_type: ($) => seq('${', $.type, '}'),
 
@@ -1391,18 +2262,7 @@ module.exports = function defineGrammar(dialect) {
       infer_type: ($) =>
         choice(seq('infer', $._type_identifier), prec.right(seq('infer', $._type_identifier, 'extends', $.type))),
 
-      conditional_type: ($) =>
-        prec.right(
-          seq(
-            field('left', $.type),
-            'extends',
-            field('right', choice($.type, alias($._conditional_right_type, $.type))),
-            '?',
-            field('consequence', $.type),
-            ':',
-            field('alternative', $.type)
-          )
-        ),
+      conditional_type: ($) => conditionalType($, $.type),
 
       _conditional_right_type: ($) => alias($._conditional_function_type, $.function_type),
 
@@ -1446,11 +2306,7 @@ module.exports = function defineGrammar(dialect) {
         prec('call', seq(field('name', $._generic_type_name), field('type_arguments', $.type_arguments))),
 
       _generic_type_guarded_name: ($) =>
-        choice(
-          field('name', alias($._type_identifier_before_angle, $.type_identifier)),
-          field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier)),
-          field('name', alias($._generic_type_query_member_expression, $.member_expression))
-        ),
+        genericTypeName($, choice($._type_identifier_before_angle, $._const_generic_name)),
 
       _generic_nested_type_identifier: ($) => nestedTypeIdentifier($, true),
 
@@ -1464,35 +2320,7 @@ module.exports = function defineGrammar(dialect) {
           alias($._type_query_member_expression_in_type_annotation, $.member_expression)
         ),
 
-      type_predicate: ($) =>
-        seq(
-          field(
-            'name',
-            choice(
-              $.identifier,
-              alias(
-                choice(
-                  'out',
-                  'as',
-                  'satisfies',
-                  $.undefined,
-                  'keyof',
-                  'infer',
-                  'readonly',
-                  'abstract',
-                  'asserts',
-                  'is',
-                  $._contextual_type_identifier
-                ),
-                $.identifier
-              ),
-              $.this,
-              alias(choice($.predefined_type, 'unique'), $.identifier)
-            )
-          ),
-          'is',
-          field('type', $.type)
-        ),
+      type_predicate: ($) => typePredicate($),
 
       type_predicate_annotation: ($) => seq(seq(':', $.type_predicate)),
 
@@ -1610,7 +2438,7 @@ module.exports = function defineGrammar(dialect) {
       literal_type: ($) =>
         choice(alias($._number, $.unary_expression), $.number, $.string, $.true, $.false, $.null, $.undefined),
 
-      _number: ($) => prec.left(1, seq(field('operator', choice('-', '+')), field('argument', $.number))),
+      _number: ($) => prec.left(1, seq(field('operator', '-'), field('argument', $.number))),
 
       existential_type: () => '*',
 
@@ -1633,9 +2461,14 @@ module.exports = function defineGrammar(dialect) {
           'object'
         ),
 
-      type_arguments: ($) => typeArguments($, choice('<', seq($._adjacent_type_angles, '<'))),
+      type_arguments: ($) =>
+        typeArguments(
+          $,
+          choice(guardedTypeArgumentOpening($), seq($._adjacent_type_angles, guardedTypeArgumentOpening($)))
+        ),
 
-      _unprefixed_type_arguments: ($) => typeArguments($, '<'),
+      _unprefixed_type_arguments: ($) => typeArguments($, guardedTypeArgumentOpening($)),
+      _assertion_type_arguments: ($) => typeArguments($, typeAngleOpening($), true),
 
       object_type: ($) =>
         seq(
@@ -1710,7 +2543,7 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      type_parameters: ($) => seq('<', commaSep1($.type_parameter), optional(','), '>'),
+      type_parameters: ($) => seq(typeAngleOpening($), commaSep1($.type_parameter), optional(','), '>'),
 
       type_parameter: ($) =>
         seq(
@@ -1770,27 +2603,13 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       array_type: ($) => seq($.primary_type, '[', ']'),
-      tuple_type: ($) => seq('[', commaSep($._tuple_type_member), optional(','), ']'),
+      tuple_type: ($) => tupleType($),
       readonly_type: ($) => prec.right(seq('readonly', $.type)),
 
-      union_type: ($) =>
-        prec.left(
-          choice(seq($.type, '|', $.type), prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq('|', $.type)))
-        ),
-      intersection_type: ($) =>
-        prec.left(
-          choice(seq($.type, '&', $.type), prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq('&', $.type)))
-        ),
+      union_type: ($) => binaryType($, '|'),
+      intersection_type: ($) => binaryType($, '&'),
 
-      function_type: ($) =>
-        prec.left(
-          seq(
-            field('type_parameters', optional($.type_parameters)),
-            field('parameters', $.formal_parameters),
-            '=>',
-            field('return_type', choice($.type, $.asserts, $.type_predicate))
-          )
-        ),
+      function_type: ($) => functionType($),
 
       // A type name may be a reserved word, which TypeScript reports only as a semantic error. The reserved words must be
       // allowed on the identifier inside the alias: around the alias, the keyword token still wins in the lexer.
@@ -1816,7 +2635,29 @@ module.exports = function defineGrammar(dialect) {
   });
 };
 
-function withShiftPrefix($, rule) {
+function expressionMembers($, dialect, members, excluded = []) {
+  return members
+    .filter(
+      (member) =>
+        (dialect !== 'typescript' || member.name !== '_jsx_element') &&
+        !excluded.includes(member.name ?? member.content?.name)
+    )
+    .map((member) => replaceSymbol(member, '_reserved_identifier', $._expression_reserved_identifier));
+}
+
+function instantiationExpression($, target, prefix) {
+  const instantiation = (end) =>
+    prec('instantiation', seq(target, ...(prefix ? [prefix] : []), field('type_arguments', $.type_arguments), end));
+  return choice(
+    prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
+    prec.dynamic(
+      DYNAMIC_PRECEDENCE.INSTANTIATION_BEFORE_EXPRESSION,
+      instantiation($._type_arguments_end_before_expression)
+    )
+  );
+}
+
+function withTypeAngleOperators($, rule) {
   return mapRule(rule, (part) => {
     if (part.type !== 'SEQ') return part;
     return {
@@ -1825,16 +2666,33 @@ function withShiftPrefix($, rule) {
         member.type === 'FIELD' &&
         member.name === 'operator' &&
         member.content.type === 'STRING' &&
-        member.content.value === '<<'
-          ? [optional($._adjacent_type_angles), member]
-          : [member]
+        member.content.value === '<'
+          ? [{ ...member, content: typeAngleOpening($) }]
+          : member.type === 'FIELD' &&
+              member.name === 'operator' &&
+              member.content.type === 'STRING' &&
+              member.content.value === '<<'
+            ? [optional($._adjacent_type_angles), member]
+            : [member]
       ),
     };
   });
 }
 
-function typeArguments($, opening) {
-  return seq(opening, commaSep1($.type), optional(','), '>');
+function typeAngleOpening($) {
+  return choice('<', alias($._type_argument_opening, '<'));
+}
+
+function guardedTypeArgumentOpening($) {
+  return choice(alias($._type_argument_opening, '<'), seq('<', $._type_argument_start));
+}
+
+function typeArguments($, opening, allowConst = false) {
+  return seq(opening, allowConst ? commaSep1($.type) : guardedTypeArgumentList($), optional(','), '>');
+}
+
+function guardedTypeArgumentList($) {
+  return seq($.type, repeat(seq(',', $._type_argument_continuation_start, $.type)));
 }
 
 function variableDeclarator($, name) {
@@ -1851,9 +2709,10 @@ function variableDeclarator($, name) {
   );
 }
 
-function nestedIdentifierTail($) {
+function nestedIdentifierTail($, nameStart) {
   return [
     '.',
+    ...(nameStart ? [nameStart] : []),
     field(
       'property',
       choice(
@@ -1909,33 +2768,675 @@ function sepBy1(sep, rule) {
   return seq(rule, repeat(seq(sep, rule)));
 }
 
-function nestedTypeIdentifier($, generic) {
+function functionType(
+  $,
+  { type = $.type, asserts = $.asserts, predicate = $.type_predicate, parameters = $.formal_parameters, end } = {}
+) {
+  return prec.left(
+    seq(
+      field('type_parameters', optional($.type_parameters)),
+      field('parameters', parameters),
+      '=>',
+      field('return_type', choice(type, ...(asserts ? [asserts] : []), ...(predicate ? [predicate] : []))),
+      ...(end ? [end] : [])
+    )
+  );
+}
+
+function constructorType($, { type = $.type, predicate, asserts, parameters = $.formal_parameters, end, start } = {}) {
+  return prec.left(
+    seq(
+      optional(seq($._abstract_constructor_prefix, 'abstract')),
+      ...(start ? [start] : []),
+      'new',
+      field('type_parameters', optional($.type_parameters)),
+      field('parameters', parameters),
+      '=>',
+      field(
+        'type',
+        predicate || asserts ? choice(type, ...(predicate ? [predicate] : []), ...(asserts ? [asserts] : [])) : type
+      ),
+      ...(end ? [end] : [])
+    )
+  );
+}
+
+function tupleType($, start) {
+  return seq(...(start ? [start] : []), '[', commaSep($._tuple_type_member), optional(','), ']');
+}
+
+function requiredParameter($, name = $._parameter_name) {
+  return seq(name, field('type', optional($.type_annotation)), optional($._initializer));
+}
+
+function optionalParameter($, name = $._parameter_name) {
+  return seq(
+    name,
+    choice('?', alias($._comment_optional_parameter_marker, '?')),
+    field('type', optional($.type_annotation)),
+    optional($._initializer)
+  );
+}
+
+function assertionFunctionParameters($) {
+  return choice(
+    alias($._as_formal_parameters, $.formal_parameters),
+    alias($._conditional_function_parameters, $.formal_parameters)
+  );
+}
+
+function assertionFormalParameters($) {
+  return mapRule(JavaScript.grammar.rules.formal_parameters, (part) => {
+    if (part.type === 'STRING' && part.value === ')') return seq($._as_formal_parameter_boundary, ')');
+    if (part.type === 'SYMBOL' && part.name === '_formal_parameter')
+      return choice(
+        $._formal_parameter,
+        alias($._as_required_array_parameter, $.required_parameter),
+        alias($._as_optional_array_parameter, $.optional_parameter)
+      );
+    return part;
+  });
+}
+
+function assertsType($, predicate = $.type_predicate, identifier = $.identifier, bindingStart) {
+  return seq(
+    'asserts',
+    ...(bindingStart ? [bindingStart] : []),
+    choice(
+      ...(predicate ? [predicate] : []),
+      seq(
+        choice(
+          identifier,
+          alias(
+            choice(
+              'out',
+              'as',
+              'satisfies',
+              'is',
+              $.undefined,
+              'keyof',
+              'infer',
+              'readonly',
+              'abstract',
+              'asserts',
+              'any',
+              'number',
+              'boolean',
+              'string',
+              'symbol',
+              'bigint',
+              'unknown',
+              'never',
+              'object',
+              'unique',
+              $._contextual_type_identifier
+            ),
+            $.identifier
+          ),
+          $.this
+        ),
+        optional($._bare_assertion_context)
+      )
+    )
+  );
+}
+
+function typePredicate($, type = $.type, identifier = $.identifier, bindingStart, allowThis = true) {
+  return seq(
+    ...(bindingStart ? [bindingStart] : []),
+    field(
+      'name',
+      choice(
+        identifier,
+        alias(
+          choice(
+            'out',
+            'as',
+            'satisfies',
+            $.undefined,
+            'keyof',
+            'infer',
+            'readonly',
+            'abstract',
+            'asserts',
+            'is',
+            $._contextual_type_identifier
+          ),
+          $.identifier
+        ),
+        ...(allowThis ? [$.this] : []),
+        alias(choice($.predefined_type, 'unique'), $.identifier)
+      )
+    ),
+    'is',
+    field('type', type)
+  );
+}
+
+function assertionThisTypePredicate($, type) {
+  return seq(
+    $._as_this_type_predicate_start,
+    $._assertion_binding_identifier_start,
+    field('name', $.this),
+    'is',
+    field('type', type)
+  );
+}
+
+function ordinaryAssertionPrimaryTypes($, constraint = false) {
+  const variants = {
+    generic_type: $._as_generic_type,
+    array_type: $._ordinary_assertion_array_type,
+    lookup_type: $._ordinary_assertion_lookup_type,
+    union_type: constraint ? $._as_constraint_union_type : $._as_union_type,
+    intersection_type: constraint ? $._as_constraint_intersection_type : $._as_intersection_type,
+    conditional_type: $._as_conditional_type,
+    index_type_query: constraint ? $._const_assertion_constraint_index_type_query : $._const_assertion_index_type_query,
+  };
+  const types = assertionPrimaryTypes($)
+    .filter((rule) => rule !== 'const' && (!constraint || rule.name !== 'conditional_type'))
+    .map((rule) => {
+      const type = variants[rule.name] ? alias(variants[rule.name], $[rule.name]) : rule;
+      return rule.name === '_type_reference_identifier' ? $._as_identifier : type;
+    });
+  return [...types, ...primitiveQualifiedTypes($)];
+}
+
+function assertionPrimaryTypes($, nonArray = false) {
+  const variants = {
+    _type_reference_identifier: nonArray ? $._as_non_array_identifier : $._as_identifier,
+    nested_type_identifier: alias(
+      nonArray ? $._as_non_array_nested_type_identifier : $._as_nested_type_identifier,
+      $.nested_type_identifier
+    ),
+    generic_type: alias(nonArray ? $._as_non_array_generic_type : $._as_generic_type, $.generic_type),
+    parenthesized_type: alias($._as_parenthesized_type, $.parenthesized_type),
+    tuple_type: alias($._as_guarded_tuple_type, $.tuple_type),
+    type_query: alias($._as_type_query, $.type_query),
+    _type_query_member_expression_in_type_annotation: $._as_import_member,
+    _type_query_call_expression_in_type_annotation: $._as_import_call,
+  };
+  return primaryTypes($).map((rule) =>
+    typeof rule === 'string'
+      ? rule
+      : mapRule(rule, (part) => (part.type === 'SYMBOL' ? (variants[part.name] ?? part) : part))
+  );
+}
+
+function primaryTypes($) {
+  return [
+    $.parenthesized_type,
+    $.predefined_type,
+    $._type_reference_identifier,
+    $.nested_type_identifier,
+    $.generic_type,
+    $.object_type,
+    $.array_type,
+    $.tuple_type,
+    $.flow_maybe_type,
+    $.type_query,
+    $.index_type_query,
+    prec(-1, alias($._type_query_member_expression_in_type_annotation, $.member_expression)),
+    prec(-1, alias($._type_query_call_expression_in_type_annotation, $.call_expression)),
+    prec(-1, alias($._typed_import_type, $.call_expression)),
+    alias($.this, $.this_type),
+    $.existential_type,
+    $.literal_type,
+    $.lookup_type,
+    $.conditional_type,
+    $.template_literal_type,
+    $.intersection_type,
+    $.union_type,
+    'const',
+  ];
+}
+
+// An intersection operand cannot start with another `&` (`A & & B`), whereas a union operand may (`A | & B`).
+function compoundOperandStart($, operator) {
+  return operator === '&' ? $._as_intersection_type_operand_start : $._as_compound_type_operand_start;
+}
+
+function binaryType($, operator, operand = $.type, operandStart) {
+  const following = operandStart ? seq(operandStart, operand) : operand;
+  return prec.left(
+    choice(
+      seq(operand, operator, following),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, following))
+    )
+  );
+}
+
+function assertionPostfixTypes($, nonArray = false) {
+  const compound = new Set([
+    'predefined_type',
+    'array_type',
+    'lookup_type',
+    'index_type_query',
+    'flow_maybe_type',
+    'conditional_type',
+    'intersection_type',
+    'union_type',
+  ]);
+  return [
+    ...assertionPrimaryTypes($, nonArray).filter((rule) => rule !== 'const' && !compound.has(rule.name)),
+    alias($._const_assertion_predefined_type, $.predefined_type),
+    ...primitiveQualifiedTypes($),
+  ];
+}
+
+function ordinaryAssertionPostfixTypes($) {
+  return [
+    ...assertionPostfixTypes($),
+    alias($._as_postfix_nullable_type, $.flow_maybe_type),
+    alias($._ordinary_assertion_array_type, $.array_type),
+    alias($._ordinary_assertion_lookup_type, $.lookup_type),
+  ];
+}
+
+function constAssertionPostfixTypes($) {
+  return [
+    $.jsdoc_unknown_type,
+    alias($._const_assertion_postfix_prefix_non_nullable_type, $.non_nullable_type),
+    alias($._as_bare_asserts_type, $.asserts),
+    alias($._as_postfix_asserts_type, $.asserts),
+    alias($._as_postfix_this_type_predicate, $.type_predicate),
+    alias($._as_const_type, $.type_identifier),
+    alias($._const_assertion_unqualified_generic_type, $.generic_type),
+    alias($._const_assertion_type_name, $.nested_type_identifier),
+    alias($._const_assertion_generic_type, $.generic_type),
+    alias($._const_assertion_array_type, $.array_type),
+    alias($._const_assertion_lookup_type, $.lookup_type),
+    alias($._const_assertion_parenthesized_type, $.parenthesized_type),
+    $.non_nullable_type,
+  ];
+}
+
+function constAssertionPrefixTypes($) {
+  return [
+    alias($._const_assertion_non_postfix_prefix_non_nullable_type, $.non_nullable_type),
+    alias($._const_assertion_index_type_query, $.index_type_query),
+    alias($._const_assertion_unique_type, $.unique_type),
+    alias($._const_assertion_nullable_type, $.flow_maybe_type),
+  ];
+}
+
+function constraintPrefixTypes($) {
+  return [
+    alias($._const_assertion_non_postfix_prefix_non_nullable_type, $.non_nullable_type),
+    alias($._const_assertion_constraint_index_type_query, $.index_type_query),
+    alias($._const_assertion_constraint_unique_type, $.unique_type),
+    alias($._const_assertion_nullable_type, $.flow_maybe_type),
+  ];
+}
+
+function typeOperatorOperand($, primary, readonly, infer) {
+  return choice(alias(primary, $.primary_type), alias(readonly, $.readonly_type), alias(infer, $.infer_type));
+}
+
+function constraintBinaryType($, operator) {
+  const scoped = alias($._const_assertion_constraint_scoped_type, $.type);
+  const any = alias($._const_assertion_constraint_type, $.type);
+  return prec.left(
+    choice(
+      seq(scoped, operator, compoundOperandStart($, operator), any),
+      seq(any, operator, compoundOperandStart($, operator), scoped),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, compoundOperandStart($, operator), scoped))
+    )
+  );
+}
+
+function assertionConstraintType($) {
+  return choice(alias($._const_assertion_constraint_type, $.type), alias($._as_function_type, $.type));
+}
+
+function ordinaryAssertionType($) {
+  return choice(alias($._as_type, $.type), alias($._as_function_type, $.type));
+}
+
+function ordinaryAssertionConstraintType($) {
+  return choice(alias($._as_constraint_type, $.type), alias($._as_function_type, $.type));
+}
+
+function nonPostfixConstraintType($) {
+  return choice(
+    alias($._const_assertion_non_postfix_constraint_type, $.type),
+    alias($._as_non_postfix_function_type, $.type)
+  );
+}
+
+function nonPostfixAssertionType($) {
+  return choice(alias($._as_non_postfix_type, $.type), alias($._as_non_postfix_function_type, $.type));
+}
+
+function assertionOperand($) {
+  return choice(alias($._as_type, $.type), alias($._qualified_const_assertion_type, $.type));
+}
+
+function nonPostfixConstraintBinaryType(
+  $,
+  operator,
+  lastType = $._const_assertion_non_postfix_constraint_type,
+  operand = alias($._const_assertion_constraint_type, $.type)
+) {
+  const last = alias(lastType, $.type);
+  return prec.left(
+    choice(
+      seq(operand, operator, compoundOperandStart($, operator), last),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, compoundOperandStart($, operator), last))
+    )
+  );
+}
+
+function nonPostfixConstraintOperatorOperand($) {
+  return typeOperatorOperand(
+    $,
+    $._const_assertion_non_postfix_constraint_operator_primary_type,
+    $._const_assertion_non_postfix_constraint_readonly_type,
+    $._const_assertion_non_postfix_constraint_infer_type
+  );
+}
+
+function nonPostfixOperatorOperand($) {
+  return typeOperatorOperand(
+    $,
+    $._as_non_postfix_operator_primary_type,
+    $._as_non_postfix_readonly_type,
+    $._as_non_postfix_infer_type
+  );
+}
+
+function nonPostfixConditionalType($) {
+  const any = assertionType($);
+  const alternative = nonPostfixAssertionType($);
+  return choice(
+    assertionConditionalType($, any, {
+      right: assertionConstraintType($),
+      consequence: any,
+      consequenceStart: $._const_assertion_consequence_start,
+      alternative,
+    }),
+    assertionConditionalType($, any, {
+      right: nonPostfixConstraintType($),
+      consequence: any,
+      consequenceStart: false,
+      alternative,
+    }),
+    assertionConditionalType($, any, {
+      right: assertionConstraintType($),
+      question: seq($._as_conditional_line_break, '?'),
+      consequence: any,
+      consequenceStart: false,
+      alternative,
+    })
+  );
+}
+
+function constAssertionConditionalType($) {
+  const scoped = alias($._qualified_const_assertion_type, $.type);
+  const ordinary = ordinaryAssertionType($);
+  const any = assertionType($);
+  const consequence = any;
+  return choice(
+    assertionConditionalType($, any, {
+      right: assertionConstraintType($),
+      question: seq($._as_conditional_line_break, '?'),
+      consequence,
+      consequenceStart: false,
+      alternative: any,
+    }),
+    assertionConditionalType($, any, {
+      right: nonPostfixConstraintType($),
+      consequence,
+      consequenceStart: false,
+      alternative: any,
+    }),
+    assertionConditionalType($, scoped, {
+      right: assertionConstraintType($),
+      consequence,
+      consequenceStart: $._const_assertion_consequence_start,
+      alternative: any,
+    }),
+    assertionConditionalType($, ordinary, {
+      right: alias($._const_assertion_constraint_scoped_type, $.type),
+      consequence,
+      consequenceStart: $._const_assertion_consequence_start,
+      alternative: any,
+    }),
+    assertionConditionalType($, ordinary, {
+      right: assertionConstraintType($),
+      consequence,
+      consequenceStart: $._const_assertion_consequence_start,
+      alternative: scoped,
+    }),
+    assertionConditionalType($, ordinary, {
+      right: assertionConstraintType($),
+      consequence: scoped,
+      consequenceStart: $._const_assertion_consequence_start,
+      alternative: any,
+    })
+  );
+}
+
+function assertionType($) {
+  return choice(ordinaryAssertionType($), alias($._qualified_const_assertion_type, $.type));
+}
+
+function assertionBinaryType($, operator) {
+  const scoped = alias($._qualified_const_assertion_type, $.type);
+  return prec.left(
+    choice(
+      seq(scoped, operator, compoundOperandStart($, operator), assertionOperand($)),
+      seq(alias($._as_type, $.type), operator, compoundOperandStart($, operator), scoped),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, compoundOperandStart($, operator), scoped))
+    )
+  );
+}
+
+function assertionTypePrecedences($, lists) {
+  const variants = {
+    expression: [$._postfix_expression_target],
+    _type_arguments_target: [$._postfix_primary_expression],
+    type: [
+      $._as_type,
+      $._as_function_type,
+      $._as_non_postfix_function_type,
+      $._as_non_postfix_type,
+      $._const_assertion_readonly_operand,
+      $._as_constraint_type,
+      $._const_assertion_non_postfix_constraint_type,
+      $._qualified_const_assertion_type,
+      $._const_assertion_constraint_type,
+      $._const_assertion_constraint_scoped_type,
+    ],
+    primary_type: [
+      $._as_primary_type,
+      $._as_non_postfix_primary_type,
+      $._as_constraint_primary_type,
+      $._const_assertion_non_postfix_constraint_primary_type,
+      $._const_assertion_constraint_scoped_primary_type,
+      $._const_assertion_operator_operand,
+      $._const_assertion_constraint_operator_operand,
+      $._const_assertion_primary_type,
+      $._const_assertion_constraint_primary_type,
+      $._const_assertion_constraint_postfix_type,
+      $._ordinary_assertion_postfix_type,
+    ],
+    nested_identifier: [$._const_assertion_nested_identifier, $._as_primitive_nested_identifier],
+    nested_type_identifier: [$._const_assertion_type_name, $._as_primitive_type_name],
+    _generic_nested_type_identifier: [$._const_assertion_generic_name, $._as_primitive_generic_name],
+    generic_type: [
+      $._as_generic_type,
+      $._const_assertion_unqualified_generic_type,
+      $._const_assertion_generic_type,
+      $._as_primitive_generic_type,
+    ],
+    array_type: [$._const_assertion_array_type, $._ordinary_assertion_array_type, $.non_nullable_type],
+    lookup_type: [$._const_assertion_lookup_type, $._ordinary_assertion_lookup_type],
+    union_type: [
+      $._as_union_type,
+      $._as_non_postfix_union_type,
+      $._as_constraint_union_type,
+      $._const_assertion_union_type,
+      $._const_assertion_constraint_union_type,
+      $._const_assertion_constraint_scoped_union_type,
+      $._const_assertion_non_postfix_constraint_union_type,
+    ],
+    intersection_type: [
+      $._as_intersection_type,
+      $._as_non_postfix_intersection_type,
+      $._as_constraint_intersection_type,
+      $._const_assertion_intersection_type,
+      $._const_assertion_constraint_intersection_type,
+      $._const_assertion_constraint_scoped_intersection_type,
+      $._const_assertion_non_postfix_constraint_intersection_type,
+    ],
+    conditional_type: [$._as_conditional_type, $._const_assertion_conditional_type, $._as_non_postfix_conditional_type],
+    function_type: [$._as_arrow_function_type, $._as_non_postfix_arrow_function_type],
+    type_predicate: [
+      $._as_type_predicate,
+      $._as_asserts_predicate,
+      $._as_non_postfix_type_predicate,
+      $._as_non_postfix_asserts_predicate,
+      $._as_postfix_this_type_predicate,
+      $._as_this_type_predicate,
+    ],
+    constructor_type: [$._as_constructor_type, $._as_non_postfix_constructor_type],
+    flow_maybe_type: [$._const_assertion_nullable_type],
+    index_type_query: [
+      $._const_assertion_index_type_query,
+      $._as_non_postfix_index_type_query,
+      $._const_assertion_constraint_index_type_query,
+      $._const_assertion_non_postfix_constraint_index_type_query,
+    ],
+    readonly_type: [
+      $._const_assertion_readonly_type,
+      $._as_non_postfix_readonly_type,
+      $._const_assertion_constraint_readonly_type,
+      $._const_assertion_non_postfix_constraint_readonly_type,
+    ],
+  };
+  return lists.flatMap((list) => [
+    list,
+    ...list.flatMap((higher, index) =>
+      list.slice(index + 1).flatMap((lower) => {
+        const above = variants[higher.name] ?? [];
+        const below = variants[lower.name] ?? [];
+        return [
+          ...above.flatMap((entry) => [[entry, lower], ...below.map((other) => [entry, other])]),
+          ...below.map((entry) => [higher, entry]),
+        ];
+      })
+    ),
+  ]);
+}
+
+function assertionConditionalType($, left, options) {
+  return conditionalType($, left, {
+    ...options,
+    constraintBoundary: $._as_constraint_type_boundary,
+    consequenceBoundary: $._as_consequence_type_boundary,
+  });
+}
+
+function conditionalType(
+  $,
+  left,
+  { right, question, consequence, consequenceStart, alternative, constraintBoundary, consequenceBoundary } = {}
+) {
+  return prec.right(
+    seq(
+      field('left', left),
+      'extends',
+      field('right', right ?? choice($.type, alias($._conditional_right_type, $.type))),
+      ...(constraintBoundary ? [constraintBoundary] : []),
+      question ?? '?',
+      ...(consequenceStart === false ? [] : [consequenceStart ?? optional($._const_assertion_consequence_start)]),
+      field('consequence', consequence ?? $.type),
+      ...(consequenceBoundary ? [consequenceBoundary] : []),
+      ':',
+      field('alternative', alternative ?? $.type)
+    )
+  );
+}
+
+function genericTypeName($, unqualified, queryMember = $._generic_type_query_member_expression, start) {
+  return choice(
+    seq(...(start ? [start] : []), field('name', alias(unqualified, $.type_identifier))),
+    seq(...(start ? [start] : []), field('name', alias($._generic_nested_type_identifier, $.nested_type_identifier))),
+    field('name', alias(queryMember, $.member_expression))
+  );
+}
+
+function assertionUniqueType($, operand) {
+  return prec(-1, seq('unique', $._as_unique_operand_start, field('type', alias(operand, $.type))));
+}
+
+function primitiveQualifiedTypes($) {
+  return [
+    alias($._as_primitive_type_name, $.nested_type_identifier),
+    alias($._as_primitive_generic_type, $.generic_type),
+  ];
+}
+
+function primitiveNamespaceWords($) {
+  const words = ['any', 'unknown', 'string', 'number', 'bigint', 'symbol', 'boolean', 'undefined', 'never', 'object'];
+  return choice(
+    ...words
+      .filter((word) => !TYPE_MODULE_KEYWORDS.includes(word))
+      .map((word) => (word === 'undefined' ? $.undefined : word))
+  );
+}
+
+function primitiveQualifiedTypeName($, generic) {
+  return nestedTypeIdentifier(
+    $,
+    generic,
+    choice(
+      alias(primitiveNamespaceWords($), $.identifier),
+      alias($._as_primitive_nested_identifier, $.nested_identifier)
+    ),
+    $._as_query_name_end
+  );
+}
+
+function assertionNestedIdentifier($, root, nested) {
+  return prec(
+    'member',
+    seq(
+      field('object', choice(root, alias(nested, $.member_expression))),
+      ...nestedIdentifierTail($, $._as_query_name_end)
+    )
+  );
+}
+
+function constAssertionTypeName($, generic) {
+  return nestedTypeIdentifier(
+    $,
+    generic,
+    choice(
+      alias($._as_const_qualified_name, $.identifier),
+      alias($._const_assertion_nested_identifier, $.nested_identifier)
+    ),
+    $._as_query_name_end
+  );
+}
+
+function nestedTypeIdentifier($, generic, module, nameStart) {
   return prec(
     'member',
     seq(
       field(
         'module',
-        choice(
-          $.identifier,
-          alias(
-            choice(
-              'in',
-              'out',
-              'abstract',
-              'as',
-              'satisfies',
-              'is',
-              'asserts',
-              'bigint',
-              $._contextual_type_identifier
-            ),
-            $.identifier
-          ),
-          $.nested_identifier,
-          alias($._in_nested_identifier, $.nested_identifier)
-        )
+        module ??
+          choice(
+            $.identifier,
+            alias(choice(...TYPE_MODULE_KEYWORDS, $._contextual_type_identifier), $.identifier),
+            $.nested_identifier,
+            alias($._in_nested_identifier, $.nested_identifier)
+          )
       ),
       '.',
+      ...(nameStart ? [nameStart] : []),
       ...(generic ? [$._type_reference_arguments_start] : []),
       field('name', qualifiedTypeName($))
     )
@@ -1946,26 +3447,43 @@ function qualifiedTypeName($) {
   return choice($._type_reference_identifier, alias('bigint', $.type_identifier));
 }
 
-function typeQueryMember($, generic) {
-  return seq(
-    field(
-      'object',
-      choice(
-        $.import,
-        alias($._type_query_member_expression_in_type_annotation, $.member_expression),
-        alias($._type_query_call_expression_in_type_annotation, $.call_expression)
-      )
-    ),
-    '.',
-    ...(generic ? [$._type_reference_arguments_start] : []),
-    field(
-      'property',
-      choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
-    )
+function assertionQueryName($, fieldName) {
+  const root = choice($._type_query_identifier, $.this);
+  const member = alias($._as_type_query_member, $.member_expression);
+  return choice(fieldName ? field(fieldName, root) : root, fieldName ? field(fieldName, member) : member);
+}
+
+function assertionImportMember($, generic) {
+  return typeQueryMember(
+    $,
+    generic,
+    [alias($._as_import_call, $.call_expression), alias($._as_import_member, $.member_expression)],
+    reserved('properties', alias($.identifier, $.property_identifier)),
+    $._as_query_name_end
   );
 }
 
-function callExpression($) {
+function typeQueryMember(
+  $,
+  generic,
+  objects = [
+    $.import,
+    alias($._type_query_member_expression_in_type_annotation, $.member_expression),
+    alias($._type_query_call_expression_in_type_annotation, $.call_expression),
+  ],
+  property = choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier))),
+  propertyStart
+) {
+  return seq(
+    field('object', choice(...objects)),
+    '.',
+    ...(propertyStart ? [propertyStart] : []),
+    ...(generic ? [$._type_reference_arguments_start] : []),
+    field('property', property)
+  );
+}
+
+function heritageCallExpression($) {
   return choice(
     prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
     // Type arguments follow a primary expression, as in TypeScript: `a + b<T>(c)` calls `b`. Where comparisons
@@ -2004,7 +3522,7 @@ function callExpression($) {
   );
 }
 
-function newExpression($) {
+function heritageNewExpression($) {
   return choice(
     prec('new', seq('new', field('constructor', $.primary_expression), field('arguments', $.arguments))),
     prec.dynamic(
@@ -2022,7 +3540,7 @@ function newExpression($) {
   );
 }
 
-function argumentlessNewExpression($) {
+function heritageArgumentlessNewExpression($) {
   return choice(
     prec.right('new', seq('new', field('constructor', $.primary_expression))),
     prec.dynamic(
@@ -2034,31 +3552,6 @@ function argumentlessNewExpression($) {
         $._new_type_arguments_end
       )
     )
-  );
-}
-
-function instantiationExpression($) {
-  const instantiation = (end) =>
-    prec('instantiation', seq($._type_arguments_target, field('type_arguments', $.type_arguments), end));
-  return choice(
-    prec.dynamic(DYNAMIC_PRECEDENCE.INSTANTIATION, instantiation($._type_arguments_end)),
-    prec.dynamic(
-      DYNAMIC_PRECEDENCE.INSTANTIATION_BEFORE_EXPRESSION,
-      instantiation($._type_arguments_end_before_expression)
-    )
-  );
-}
-
-function typeArgumentsTarget($, dialect, heritage = false) {
-  const excluded = heritage ? ['arrow_function', '_jsx_element'] : dialect === 'typescript' ? ['_jsx_element'] : [];
-  const members = JavaScript.grammar.rules.primary_expression.members.filter(
-    (member) =>
-      (member.type !== 'ALIAS' || member.content.name !== '_argumentless_new_expression') &&
-      !excluded.includes(member.name)
-  );
-  return choice(
-    ...members.map((member) => replaceSymbol(member, '_reserved_identifier', $._expression_reserved_identifier)),
-    $.non_null_expression
   );
 }
 
@@ -2086,6 +3579,14 @@ function expressionReservedIdentifier() {
   return choice(
     ...TYPESCRIPT_CONTEXTUAL_KEYWORDS.filter((word) => word !== 'new'),
     JavaScript.grammar.rules._reserved_identifier
+  );
+}
+
+function excludeFromNamePatterns(rule, escapedCharacter) {
+  return mapRule(rule, (part) =>
+    part.type === 'PATTERN' && part.value.startsWith('[^')
+      ? { ...part, value: `[^${escapedCharacter}${part.value.slice(2)}` }
+      : part
   );
 }
 

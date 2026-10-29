@@ -284,6 +284,10 @@
         "named": true
       },
       {
+        "type": "asserts",
+        "named": true
+      },
+      {
         "type": "call_expression",
         "named": true
       },
@@ -316,6 +320,10 @@
         "named": true
       },
       {
+        "type": "jsdoc_unknown_type",
+        "named": true
+      },
+      {
         "type": "literal_type",
         "named": true
       },
@@ -329,6 +337,10 @@
       },
       {
         "type": "nested_type_identifier",
+        "named": true
+      },
+      {
+        "type": "non_nullable_type",
         "named": true
       },
       {
@@ -360,11 +372,19 @@
         "named": true
       },
       {
+        "type": "type_predicate",
+        "named": true
+      },
+      {
         "type": "type_query",
         "named": true
       },
       {
         "type": "union_type",
+        "named": true
+      },
+      {
+        "type": "unique_type",
         "named": true
       }
     ]
@@ -1683,7 +1703,15 @@
         "required": true,
         "types": [
           {
+            "type": "asserts",
+            "named": true
+          },
+          {
             "type": "type",
+            "named": true
+          },
+          {
+            "type": "type_predicate",
             "named": true
           }
         ]
@@ -2129,7 +2157,7 @@
       "required": true,
       "types": [
         {
-          "type": "primary_type",
+          "type": "type",
           "named": true
         }
       ]
@@ -3069,6 +3097,10 @@
       "required": true,
       "types": [
         {
+          "type": "infer_type",
+          "named": true
+        },
+        {
           "type": "primary_type",
           "named": true
         },
@@ -3121,6 +3153,10 @@
           {
             "type": "subscript_expression",
             "named": true
+          },
+          {
+            "type": "this",
+            "named": true
           }
         ]
       },
@@ -3140,107 +3176,7 @@
       "required": false,
       "types": [
         {
-          "type": "array",
-          "named": true
-        },
-        {
-          "type": "arrow_function",
-          "named": true
-        },
-        {
-          "type": "call_expression",
-          "named": true
-        },
-        {
-          "type": "class",
-          "named": true
-        },
-        {
-          "type": "false",
-          "named": true
-        },
-        {
-          "type": "function_expression",
-          "named": true
-        },
-        {
-          "type": "generator_function",
-          "named": true
-        },
-        {
-          "type": "identifier",
-          "named": true
-        },
-        {
-          "type": "jsx_element",
-          "named": true
-        },
-        {
-          "type": "jsx_self_closing_element",
-          "named": true
-        },
-        {
-          "type": "member_expression",
-          "named": true
-        },
-        {
-          "type": "meta_property",
-          "named": true
-        },
-        {
-          "type": "new_expression",
-          "named": true
-        },
-        {
-          "type": "non_null_expression",
-          "named": true
-        },
-        {
-          "type": "null",
-          "named": true
-        },
-        {
-          "type": "number",
-          "named": true
-        },
-        {
-          "type": "object",
-          "named": true
-        },
-        {
-          "type": "parenthesized_expression",
-          "named": true
-        },
-        {
-          "type": "regex",
-          "named": true
-        },
-        {
-          "type": "string",
-          "named": true
-        },
-        {
-          "type": "subscript_expression",
-          "named": true
-        },
-        {
-          "type": "super",
-          "named": true
-        },
-        {
-          "type": "template_string",
-          "named": true
-        },
-        {
-          "type": "this",
-          "named": true
-        },
-        {
-          "type": "true",
-          "named": true
-        },
-        {
-          "type": "undefined",
+          "type": "primary_expression",
           "named": true
         }
       ]
@@ -3375,6 +3311,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "jsdoc_unknown_type",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "jsx_attribute",
@@ -4193,6 +4134,21 @@
       "types": [
         {
           "type": "primary_expression",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "non_nullable_type",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "primary_type",
           "named": true
         }
       ]
@@ -5634,6 +5590,22 @@
     }
   },
   {
+    "type": "unique_type",
+    "named": true,
+    "fields": {
+      "type": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "type",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "update_expression",
     "named": true,
     "fields": {
@@ -6424,6 +6396,10 @@
   {
     "type": "undefined",
     "named": true
+  },
+  {
+    "type": "unique",
+    "named": false
   },
   {
     "type": "unique symbol",
