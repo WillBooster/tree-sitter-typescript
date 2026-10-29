@@ -3678,11 +3678,17 @@ static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_star
 
 static bool const_assertion_consequence_can_start(TSLexer *lexer) {
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+    return assertion_type_keyword_can_start(lexer, false);
+}
+
+// Unlike a type argument, a conditional branch is parsed as a whole type, where a reserved word still names a generic
+// type (`A extends infer U ? const<T> : T`).
+static bool conditional_consequence_can_start(TSLexer *lexer) {
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
     char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
-    // A reserved word still names a generic type, as in `A extends infer U ? const<T> : T`.
     if (!assertion_type_word_allowed(kind, word, escaped, false)) {
         return kind == ASSERTION_IDENTIFIER_WORD && scan_default_trivia(lexer, true, false) && lexer->lookahead == '<';
     }
@@ -3724,7 +3730,13 @@ static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier ki
                                           bool parameter_start) {
     if (!assertion_type_word_allowed(kind, word, escaped, parameter_start)) return false;
     bool comment = false;
-    return !scan_type_whitespace_and_comments(lexer, &comment, false) || scan_assertion_name_tail(lexer);
+    if (!scan_type_whitespace_and_comments(lexer, &comment, false)) return true;
+    // A type operator's `.` starts a numeric operand (`keyof .5`), not a qualified name.
+    if (kind == ASSERTION_IDENTIFIER_WORD && !escaped && is_type_operator_word(word) && lexer->lookahead == '.') {
+        advance(lexer);
+        return is_ascii_digit(lexer->lookahead);
+    }
+    return scan_assertion_name_tail(lexer);
 }
 
 static bool as_lookup_index_can_start(TSLexer *lexer) {
@@ -3791,6 +3803,7 @@ static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols)
                      valid_symbols[AS_LOOKUP_INDEX_START] ? AS_LOOKUP_INDEX_START : TYPE_ARGUMENT_CONTINUATION_START;
     lexer->result_symbol = start;
     if (start == AS_LOOKUP_INDEX_START) return as_lookup_index_can_start(lexer);
+    if (start == CONST_ASSERTION_CONSEQUENCE_START) return conditional_consequence_can_start(lexer);
     return start == TYPE_ARGUMENT_CONTINUATION_START ? type_argument_can_start(lexer) : const_assertion_consequence_can_start(lexer);
 }
 
