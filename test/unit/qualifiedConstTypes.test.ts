@@ -9,6 +9,12 @@ import { loadCurrentWasmBuild } from './wasmBuild.js';
 type Ranges = [string, number, number][];
 const Sources = [
   'const result = value as ? | const.Member;',
+  'const result = value as ?A | infer U[Key];',
+  'const result = value as ?A | infer U[];',
+  'const result = value as ?A & infer U[Key];',
+  'const result = value as ?A | keyof B[Key];',
+  'const result = value as A extends B ? A | (new () => B) : C;',
+  'const result = value as A extends B ? keyof new.Member : C;',
   'const result = value as const.Member & !A;',
   'const result = value as const.Member[!true];',
   'const result = value as !infer.Member<Arg>[];',
@@ -357,6 +363,10 @@ const Sources = [
   'const result = value as const.Member as Other;',
 ];
 const InvalidContexts = [
+  'const invalid = value as A extends B ? A | new.Member : C;',
+  'const invalid = value as A extends B ? C : A | new.Member;',
+  'const invalid = value as A extends B | new.Member ? C : D;',
+  'const invalid = value as A extends B ? A & new.Member : C;',
   String.raw`const invalid = value as typeof \u0069mport;`,
   String.raw`const invalid = value as typeof \u0069mport` + '\n<2;',
   String.raw`const invalid = value as typeof \u0069mport.Member` + '/*\n*/<2;',

@@ -175,6 +175,7 @@ module.exports = function defineGrammar(dialect) {
       $._as_protected_identifier,
       $._as_unique_operand_start,
       $._as_query_root_start,
+      $._as_compound_type_operand_start,
     ],
 
     supertypes: ($, previous) => [
@@ -1387,8 +1388,8 @@ module.exports = function defineGrammar(dialect) {
         ),
       _as_import_member: ($) => assertionImportMember($, false),
       _as_generic_import_member: ($) => assertionImportMember($, true),
-      _as_union_type: ($) => binaryType($, '|', alias($._as_type, $.type)),
-      _as_intersection_type: ($) => binaryType($, '&', alias($._as_type, $.type)),
+      _as_union_type: ($) => binaryType($, '|', alias($._as_type, $.type), $._as_compound_type_operand_start),
+      _as_intersection_type: ($) => binaryType($, '&', alias($._as_type, $.type), $._as_compound_type_operand_start),
       _as_conditional_type: ($) =>
         assertionConditionalType($, alias($._as_type, $.type), {
           right: ordinaryAssertionConstraintType($),
@@ -1415,8 +1416,10 @@ module.exports = function defineGrammar(dialect) {
           $.type_identifier
         ),
       _as_non_array_identifier: ($) => alias($._as_non_array_type_identifier, $.type_identifier),
-      _as_constraint_union_type: ($) => binaryType($, '|', alias($._as_constraint_type, $.type)),
-      _as_constraint_intersection_type: ($) => binaryType($, '&', alias($._as_constraint_type, $.type)),
+      _as_constraint_union_type: ($) =>
+        binaryType($, '|', alias($._as_constraint_type, $.type), $._as_compound_type_operand_start),
+      _as_constraint_intersection_type: ($) =>
+        binaryType($, '&', alias($._as_constraint_type, $.type), $._as_compound_type_operand_start),
       _qualified_const_assertion_type: ($) =>
         choice(
           alias($._const_assertion_primary_type, $.primary_type),
@@ -1715,9 +1718,9 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _const_assertion_constraint_union_type: ($) =>
-        binaryType($, '|', alias($._const_assertion_constraint_type, $.type)),
+        binaryType($, '|', alias($._const_assertion_constraint_type, $.type), $._as_compound_type_operand_start),
       _const_assertion_constraint_intersection_type: ($) =>
-        binaryType($, '&', alias($._const_assertion_constraint_type, $.type)),
+        binaryType($, '&', alias($._const_assertion_constraint_type, $.type), $._as_compound_type_operand_start),
       _const_assertion_constraint_index_type_query: ($) =>
         prec.right(
           seq(
@@ -2986,11 +2989,12 @@ function primaryTypes($) {
   ];
 }
 
-function binaryType($, operator, operand = $.type) {
+function binaryType($, operator, operand = $.type, operandStart) {
+  const following = operandStart ? seq(operandStart, operand) : operand;
   return prec.left(
     choice(
-      seq(operand, operator, operand),
-      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, operand))
+      seq(operand, operator, following),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, following))
     )
   );
 }
@@ -3016,6 +3020,7 @@ function assertionPostfixTypes($, nonArray = false) {
 function ordinaryAssertionPostfixTypes($) {
   return [
     ...assertionPostfixTypes($),
+    alias($._as_postfix_nullable_type, $.flow_maybe_type),
     alias($._ordinary_assertion_array_type, $.array_type),
     alias($._ordinary_assertion_lookup_type, $.lookup_type),
   ];
@@ -3066,9 +3071,9 @@ function constraintBinaryType($, operator) {
   const any = alias($._const_assertion_constraint_type, $.type);
   return prec.left(
     choice(
-      seq(scoped, operator, any),
-      seq(any, operator, scoped),
-      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, scoped))
+      seq(scoped, operator, $._as_compound_type_operand_start, any),
+      seq(any, operator, $._as_compound_type_operand_start, scoped),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, $._as_compound_type_operand_start, scoped))
     )
   );
 }
@@ -3108,7 +3113,10 @@ function nonPostfixConstraintBinaryType(
 ) {
   const last = alias(lastType, $.type);
   return prec.left(
-    choice(seq(operand, operator, last), prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, last)))
+    choice(
+      seq(operand, operator, $._as_compound_type_operand_start, last),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, $._as_compound_type_operand_start, last))
+    )
   );
 }
 
@@ -3210,9 +3218,9 @@ function assertionBinaryType($, operator) {
   const scoped = alias($._qualified_const_assertion_type, $.type);
   return prec.left(
     choice(
-      seq(scoped, operator, assertionOperand($)),
-      seq(alias($._as_type, $.type), operator, scoped),
-      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, scoped))
+      seq(scoped, operator, $._as_compound_type_operand_start, assertionOperand($)),
+      seq(alias($._as_type, $.type), operator, $._as_compound_type_operand_start, scoped),
+      prec.dynamic(DYNAMIC_PRECEDENCE.LEADING_TYPE_OPERATOR, seq(operator, $._as_compound_type_operand_start, scoped))
     )
   );
 }

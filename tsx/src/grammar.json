@@ -19005,13 +19005,22 @@
                 "value": "|"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -19026,13 +19035,22 @@
                   "value": "|"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -19063,13 +19081,22 @@
                 "value": "&"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -19084,13 +19111,22 @@
                   "value": "&"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -19511,13 +19547,22 @@
                 "value": "|"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_constraint_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_constraint_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -19532,13 +19577,22 @@
                   "value": "|"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_constraint_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_constraint_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -19569,13 +19623,22 @@
                 "value": "&"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_as_constraint_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_as_constraint_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -19590,13 +19653,22 @@
                   "value": "&"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_as_constraint_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_as_constraint_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -20043,6 +20115,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "CHOICE",
                 "members": [
                   {
@@ -20084,6 +20160,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -20103,6 +20183,10 @@
                 {
                   "type": "STRING",
                   "value": "|"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -20140,6 +20224,10 @@
               {
                 "type": "STRING",
                 "value": "&"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
               },
               {
                 "type": "CHOICE",
@@ -20183,6 +20271,10 @@
                 "value": "&"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -20202,6 +20294,10 @@
                 {
                   "type": "STRING",
                   "value": "&"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -21879,6 +21975,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_ordinary_assertion_array_type"
           },
           "named": true,
@@ -22401,6 +22506,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -22428,6 +22537,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -22447,6 +22560,10 @@
                 {
                   "type": "STRING",
                   "value": "|"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -22486,6 +22603,10 @@
                 "value": "&"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -22513,6 +22634,10 @@
                 "value": "&"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -22532,6 +22657,10 @@
                 {
                   "type": "STRING",
                   "value": "&"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -23261,6 +23390,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -23280,6 +23413,10 @@
                 {
                   "type": "STRING",
                   "value": "|"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -23333,6 +23470,10 @@
                 "value": "&"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -23352,6 +23493,10 @@
                 {
                   "type": "STRING",
                   "value": "&"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -24118,6 +24263,10 @@
                 "value": "|"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -24137,6 +24286,10 @@
                 {
                   "type": "STRING",
                   "value": "|"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -24176,6 +24329,10 @@
                 "value": "&"
               },
               {
+                "type": "SYMBOL",
+                "name": "_as_compound_type_operand_start"
+              },
+              {
                 "type": "ALIAS",
                 "content": {
                   "type": "SYMBOL",
@@ -24195,6 +24352,10 @@
                 {
                   "type": "STRING",
                   "value": "&"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_as_compound_type_operand_start"
                 },
                 {
                   "type": "ALIAS",
@@ -24563,6 +24724,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_ordinary_assertion_array_type"
           },
           "named": true,
@@ -24860,6 +25030,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_ordinary_assertion_array_type"
           },
           "named": true,
@@ -25130,6 +25309,15 @@
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
+            "name": "_as_postfix_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
             "name": "_ordinary_assertion_array_type"
           },
           "named": true,
@@ -25266,13 +25454,22 @@
                 "value": "|"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_const_assertion_constraint_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_const_assertion_constraint_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -25287,13 +25484,22 @@
                   "value": "|"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_const_assertion_constraint_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_const_assertion_constraint_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -25324,13 +25530,22 @@
                 "value": "&"
               },
               {
-                "type": "ALIAS",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_const_assertion_constraint_type"
-                },
-                "named": true,
-                "value": "type"
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_as_compound_type_operand_start"
+                  },
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_const_assertion_constraint_type"
+                    },
+                    "named": true,
+                    "value": "type"
+                  }
+                ]
               }
             ]
           },
@@ -25345,13 +25560,22 @@
                   "value": "&"
                 },
                 {
-                  "type": "ALIAS",
-                  "content": {
-                    "type": "SYMBOL",
-                    "name": "_const_assertion_constraint_type"
-                  },
-                  "named": true,
-                  "value": "type"
+                  "type": "SEQ",
+                  "members": [
+                    {
+                      "type": "SYMBOL",
+                      "name": "_as_compound_type_operand_start"
+                    },
+                    {
+                      "type": "ALIAS",
+                      "content": {
+                        "type": "SYMBOL",
+                        "name": "_const_assertion_constraint_type"
+                      },
+                      "named": true,
+                      "value": "type"
+                    }
+                  ]
                 }
               ]
             }
@@ -25576,6 +25800,15 @@
           },
           "named": true,
           "value": "generic_type"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_as_postfix_nullable_type"
+          },
+          "named": true,
+          "value": "flow_maybe_type"
         },
         {
           "type": "ALIAS",
@@ -51683,6 +51916,10 @@
     {
       "type": "SYMBOL",
       "name": "_as_query_root_start"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_as_compound_type_operand_start"
     }
   ],
   "inline": [
