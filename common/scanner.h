@@ -1619,7 +1619,10 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
                     while (!lexer->eof(lexer)) {
                         bool star = lexer->lookahead == '*';
                         advance(lexer);
-                        if (star && lexer->lookahead == '/') break;
+                        if (star && lexer->lookahead == '/') {
+                            advance(lexer);
+                            break;
+                        }
                     }
                 }
                 continue;
@@ -1703,10 +1706,10 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
         bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
-        // TypeScript reads `(name?` as a parameter list even before a type (`(unique ? A)` misses `,` and `=>`).
-        if (optional_parameter && (is_identifier_part(lexer->lookahead) || lexer->lookahead == '(' || lexer->lookahead == '[' ||
-                                   lexer->lookahead == '{' || lexer->lookahead == '"' || lexer->lookahead == '\'' ||
-                                   lexer->lookahead == '`')) {
+        // TypeScript reads `(name?` as a parameter list even before a type (`(unique ? A)` misses `,` and `=>`); a tuple's
+        // optional element (`[unknown?]`) and the other delimiters below keep their own readings.
+        if (optional_parameter && !untyped_parameter &&
+            !(lexer->lookahead < 128 && strchr(":]>=;}", (int)lexer->lookahead))) {
             if (!valid_symbols[PREDEFINED_PARAMETER_NAME]) return false;
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
             return true;
@@ -3521,6 +3524,7 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_consequence_can_start(TSLexer *lexer);
+static bool assertion_type_word_allowed(AssertionIdentifier kind, const char *word, bool escaped, bool parameter_start);
 static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier kind, const char *word, bool escaped,
                                           bool parameter_start);
 static bool type_argument_can_start(TSLexer *lexer);
@@ -3674,7 +3678,15 @@ static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_star
 
 static bool const_assertion_consequence_can_start(TSLexer *lexer) {
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
-    return assertion_type_keyword_can_start(lexer, false);
+    char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+    bool escaped = false;
+    AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
+    if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
+    // A reserved word still names a generic type, as in `A extends infer U ? const<T> : T`.
+    if (!assertion_type_word_allowed(kind, word, escaped, false)) {
+        return kind == ASSERTION_IDENTIFIER_WORD && scan_default_trivia(lexer, true, false) && lexer->lookahead == '<';
+    }
+    return assertion_type_word_can_start(lexer, kind, word, escaped, false);
 }
 
 static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *valid_symbols) {
@@ -3701,15 +3713,16 @@ static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_star
     return assertion_type_word_can_start(lexer, kind, word, escaped, parameter_start);
 }
 
+static bool assertion_type_word_allowed(AssertionIdentifier kind, const char *word, bool escaped, bool parameter_start) {
+    if (kind != ASSERTION_IDENTIFIER_WORD) return kind == ASSERTION_IDENTIFIER_OTHER;
+    return !assertion_binding_word_is_reserved(word) || strcmp(word, "function") == 0 ||
+        (parameter_start && (strcmp(word, "this") == 0 || strcmp(word, "const") == 0 || strcmp(word, "default") == 0 || strcmp(word, "export") == 0 || strcmp(word, "in") == 0)) ||
+        (!escaped && (strcmp(word, "void") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 || strcmp(word, "import") == 0 || strcmp(word, "this") == 0));
+}
+
 static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier kind, const char *word, bool escaped,
                                           bool parameter_start) {
-    bool allowed = kind == ASSERTION_IDENTIFIER_OTHER;
-    if (kind == ASSERTION_IDENTIFIER_WORD) {
-        allowed = !assertion_binding_word_is_reserved(word) || strcmp(word, "function") == 0 ||
-            (parameter_start && (strcmp(word, "this") == 0 || strcmp(word, "const") == 0 || strcmp(word, "default") == 0 || strcmp(word, "export") == 0 || strcmp(word, "in") == 0)) ||
-            (!escaped && (strcmp(word, "void") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 || strcmp(word, "import") == 0 || strcmp(word, "this") == 0));
-    }
-    if (!allowed) return false;
+    if (!assertion_type_word_allowed(kind, word, escaped, parameter_start)) return false;
     bool comment = false;
     return !scan_type_whitespace_and_comments(lexer, &comment, false) || scan_assertion_name_tail(lexer);
 }
