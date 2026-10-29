@@ -339,11 +339,14 @@ for (const dialect of ['typescript', 'tsx']) {
           }
         }
       }
-      const tree = parser.parse('class C implements number</* gap */<T>()=>T> {}')!;
-      try {
-        expect(tree.rootNode.hasError).toBe(false);
-      } finally {
-        tree.delete();
+      for (const separator of ['/* gap */', ' ']) {
+        const source = `class C implements number<${separator}<T>()=>T> {}`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
       parser.delete();
