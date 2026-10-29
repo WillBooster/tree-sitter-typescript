@@ -492,6 +492,7 @@ for (const dialect of ['typescript', 'tsx']) {
         'a as (unique ?);',
         'a as (unique ? A);',
         'a as (unique ? !A);',
+        'a as (unique ? -1);',
         'type U = A extends infer U ? const<T> : T;',
         'type U = A extends infer U ? class<T> : T;',
         'type U = A extends infer U ? in<T, U> : Y;',

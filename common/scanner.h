@@ -1703,7 +1703,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         if (strcmp(word, "readonly") == 0 && !optional_parameter) return false;
         if (optional_parameter) {
             advance(lexer);
-            if (!scan_default_trivia(lexer, true, true)) return false;
+            if (!scan_default_trivia(lexer, true, false)) return false;
         }
         bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
         // TypeScript reads `(name?` as a parameter list even before a type (`(unique ? A)` misses `,` and `=>`); a tuple's
