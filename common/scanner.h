@@ -1694,6 +1694,8 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         (strcmp(word, "bigint") == 0 || strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
         lexer->mark_end(lexer);
         if (!scan_default_trivia(lexer, true, true)) return false;
+        // A qualified name (`(bigint.M)`) is a type reference, never a parameter.
+        if (lexer->lookahead == '.') goto reference;
         bool optional_parameter = lexer->lookahead == '?';
         if (strcmp(word, "readonly") == 0 && !optional_parameter) return false;
         if (optional_parameter) {
@@ -1803,6 +1805,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         }
         return true;
     }
+reference:;
     bool abstract_prefix = valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] && ascii_word && strcmp(word, "abstract") == 0;
     bool line_break = false;
     if (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) {
