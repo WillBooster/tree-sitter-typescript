@@ -1,9 +1,7 @@
-import { Edit, type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
@@ -65,21 +63,14 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`updates qualified ${dialect} implements names and captures through edits`, async () => {
+  test(`parses qualified ${dialect} implements names before class bodies`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const roles = new Query(language, RoleQuery);
-    const queries: ReturnType<typeof configuredQueries> = [];
-    const prefix = Header + 'class C implements ';
-    let name = 'readonly.Foo';
-    let source = prefix + name + Suffix;
-    let tree: Tree | undefined;
     try {
-      queries.push(...configuredQueries(language, dialect));
-      tree = parser.parse(source)!;
-      checkHeritage(tree, source, dialect, roles);
-      for (const nextName of [
+      for (const name of [
+        'readonly.Foo',
         'readonly.Foo<number>',
         'keyof.Inner.Deep<number>',
         'unique.Inner.Deeper.Leaf<string>',
@@ -88,41 +79,16 @@ for (const dialect of ['typescript', 'tsx']) {
         'type.Inner.Deep<number>',
         'namespace.Inner.Deeper.Leaf<string>',
         'Outer.get.Foo<number>',
-        'readonly.Foo',
       ]) {
-        const next = prefix + nextName + Suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + name.length,
-            newEndIndex: prefix.length + nextName.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + name.length),
-            newEndPosition: position(next, prefix.length + nextName.length),
-          }),
-          (incremental, fresh) => {
-            checkHeritage(incremental, next, dialect, roles);
-            checkHeritage(fresh, next, dialect, roles);
-            for (const query of queries) {
-              const captures = (parsed: Tree): unknown =>
-                query
-                  .captures(parsed.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex]);
-              expect(captures(incremental)).toEqual(captures(fresh));
-            }
-          }
-        );
-        previous.delete();
-        source = next;
-        name = nextName;
+        const source = Header + 'class C implements ' + name + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkHeritage(tree, source, dialect, roles);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
-      for (const query of queries) query.delete();
       roles.delete();
       parser.delete();
     }

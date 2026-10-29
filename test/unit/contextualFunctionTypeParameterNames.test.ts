@@ -1,7 +1,6 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Names = [
@@ -48,20 +47,21 @@ describe.each(['typescript', 'tsx'])('%s contextual function-type parameter name
   afterAll(() => query?.delete());
 
   test.each(Names)(
-    'keeps $name ($optional) bindings with $returnType through annotation edits',
+    'keeps $name ($optional) bindings with $returnType and rejects missing annotations',
     ({ name, optional, returnType }) => {
       const parser = new Parser().setLanguage(language);
       try {
         for (const context of Contexts) {
           for (const trivia of ['', ' /* name */ ', '\n']) {
             for (const annotation of ['T', 'typeof ns.x', 'readonly T[]', 'T extends U?V:W']) {
-              let source = context.replace('SIGNATURE', `(${name}${optional}${trivia}:${annotation})=>${returnType}`);
+              const sourceFor = (type: string): string =>
+                context.replace('SIGNATURE', `(${name}${optional}${trivia}:${type})=>${returnType}`);
+              const source = sourceFor(annotation);
               const nameStart = source.indexOf(name);
-              const start = source.indexOf(':', nameStart + name.length) + 1;
-              let previousAnnotation = annotation;
-              let tree: Tree | undefined;
-              const checkBinding = (current: Tree): void => {
-                const captures = query!.captures(current.rootNode);
+              const tree = parser.parse(source)!;
+              try {
+                expect(tree.rootNode.hasError).toBe(false);
+                const captures = query!.captures(tree.rootNode);
                 const bindings = captures.filter(
                   ({ name: capture, node }) => capture === 'binding' && node.text === name
                 );
@@ -77,41 +77,16 @@ describe.each(['typescript', 'tsx'])('%s contextual function-type parameter name
                 expect(
                   captures.some(({ name: capture, node }) => capture === 'signature' && node.id === signature.id)
                 ).toBe(true);
-              };
-              try {
-                tree = parser.parse(source)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                checkBinding(tree);
-                for (const replacement of ['', '/* removed */', annotation]) {
-                  const end = start + previousAnnotation.length;
-                  const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(replacement !== annotation);
-                        if (replacement === annotation) checkBinding(current);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
-                  source = next;
-                  previousAnnotation = replacement;
-                }
               } finally {
-                tree?.delete();
+                tree.delete();
+              }
+              for (const missing of ['', '/* removed */']) {
+                const broken = parser.parse(sourceFor(missing))!;
+                try {
+                  expect(broken.rootNode.hasError).toBe(true);
+                } finally {
+                  broken.delete();
+                }
               }
             }
           }

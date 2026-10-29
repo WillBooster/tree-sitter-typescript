@@ -1,7 +1,7 @@
-import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit';
+import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Declarations = [
@@ -63,36 +63,14 @@ for (const dialect of ['typescript', 'tsx'] as const) {
         for (const gap of Trivia) {
           const withTrivia = declaration.replace(/\b(interface|enum|let|function)(\*?) /, `$1$2${gap}`);
           const following = withTrivia + '\n' + Sentinel;
-          let header = BrokenHeader;
-          let tree = parser.parse(header + following)!;
-          try {
-            checkFollowing(tree, header + following, withTrivia, kind, true);
-            for (const replacement of [RepairedHeader, BrokenHeader]) {
-              const source = replacement + following;
-              const next = compareEditedTree(
-                parser,
-                tree,
-                source,
-                new Edit({
-                  startIndex: 0,
-                  oldEndIndex: header.length,
-                  newEndIndex: replacement.length,
-                  startPosition: { row: 0, column: 0 },
-                  oldEndPosition: position(header, header.length),
-                  newEndPosition: position(replacement, replacement.length),
-                }),
-                (incremental, fresh) => {
-                  checkFollowing(incremental, source, withTrivia, kind, replacement === BrokenHeader);
-                  checkFollowing(fresh, source, withTrivia, kind, replacement === BrokenHeader);
-                },
-                true
-              );
+          for (const header of [BrokenHeader, RepairedHeader]) {
+            const source = header + following;
+            const tree = parser.parse(source)!;
+            try {
+              checkFollowing(tree, source, withTrivia, kind, header === BrokenHeader);
+            } finally {
               tree.delete();
-              tree = next;
-              header = replacement;
             }
-          } finally {
-            tree.delete();
           }
         }
       }

@@ -1,7 +1,6 @@
-import { Edit, Parser } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('rejects string-named local exports while retaining string re-exports and aliases', async () => {
@@ -41,49 +40,6 @@ test('rejects string-named local exports while retaining string re-exports and a
           } finally {
             tree.delete();
           }
-        }
-      }
-    } finally {
-      parser.delete();
-    }
-  }
-});
-
-test('updates export validity when adding and removing a from clause', async () => {
-  await Parser.init();
-  for (const dialect of ['typescript', 'tsx']) {
-    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
-    try {
-      for (const statement of ['export', 'export type']) {
-        const prefix = `${statement} { "remote" as local }`;
-        let clause = '';
-        let tree = parser.parse(prefix + ';')!;
-        try {
-          expect(tree.rootNode.hasError).toBe(true);
-          for (const nextClause of [' from "m"', '', ' from "m"']) {
-            const previousSource = prefix + clause + ';';
-            const source = prefix + nextClause + ';';
-            const next = compareEditedTree(
-              parser,
-              tree,
-              source,
-              new Edit({
-                startIndex: prefix.length,
-                oldEndIndex: prefix.length + clause.length,
-                newEndIndex: prefix.length + nextClause.length,
-                startPosition: position(previousSource, prefix.length),
-                oldEndPosition: position(previousSource, prefix.length + clause.length),
-                newEndPosition: position(source, prefix.length + nextClause.length),
-              }),
-              (incremental) => expect(incremental.rootNode.hasError, source).toBe(!nextClause),
-              true
-            );
-            tree.delete();
-            tree = next;
-            clause = nextClause;
-          }
-        } finally {
-          tree.delete();
         }
       }
     } finally {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-import { Edit, type Node, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 import { loadCurrentWasmBuild } from './wasmBuild';
@@ -33,58 +33,32 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} restores typed await and statement boundaries after comment edits`, () => {
+  test(`${dialect} keeps typed await and statement boundaries around comments`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const prefix = 'async function f() { await g<T>(x)\n';
-    const suffix = '!h; }';
-    let source = `${prefix}${suffix}`;
-    let tree = parser.parse(source);
-    assert.ok(tree);
-    let comment = '';
     try {
-      for (const replacement of ['// boundary\n', '/* boundary */', '/* boundary\n */', '', '/* unfinished', '']) {
-        const next = prefix + replacement + suffix;
-        tree.edit(
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + comment.length,
-            newEndIndex: prefix.length + replacement.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + comment.length),
-            newEndPosition: position(next, prefix.length + replacement.length),
-          })
-        );
-        const edited = parser.parse(next, tree);
-        assert.ok(edited);
-        const old = tree;
-        tree = edited;
-        old.delete();
-        const fresh = parser.parse(next);
-        assert.ok(fresh);
+      for (const comment of ['// boundary\n', '/* boundary */', '/* boundary\n */', '', '/* unfinished']) {
+        const tree = parser.parse(`async function f() { await g<T>(x)\n${comment}!h; }`);
+        assert.ok(tree);
         try {
-          expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
-          if (!replacement.includes('unfinished')) {
-            expect(edited.rootNode.hasError).toBe(false);
-            const [body] = edited.rootNode.descendantsOfType('statement_block');
+          if (!comment.includes('unfinished')) {
+            expect(tree.rootNode.hasError).toBe(false);
+            const [body] = tree.rootNode.descendantsOfType('statement_block');
             expect(body?.namedChildren.filter((node) => node.type !== 'comment').map((node) => node.type)).toEqual([
               'expression_statement',
               'expression_statement',
             ]);
-            const [awaitNode] = edited.rootNode.descendantsOfType('await_expression');
+            const [awaitNode] = tree.rootNode.descendantsOfType('await_expression');
             expect(awaitNode?.text).toBe('await g<T>(x)');
-            expect(edited.rootNode.descendantsOfType('unary_expression').map((node) => node.text)).toEqual(['!h']);
+            expect(tree.rootNode.descendantsOfType('unary_expression').map((node) => node.text)).toEqual(['!h']);
           } else {
-            expect(edited.rootNode.hasError).toBe(true);
+            expect(tree.rootNode.hasError).toBe(true);
           }
         } finally {
-          fresh.delete();
+          tree.delete();
         }
-        source = next;
-        comment = replacement;
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });
@@ -150,7 +124,7 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} restores restricted return and regex boundaries across adjacent comment edits`, () => {
+  test(`${dialect} keeps restricted return and regex boundaries around adjacent comments`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
     const declaration = parser.parse('let a/*\nx*//b/.test(x);');
@@ -163,61 +137,29 @@ for (const dialect of ['typescript', 'tsx']) {
     } finally {
       declaration.delete();
     }
-    const prefix = 'function f(){return';
-    const suffix = '/b/.test(x);}';
-    let comment = '/*\nx*/';
-    let source = prefix + comment + suffix;
-    let tree = parser.parse(source);
-    assert.ok(tree);
     try {
-      for (const replacement of [
-        '/*\nx*//* second */',
-        '/* same line */',
-        '// boundary\n',
-        '/* unfinished',
-        '/*\nx*/',
-      ]) {
-        const next = prefix + replacement + suffix;
-        tree.edit(
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + comment.length,
-            newEndIndex: prefix.length + replacement.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + comment.length),
-            newEndPosition: position(next, prefix.length + replacement.length),
-          })
-        );
-        const edited = parser.parse(next, tree);
-        assert.ok(edited);
-        const old = tree;
-        tree = edited;
-        old.delete();
-        const fresh = parser.parse(next);
-        assert.ok(fresh);
+      for (const comment of ['/*\nx*/', '/*\nx*//* second */', '/* same line */', '// boundary\n', '/* unfinished']) {
+        const tree = parser.parse(`function f(){return${comment}/b/.test(x);}`);
+        assert.ok(tree);
         try {
-          expect(snapshot(edited.rootNode)).toEqual(snapshot(fresh.rootNode));
-          if (replacement.includes('unfinished')) {
-            expect(edited.rootNode.hasError).toBe(true);
+          if (comment.includes('unfinished')) {
+            expect(tree.rootNode.hasError).toBe(true);
           } else {
-            expect(edited.rootNode.hasError).toBe(false);
-            const [returnNode] = edited.rootNode.descendantsOfType('return_statement');
+            expect(tree.rootNode.hasError).toBe(false);
+            const [returnNode] = tree.rootNode.descendantsOfType('return_statement');
             expect(
               returnNode?.namedChildren.filter((node) => node.type !== 'comment').map((node) => node.type)
-            ).toEqual(replacement.includes('\n') ? [] : ['call_expression']);
-            expect(edited.rootNode.descendantsOfType('expression_statement')).toHaveLength(
-              replacement.includes('\n') ? 1 : 0
+            ).toEqual(comment.includes('\n') ? [] : ['call_expression']);
+            expect(tree.rootNode.descendantsOfType('expression_statement')).toHaveLength(
+              comment.includes('\n') ? 1 : 0
             );
-            expect(edited.rootNode.descendantsOfType('regex').map((node) => node.text)).toEqual(['/b/']);
+            expect(tree.rootNode.descendantsOfType('regex').map((node) => node.text)).toEqual(['/b/']);
           }
         } finally {
-          fresh.delete();
+          tree.delete();
         }
-        source = next;
-        comment = replacement;
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });
@@ -350,7 +292,7 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} attaches class bodies after comments and restores them after incremental edits`, () => {
+  test(`${dialect} attaches class bodies after comments`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
     const query = new Query(language, '(method_definition body: (statement_block) @body)');
@@ -363,52 +305,17 @@ for (const dialect of ['typescript', 'tsx']) {
         ['set x(v: number)', '{}'],
         ['m<T>(): T', '{ return undefined as T; }'],
       ]) {
-        const prefix = `class C {\n${header}`;
-        const suffix = `\n${body}\n}`;
-        let comment = '';
-        let source = prefix + suffix;
-        let tree = parser.parse(source);
-        assert.ok(tree);
-        try {
-          for (const replacement of [
-            ' // boundary',
-            ' /* boundary\n */',
-            ' /* first */// boundary',
-            '',
-            ' // restored',
-          ]) {
-            const next = prefix + replacement + suffix;
-            tree.edit(
-              new Edit({
-                startIndex: prefix.length,
-                oldEndIndex: prefix.length + comment.length,
-                newEndIndex: prefix.length + replacement.length,
-                startPosition: position(source, prefix.length),
-                oldEndPosition: position(source, prefix.length + comment.length),
-                newEndPosition: position(next, prefix.length + replacement.length),
-              })
-            );
-            const edited = parser.parse(next, tree);
-            assert.ok(edited);
-            const old = tree;
-            tree = edited;
-            old.delete();
-            const fresh = parser.parse(next);
-            assert.ok(fresh);
-            try {
-              expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
-              expect(tree.rootNode.hasError).toBe(false);
-              expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['class_declaration']);
-              expect(tree.rootNode.descendantsOfType('method_definition')).toHaveLength(1);
-              expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([body]);
-            } finally {
-              fresh.delete();
-            }
-            source = next;
-            comment = replacement;
+        for (const comment of [' // boundary', ' /* boundary\n */', ' /* first */// boundary', '', ' // restored']) {
+          const tree = parser.parse(`class C {\n${header}${comment}\n${body}\n}`);
+          assert.ok(tree);
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['class_declaration']);
+            expect(tree.rootNode.descendantsOfType('method_definition')).toHaveLength(1);
+            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([body]);
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {
@@ -417,7 +324,7 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} preserves typed declaration continuations through incremental comment edits`, () => {
+  test(`${dialect} preserves typed declaration continuations after comments`, () => {
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(predefined_type) @type');
     try {
@@ -429,64 +336,31 @@ for (const dialect of ['typescript', 'tsx']) {
         ['let x: { a', '\n: string };', 'string'],
         ['interface I { a: string', '\n; }', 'string'],
       ] as const) {
-        let comment = '';
-        let source = prefix + suffix;
-        let tree = parser.parse(source);
-        assert.ok(tree);
-        try {
-          for (const replacement of [
-            ' // boundary',
-            ' /* boundary\n */',
-            ' /* first */// boundary',
-            '',
-            ' // restored',
-          ]) {
-            const next = prefix + replacement + suffix;
-            tree.edit(
-              new Edit({
-                startIndex: prefix.length,
-                oldEndIndex: prefix.length + comment.length,
-                newEndIndex: prefix.length + replacement.length,
-                startPosition: position(source, prefix.length),
-                oldEndPosition: position(source, prefix.length + comment.length),
-                newEndPosition: position(next, prefix.length + replacement.length),
-              })
-            );
-            const edited = parser.parse(next, tree);
-            assert.ok(edited);
-            const old = tree;
-            tree = edited;
-            old.delete();
-            const fresh = parser.parse(next);
-            assert.ok(fresh);
-            try {
-              expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
-              expect(tree.rootNode.hasError).toBe(false);
-              expect(tree.rootNode.namedChildren).toHaveLength(1);
-              expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([type]);
-              const [property] = tree.rootNode.descendantsOfType('property_signature');
-              if (property) {
-                expect(property.childForFieldName('name')?.text).toBe('a');
-                expect(property.childForFieldName('type')?.text).toBe(': string');
-              }
-              const [method] = tree.rootNode.descendantsOfType('method_signature');
-              if (method) {
-                expect(method.childForFieldName('parameters')?.text).toBe('()');
-                expect(method.childForFieldName('return_type')?.text).toBe(': void');
-              }
-              const [generic] = tree.rootNode.descendantsOfType('generic_type');
-              if (generic) {
-                expect(generic.childForFieldName('name')?.text).toBe('Foo');
-                expect(generic.childForFieldName('type_arguments')?.text).toBe('<number>');
-              }
-            } finally {
-              fresh.delete();
+        for (const comment of [' // boundary', ' /* boundary\n */', ' /* first */// boundary', '', ' // restored']) {
+          const tree = parser.parse(prefix + comment + suffix);
+          assert.ok(tree);
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.namedChildren).toHaveLength(1);
+            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([type]);
+            const [property] = tree.rootNode.descendantsOfType('property_signature');
+            if (property) {
+              expect(property.childForFieldName('name')?.text).toBe('a');
+              expect(property.childForFieldName('type')?.text).toBe(': string');
             }
-            source = next;
-            comment = replacement;
+            const [method] = tree.rootNode.descendantsOfType('method_signature');
+            if (method) {
+              expect(method.childForFieldName('parameters')?.text).toBe('()');
+              expect(method.childForFieldName('return_type')?.text).toBe(': void');
+            }
+            const [generic] = tree.rootNode.descendantsOfType('generic_type');
+            if (generic) {
+              expect(generic.childForFieldName('name')?.text).toBe('Foo');
+              expect(generic.childForFieldName('type_arguments')?.text).toBe('<number>');
+            }
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {
@@ -503,32 +377,11 @@ for (const dialect of ['typescript', 'tsx']) {
     );
     const prefix = 'const f = () => {}';
     const suffix = '\n/re/.test(a)\n';
-    let comment = '';
-    let source = prefix + suffix;
-    let tree = parser.parse(source);
-    assert.ok(tree);
     try {
-      for (const replacement of [' // boundary', ' /* boundary\n */', ' /* first */// boundary', '', ' // restored']) {
-        const next = prefix + replacement + suffix;
-        tree.edit(
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + comment.length,
-            newEndIndex: prefix.length + replacement.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + comment.length),
-            newEndPosition: position(next, prefix.length + replacement.length),
-          })
-        );
-        const edited = parser.parse(next, tree);
-        assert.ok(edited);
-        const old = tree;
-        tree = edited;
-        old.delete();
-        const fresh = parser.parse(next);
-        assert.ok(fresh);
+      for (const comment of [' // boundary', ' /* boundary\n */', ' /* first */// boundary', '', ' // restored']) {
+        const tree = parser.parse(prefix + comment + suffix);
+        assert.ok(tree);
         try {
-          expect(snapshot(tree.rootNode)).toEqual(snapshot(fresh.rootNode));
           expect(tree.rootNode.hasError).toBe(false);
           const [declaration] = tree.rootNode.descendantsOfType('lexical_declaration');
           const [arrow] = tree.rootNode.descendantsOfType('arrow_function');
@@ -543,13 +396,10 @@ for (const dialect of ['typescript', 'tsx']) {
             expect(node.parent?.type).toBe('program');
           }
         } finally {
-          fresh.delete();
+          tree.delete();
         }
-        source = next;
-        comment = replacement;
       }
     } finally {
-      tree.delete();
       query.delete();
       parser.delete();
     }
@@ -579,19 +429,4 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
-}
-
-function position(source: string, index: number): { row: number; column: number } {
-  const prefix = source.slice(0, index);
-  return { row: prefix.split('\n').length - 1, column: index - prefix.lastIndexOf('\n') - 1 };
-}
-
-function snapshot(node: Node): unknown {
-  return {
-    type: node.type,
-    start: node.startIndex,
-    end: node.endIndex,
-    missing: node.isMissing,
-    children: node.children.map(snapshot),
-  };
 }

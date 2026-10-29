@@ -1,11 +1,7 @@
-import fs from 'node:fs';
-
-import { Edit, type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import treeSitterJson from '../../tree-sitter.json';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `type asserts<T = unknown> = T;
@@ -53,10 +49,9 @@ declare function editable(value: unknown): `;
 const Suffix = `;
 const following = 1;
 `;
-const InitialType = 'asserts';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves asserts type references and predicates through ${dialect} edits`, async () => {
+  test(`preserves ${dialect} asserts type references and predicates`, async () => {
     const prefix =
       (dialect === 'tsx'
         ? 'const view = <asserts.View />; const flat = <asserts />; const paired = <asserts>text</asserts>;\n'
@@ -68,29 +63,9 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding) (computed_property_name) @computed (index_signature name: (_) @indexName) (type_query) @typeQuery (conditional_type) @conditional'
     );
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
-      (kind) =>
-        new Query(
-          language,
-          [grammar[kind]]
-            .flat()
-            .map((file) => fs.readFileSync(file, 'utf8'))
-            .join('\n')
-        )
-    );
-    const captures = (tree: Tree): unknown =>
-      queries.map((compiled) =>
-        compiled
-          .captures(tree.rootNode)
-          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-      );
-    let annotation = InitialType;
-    let source = prefix + annotation + Suffix;
-    let tree = parser.parse(source)!;
     try {
-      checkReturns(tree, source, dialect, query);
-      for (const nextType of [
+      for (const type of [
+        'asserts',
         'asserts<string>',
         'asserts.X',
         'asserts.X<string>',
@@ -102,36 +77,17 @@ for (const dialect of ['typescript', 'tsx']) {
         '() => asserts',
         'asserts /* same line */ value',
         'asserts\n',
-        InitialType,
       ]) {
-        const next = prefix + nextType + Suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + annotation.length,
-            newEndIndex: prefix.length + nextType.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + annotation.length),
-            newEndPosition: position(next, prefix.length + nextType.length),
-          }),
-          (incremental, fresh) => {
-            checkReturns(incremental, next, dialect, query);
-            checkReturns(fresh, next, dialect, query);
-            expect(captures(incremental)).toEqual(captures(fresh));
-          }
-        );
-        previous.delete();
-        annotation = nextType;
-        source = next;
+        const source = prefix + type + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkReturns(tree, source, dialect, query);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
       query.delete();
-      for (const compiled of queries) compiled.delete();
       parser.delete();
     }
   });

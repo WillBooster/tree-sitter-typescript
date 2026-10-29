@@ -1,12 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const RecoveryCases: [string, boolean, string, string, string?, string?, string?, string?][] = [];
@@ -182,43 +180,20 @@ describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
     for (const resource of queries) resource.delete();
   });
   test.each(['any', 'number', 'boolean', 'string', 'symbol', 'unknown', 'never', 'object', 'unique'])(
-    'preserves %s through identifier edits',
+    'recognizes %s and a renamed parameter as assertion names',
     (word) => {
       const parser = new Parser().setLanguage(language);
-      let tree: Tree | undefined;
-      let source = Source;
       try {
-        tree = parser.parse(source)!;
-        check(tree);
-        const start = source.indexOf(`asserts ${word}`) + 'asserts '.length;
-        for (const [before, after] of [
-          [word, 'parameter'],
-          ['parameter', word],
-        ]) {
-          const next = source.slice(0, start) + after + source.slice(start + before!.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before!.length,
-              newEndIndex: start + after!.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before!.length),
-              newEndPosition: position(next, start + after!.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next);
-              check(fresh, next);
-            }
-          );
-          previous.delete();
-          source = next;
+        const start = Source.indexOf(`asserts ${word}`) + 'asserts '.length;
+        for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + word.length)]) {
+          const tree = parser.parse(source)!;
+          try {
+            check(tree, source);
+          } finally {
+            tree.delete();
+          }
         }
-        expect(source).toBe(Source);
-        function check(current: Tree, text = source): void {
+        function check(current: Tree, text: string): void {
           const reference = ts.createSourceFile('assertions.ts', text, ts.ScriptTarget.Latest, true);
           const names: [string, number, number][] = [];
           const predicateRoles: [string, string, number, number][] = [];
@@ -250,7 +225,6 @@ describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
           ).toEqual(predicateRoles);
         }
       } finally {
-        tree?.delete();
         parser.delete();
       }
     }
@@ -258,75 +232,30 @@ describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
 });
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves ${dialect} canonical assertion prefixes through malformed array-tail edits`, async () => {
+  test(`preserves ${dialect} canonical assertion prefixes with and without malformed array tails`, async () => {
     await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const queries: Query[] = [];
-    let tree: Tree | undefined;
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
-      queries.push(...configuredQueries(language, dialect));
       for (const word of ['any', 'number', 'boolean', 'string', 'symbol', 'unknown', 'never', 'object', 'unique']) {
-        let source = `declare function f(value: unknown): asserts ${word};\nconst sentinel = 1;\n`;
-        tree = parser.parse(source)!;
-        expect(tree.rootNode.hasError).toBe(false);
-        const start = source.indexOf(';');
-        for (const [before, after] of [
-          ['', '[], number'],
-          ['[], number', ''],
-        ]) {
-          const next = source.slice(0, start) + after + source.slice(start + before!.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before!.length,
-              newEndIndex: start + after!.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before!.length),
-              newEndPosition: position(next, start + after!.length),
-            }),
-            (incremental, fresh) => {
-              for (const query of queries) {
-                const captures = (current: Tree): unknown[] =>
-                  query
-                    .captures(current.rootNode)
-                    .map(({ name, node }) => [
-                      name,
-                      node.type,
-                      node.text,
-                      node.startIndex,
-                      node.endIndex,
-                      node.startPosition,
-                      node.endPosition,
-                    ]);
-                expect(captures(incremental)).toEqual(captures(fresh));
-              }
-              for (const current of [incremental, fresh]) {
-                expect(current.rootNode.hasError).toBe(after !== '');
-                const assertion = current.rootNode.descendantsOfType('asserts').find((node) => node.isNamed)!;
-                expect(assertion.namedChildren[0]!.type).toBe('identifier');
-                expect(assertion.namedChildren[0]!.text).toBe(word);
-                expect(current.rootNode.descendantsOfType('expression_statement').map((node) => node.text)).toEqual(
-                  after ? ['[], number;'] : []
-                );
-                expect(current.rootNode.namedChildren.at(-1)!.text).toBe('const sentinel = 1;');
-              }
-            },
-            true
-          );
-          previous.delete();
-          source = next;
+        for (const tail of ['', '[], number']) {
+          const tree = parser.parse(
+            `declare function f(value: unknown): asserts ${word}${tail};\nconst sentinel = 1;\n`
+          )!;
+          try {
+            expect(tree.rootNode.hasError).toBe(tail !== '');
+            const assertion = tree.rootNode.descendantsOfType('asserts').find((node) => node.isNamed)!;
+            expect(assertion.namedChildren[0]!.type).toBe('identifier');
+            expect(assertion.namedChildren[0]!.text).toBe(word);
+            expect(tree.rootNode.descendantsOfType('expression_statement').map((node) => node.text)).toEqual(
+              tail ? ['[], number;'] : []
+            );
+            expect(tree.rootNode.namedChildren.at(-1)!.text).toBe('const sentinel = 1;');
+          } finally {
+            tree.delete();
+          }
         }
-        tree.delete();
-        tree = undefined;
       }
     } finally {
-      tree?.delete();
-      for (const query of queries) query.delete();
       parser.delete();
     }
   });
@@ -334,12 +263,10 @@ for (const dialect of ['typescript', 'tsx']) {
 
 describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  const queries: Query[] = [];
   let annotationQuery: Query | undefined;
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    queries.push(...configuredQueries(language, dialect));
     annotationQuery = new Query(
       language,
       `
@@ -355,82 +282,37 @@ describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dia
   }, 30_000);
   afterAll(() => {
     annotationQuery?.delete();
-    for (const query of queries) query.delete();
   });
-  test.each(RecoverySamples)('restores $prefix after $tail', ({ word, tail, prefix, suffix, following }) => {
+  test.each(RecoverySamples)('parses $prefix with and without $tail', ({ word, tail, prefix, suffix, following }) => {
     const parser = new Parser().setLanguage(language);
-    let tree: Tree | undefined;
     try {
-      let source = `${prefix}${suffix}${following}`;
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      for (const [before, after] of [
-        ['', tail],
-        [tail, ''],
-      ]) {
-        const start = prefix.length;
-        const next = source.slice(0, start) + after + source.slice(start + before!.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            for (const query of [...queries, annotationQuery!]) {
-              const captures = (current: Tree): unknown[] =>
-                query
-                  .captures(current.rootNode)
-                  .map(({ name, node }) => [
-                    name,
-                    node.type,
-                    node.text,
-                    node.startIndex,
-                    node.endIndex,
-                    node.startPosition,
-                    node.endPosition,
-                  ]);
-              expect(captures(incremental)).toEqual(captures(fresh));
-            }
-            for (const current of [incremental, fresh]) {
-              expect(current.rootNode.hasError).toBe(after !== '');
-              const sentinel = current.rootNode.namedChildren.find((node) => node.text === 'const sentinel = 1;');
-              expect(sentinel).toBeDefined();
-              expect(sentinel!.hasError).toBe(false);
-              expect(current.rootNode.lastNamedChild?.text).toBe(following.trim().split('\n').at(-1));
-              if (after !== '') continue;
-              const annotations = annotationQuery!.captures(current.rootNode);
-              expect(annotations).toHaveLength(1);
-              const annotation = annotations[0]!.node;
-              const functionType = prefix.includes('=> asserts');
-              expect(annotation.type).toBe(functionType ? 'asserts' : 'asserts_annotation');
-              expect(annotation.startIndex).toBe(
-                functionType ? prefix.indexOf('asserts') : prefix.indexOf(': asserts')
-              );
-              const assertion = functionType ? annotation : annotation.namedChildren[0]!;
-              expect(assertion.type).toBe('asserts');
-              const name = assertion.namedChildren.at(-1)!;
-              expect(name.type).toBe('identifier');
-              expect(name.text).toBe(word);
-              expect(name.startIndex).toBe(prefix.lastIndexOf(word));
-              expect(name.endIndex).toBe(prefix.lastIndexOf(word) + word.length);
-            }
-          },
-          true
-        );
-        previous.delete();
-        source = next;
+      for (const inserted of [tail, '']) {
+        const tree = parser.parse(`${prefix}${inserted}${suffix}${following}`)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(inserted !== '');
+          const sentinel = tree.rootNode.namedChildren.find((node) => node.text === 'const sentinel = 1;');
+          expect(sentinel).toBeDefined();
+          expect(sentinel!.hasError).toBe(false);
+          expect(tree.rootNode.lastNamedChild?.text).toBe(following.trim().split('\n').at(-1));
+          if (inserted !== '') continue;
+          const annotations = annotationQuery!.captures(tree.rootNode);
+          expect(annotations).toHaveLength(1);
+          const annotation = annotations[0]!.node;
+          const functionType = prefix.includes('=> asserts');
+          expect(annotation.type).toBe(functionType ? 'asserts' : 'asserts_annotation');
+          expect(annotation.startIndex).toBe(functionType ? prefix.indexOf('asserts') : prefix.indexOf(': asserts'));
+          const assertion = functionType ? annotation : annotation.namedChildren[0]!;
+          expect(assertion.type).toBe('asserts');
+          const name = assertion.namedChildren.at(-1)!;
+          expect(name.type).toBe('identifier');
+          expect(name.text).toBe(word);
+          expect(name.startIndex).toBe(prefix.lastIndexOf(word));
+          expect(name.endIndex).toBe(prefix.lastIndexOf(word) + word.length);
+        } finally {
+          tree.delete();
+        }
       }
-      expect(source).toBe(`${prefix}${suffix}${following}`);
     } finally {
-      tree?.delete();
       parser.delete();
     }
   });

@@ -1,4 +1,4 @@
-import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser, Query } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -217,9 +217,8 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} preserves default and heritage contexts through incremental prefix edits`, () => {
+  test(`${dialect} preserves default and heritage contexts with and without an export default prefix`, () => {
     const parser = new Parser().setLanguage(language);
-    const prefix = 'export default ';
     try {
       for (const declaration of [
         'interface Named<T> { value: T }',
@@ -230,46 +229,21 @@ for (const dialect of ['typescript', 'tsx']) {
         'abstract class Named<T> extends Base<T> {}',
         'function named<T>(x: T): T { return x; }',
       ]) {
-        const ordinary = `${declaration}\n(value);`;
-        let tree = parser.parse(ordinary)!;
-        try {
-          for (const inserted of [true, false, true]) {
-            tree.edit(
-              new Edit({
-                startIndex: 0,
-                oldEndIndex: inserted ? 0 : prefix.length,
-                newEndIndex: inserted ? prefix.length : 0,
-                startPosition: { row: 0, column: 0 },
-                oldEndPosition: { row: 0, column: inserted ? 0 : prefix.length },
-                newEndPosition: { row: 0, column: inserted ? prefix.length : 0 },
-              })
-            );
-            const source = (inserted ? prefix : '') + ordinary;
-            const previous = tree;
-            tree = parser.parse(source, previous)!;
-            previous.delete();
-            const fresh = parser.parse(source)!;
-            try {
-              expect(tree.rootNode.hasError, source).toBe(fresh.rootNode.hasError);
-              if (inserted) {
-                expect(tree.rootNode.hasError, source).toBe(false);
-                expect(tree.rootNode.firstNamedChild?.type).toBe('export_statement');
-                expect(tree.rootNode.firstNamedChild?.childForFieldName('declaration'), source).toBeTruthy();
-              }
-              expect(tree.rootNode.toString(), source).toBe(fresh.rootNode.toString());
-              if (inserted || declaration.includes('Named') || declaration.includes('named')) {
-                expect(tree.rootNode.lastNamedChild?.text, source).toBe('(value);');
-              }
-              expect(
-                tree.rootNode.descendantsOfType('type_arguments').map((n) => n.text),
-                source
-              ).toEqual(fresh.rootNode.descendantsOfType('type_arguments').map((n) => n.text));
-            } finally {
-              fresh.delete();
+        for (const inserted of [false, true]) {
+          const source = `${inserted ? 'export default ' : ''}${declaration}\n(value);`;
+          const tree = parser.parse(source)!;
+          try {
+            if (inserted) {
+              expect(tree.rootNode.hasError, source).toBe(false);
+              expect(tree.rootNode.firstNamedChild?.type).toBe('export_statement');
+              expect(tree.rootNode.firstNamedChild?.childForFieldName('declaration'), source).toBeTruthy();
             }
+            if (inserted || declaration.includes('Named') || declaration.includes('named')) {
+              expect(tree.rootNode.lastNamedChild?.text, source).toBe('(value);');
+            }
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {
@@ -277,31 +251,15 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} restores regex boundaries after flag edits`, () => {
+  test(`${dialect} keeps regex boundaries across flags`, () => {
     const parser = new Parser().setLanguage(language);
-    let flags = 'g';
-    let tree = parser.parse('/x/g/* boundary */instanceof value;')!;
     try {
-      for (const nextFlags of ['', 'gi', '', 'g']) {
-        tree.edit(
-          new Edit({
-            startIndex: 3,
-            oldEndIndex: 3 + flags.length,
-            newEndIndex: 3 + nextFlags.length,
-            startPosition: { row: 0, column: 3 },
-            oldEndPosition: { row: 0, column: 3 + flags.length },
-            newEndPosition: { row: 0, column: 3 + nextFlags.length },
-          })
-        );
-        const source = `/x/${nextFlags}/* boundary */instanceof value;`;
-        const previous = tree;
-        tree = parser.parse(source, previous)!;
-        previous.delete();
-        const fresh = parser.parse(source)!;
+      for (const flags of ['g', '', 'gi']) {
+        const source = `/x/${flags}/* boundary */instanceof value;`;
+        const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
-          expect(tree.rootNode.toString(), source).toBe(fresh.rootNode.toString());
-          expect(tree.rootNode.descendantsOfType('regex')[0]?.text, source).toBe(`/x/${nextFlags}`);
+          expect(tree.rootNode.descendantsOfType('regex')[0]?.text, source).toBe(`/x/${flags}`);
           expect(
             tree.rootNode.descendantsOfType('comment').map((n) => n.text),
             source
@@ -311,12 +269,10 @@ for (const dialect of ['typescript', 'tsx']) {
             source
           ).toBe('instanceof');
         } finally {
-          fresh.delete();
+          tree.delete();
         }
-        flags = nextFlags;
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });

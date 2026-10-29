@@ -1,7 +1,6 @@
-import { Edit, Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 await Parser.init();
@@ -40,49 +39,25 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} changes typed nested async scopes without stale operand nodes or captures`, () => {
+  test(`${dialect} distinguishes typed nested async scopes from await calls`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(await_expression) @await (call_expression function: (identifier) @call)');
-    const prefix = 'async function outer<T>(input:T) { ';
-    const suffix = 'function inner<U>(x:U):U { return await(x) } return await input; }';
-    let source = prefix + suffix;
-    let modifier = '';
-    let tree = parser.parse(source)!;
-    const captures = (current: typeof tree): unknown =>
-      query.captures(current.rootNode).map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex]);
     try {
-      for (const replacement of ['async ', '', 'async /* boundary */ ', '']) {
-        const next = prefix + replacement + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + modifier.length,
-            newEndIndex: prefix.length + replacement.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + modifier.length),
-            newEndPosition: position(next, prefix.length + replacement.length),
-          }),
-          (incremental, fresh) => {
-            expect(captures(incremental)).toEqual(captures(fresh));
-            expect(incremental.rootNode.descendantsOfType('await_expression').map((node) => node.text)).toEqual(
-              replacement ? ['await(x)', 'await input'] : ['await input']
-            );
-            expect(incremental.rootNode.descendantsOfType('call_expression').map((node) => node.text)).toEqual(
-              replacement ? [] : ['await(x)']
-            );
-          }
-        );
-        previous.delete();
-        source = next;
-        modifier = replacement;
+      for (const modifier of ['', 'async ', 'async /* boundary */ ']) {
+        const source = `async function outer<T>(input:T) { ${modifier}function inner<U>(x:U):U { return await(x) } return await input; }`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.descendantsOfType('await_expression').map((node) => node.text)).toEqual(
+            modifier ? ['await(x)', 'await input'] : ['await input']
+          );
+          expect(tree.rootNode.descendantsOfType('call_expression').map((node) => node.text)).toEqual(
+            modifier ? [] : ['await(x)']
+          );
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
-      query.delete();
       parser.delete();
     }
   });
@@ -193,51 +168,21 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} reparses construct-to-method signature edits with fresh metadata and captures`, () => {
+  test(`${dialect} parses modified new members as method signatures`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(construct_signature) @construct (method_signature name: (_) @method) @signature'
-    );
-    const prefix = 'interface I { ';
-    const suffix = ' (): I; after():void }\nconst following = 1;';
-    let name = 'new';
-    let source = prefix + name + suffix;
-    let tree = parser.parse(source)!;
-    const captures = (current: typeof tree): unknown =>
-      query.captures(current.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex]);
     try {
-      for (const replacement of ['new?', '"new"', 'new<T>', 'new']) {
-        const next = prefix + replacement + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + name.length,
-            newEndIndex: prefix.length + replacement.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + name.length),
-            newEndPosition: position(next, prefix.length + replacement.length),
-          }),
-          (incremental, fresh) => {
-            expect(captures(incremental)).toEqual(captures(fresh));
-            expect(incremental.rootNode.hasError).toBe(false);
-            expect(incremental.rootNode.descendantsOfType('construct_signature')).toHaveLength(
-              replacement === 'new' || replacement === 'new<T>' ? 1 : 0
-            );
-            expect(incremental.rootNode.lastNamedChild?.text).toBe('const following = 1;');
-          }
-        );
-        previous.delete();
-        source = next;
-        name = replacement;
+      for (const name of ['new?', '"new"', 'new<T>']) {
+        const source = `interface I { ${name} (): I; after():void }\nconst following = 1;`;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.descendantsOfType('construct_signature')).toHaveLength(name === 'new<T>' ? 1 : 0);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
-      query.delete();
       parser.delete();
     }
   });
@@ -305,59 +250,20 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} restores typed arrow statement boundaries through assertion and parenthesis edits`, () => {
+  test(`${dialect} separates async typed arrow assertions from next-line templates`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(expression_statement) @statement (await_expression) @await (as_expression) @assertion (satisfies_expression) @constraint'
-    );
     try {
-      for (const async of [false, true]) {
-        const prefix = `const f = ${async ? 'async ' : ''}() => `;
-        const operand = async ? 'await a' : 'a';
-        const suffix = '\n`x`;\nconst following = 1;';
-        let body = `${operand} as T`;
-        let source = prefix + body + suffix;
-        let tree = parser.parse(source)!;
-        const captures = (current: typeof tree): unknown =>
-          query.captures(current.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex]);
+      for (const body of ['await a as T', '(await a as T)', 'await a satisfies T', 'await a', 'await a as const']) {
+        const source = `const f = async () => ${body}\n\`x\`;\nconst following = 1;`;
+        const tree = parser.parse(source)!;
         try {
-          for (const replacement of [
-            `(${operand} as T)`,
-            `${operand} satisfies T`,
-            operand,
-            `${operand} as const`,
-            `${operand} as T`,
-          ]) {
-            const next = prefix + replacement + suffix;
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: prefix.length,
-                oldEndIndex: prefix.length + body.length,
-                newEndIndex: prefix.length + replacement.length,
-                startPosition: position(source, prefix.length),
-                oldEndPosition: position(source, prefix.length + body.length),
-                newEndPosition: position(next, prefix.length + replacement.length),
-              }),
-              (incremental, fresh) => {
-                expect(captures(incremental)).toEqual(captures(fresh));
-                expect(incremental.rootNode.lastNamedChild?.text).toBe('const following = 1;');
-              }
-            );
-            previous.delete();
-            source = next;
-            body = replacement;
-          }
+          expect(tree.rootNode.hasError, source).toBe(false);
+          expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });

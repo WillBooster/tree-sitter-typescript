@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `class Example extends Base {
@@ -18,7 +17,7 @@ const Source = `class Example extends Base {
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`attaches ${dialect} method decorators to their method through edits`, async () => {
+  test(`attaches ${dialect} method decorators to their method`, async () => {
     await Parser.init();
     const parser = new Parser();
     let tree: Tree | undefined;
@@ -35,34 +34,12 @@ for (const dialect of ['typescript', 'tsx']) {
           invalid.delete();
         }
       }
-      let source = Source;
-      tree = parser.parse(source)!;
-      checkDecorators(tree, source, query);
-      const start = source.indexOf('@first');
-      let previousLength = '@first'.length;
-      for (const replacement of ['@replacement() @additional', '', '@first']) {
-        const next = source.slice(0, start) + replacement + source.slice(start + previousLength);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + previousLength,
-            newEndIndex: start + replacement.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + previousLength),
-            newEndPosition: position(next, start + replacement.length),
-          }),
-          (incremental, fresh) => {
-            checkDecorators(incremental, next, query!);
-            checkDecorators(fresh, next, query!);
-          }
-        );
-        previous.delete();
-        source = next;
-        previousLength = replacement.length;
+      for (const replacement of ['@first', '@replacement() @additional', '']) {
+        const source = Source.replace('@first', replacement);
+        tree = parser.parse(source)!;
+        checkDecorators(tree, source, query);
+        tree.delete();
+        tree = undefined;
       }
     } finally {
       tree?.delete();

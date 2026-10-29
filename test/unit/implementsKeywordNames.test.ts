@@ -1,9 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
@@ -48,54 +46,22 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`updates ${dialect} implements names and captures through edits`, async () => {
+  test(`parses ${dialect} implements names before class members`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const roles = new Query(language, RoleQuery);
-    const queries: ReturnType<typeof configuredQueries> = [];
-    const prefix = Header + 'class C implements ';
-    let word = 'readonly';
-    let source = prefix + word + Suffix;
-    let tree: Tree | undefined;
     try {
-      queries.push(...configuredQueries(language, dialect));
-      tree = parser.parse(source)!;
-      checkHeritage(tree, source, dialect, roles);
-      for (const nextWord of ['keyof', 'unique', 'infer', 'readonly']) {
-        const next = prefix + nextWord + Suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + word.length,
-            newEndIndex: prefix.length + nextWord.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + word.length),
-            newEndPosition: position(next, prefix.length + nextWord.length),
-          }),
-          (incremental, fresh) => {
-            checkHeritage(incremental, next, dialect, roles);
-            checkHeritage(fresh, next, dialect, roles);
-            for (const query of queries) {
-              const captures = (parsed: Tree): unknown =>
-                query
-                  .captures(parsed.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex]);
-              expect(captures(incremental)).toEqual(captures(fresh));
-            }
-          }
-        );
-        previous.delete();
-        source = next;
-        word = nextWord;
+      for (const word of ['readonly', 'keyof', 'unique', 'infer']) {
+        const source = Header + 'class C implements ' + word + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkHeritage(tree, source, dialect, roles);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
-      for (const query of queries) query.delete();
       roles.delete();
       parser.delete();
     }

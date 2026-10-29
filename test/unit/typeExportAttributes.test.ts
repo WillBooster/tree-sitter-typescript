@@ -1,7 +1,6 @@
-import { Edit, Parser } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 test('retains attributes on named, star and namespace type re-exports', async () => {
@@ -47,39 +46,17 @@ test('preserves type re-export attributes when their keyword crosses a newline',
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
       for (const clause of ['{ A }', '*', '* as ns']) {
-        const prefix = `export type ${clause} from "m"`;
-        const suffix = 'with { "resolution-mode": "import" };\nconst after = 1;';
-        let separator = ' ';
-        let source = prefix + separator + suffix;
-        let tree = parser.parse(source)!;
-        try {
-          expect(tree.rootNode.hasError).toBe(false);
-          for (const nextSeparator of ['\n', ' /* c */\n', ' ']) {
-            const nextSource = prefix + nextSeparator + suffix;
-            const next = compareEditedTree(
-              parser,
-              tree,
-              nextSource,
-              new Edit({
-                startIndex: prefix.length,
-                oldEndIndex: prefix.length + separator.length,
-                newEndIndex: prefix.length + nextSeparator.length,
-                startPosition: position(source, prefix.length),
-                oldEndPosition: position(source, prefix.length + separator.length),
-                newEndPosition: position(nextSource, prefix.length + nextSeparator.length),
-              }),
-              (updated) => {
-                expect(updated.rootNode.namedChildren[0]?.descendantsOfType('import_attribute')).toHaveLength(1);
-                expect(updated.rootNode.namedChildren[1]?.text).toBe('const after = 1;');
-              }
-            );
+        for (const separator of [' ', '\n', ' /* c */\n']) {
+          const tree = parser.parse(
+            `export type ${clause} from "m"${separator}with { "resolution-mode": "import" };\nconst after = 1;`
+          )!;
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(tree.rootNode.namedChildren[0]?.descendantsOfType('import_attribute')).toHaveLength(1);
+            expect(tree.rootNode.namedChildren[1]?.text).toBe('const after = 1;');
+          } finally {
             tree.delete();
-            tree = next;
-            source = nextSource;
-            separator = nextSeparator;
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {

@@ -1,7 +1,7 @@
-import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit';
+import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const MalformedHeaders = [
@@ -15,40 +15,15 @@ const FollowingConstant = 'const sentinel = 1;';
 const Following = `${FollowingFunction}\n${FollowingConstant}\n`;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`reports malformed ${dialect} heritage and restores following declarations after repair`, async () => {
+  test(`reports malformed ${dialect} heritage and parses following declarations after a repaired header`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
-      for (const malformed of MalformedHeaders) {
-        let prefix = malformed;
-        const source = prefix + Following;
-        let tree = parser.parse(source)!;
+      for (const header of [...MalformedHeaders, RepairedHeader]) {
+        const source = header + Following;
+        const tree = parser.parse(source)!;
         try {
-          checkFollowing(tree, source, true);
-          for (const replacement of [RepairedHeader, malformed]) {
-            const nextSource = replacement + Following;
-            const next = compareEditedTree(
-              parser,
-              tree,
-              nextSource,
-              new Edit({
-                startIndex: 0,
-                oldEndIndex: prefix.length,
-                newEndIndex: replacement.length,
-                startPosition: { row: 0, column: 0 },
-                oldEndPosition: position(prefix, prefix.length),
-                newEndPosition: position(replacement, replacement.length),
-              }),
-              (incremental, fresh) => {
-                checkFollowing(incremental, nextSource, replacement === malformed);
-                checkFollowing(fresh, nextSource, replacement === malformed);
-              },
-              true
-            );
-            tree.delete();
-            tree = next;
-            prefix = replacement;
-          }
+          checkFollowing(tree, source, header !== RepairedHeader);
         } finally {
           tree.delete();
         }

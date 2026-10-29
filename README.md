@@ -5,7 +5,7 @@
 [![Test](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml)
 [![Test rust](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![wbfy](https://img.shields.io/badge/wbfy-20.48.9-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
+[![wbfy](https://img.shields.io/badge/wbfy-20.49.0-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
 [![crates.io](https://img.shields.io/crates/v/willbooster-tree-sitter-typescript.svg)](https://crates.io/crates/willbooster-tree-sitter-typescript)
 
 TypeScript and TSX grammars for [tree-sitter](https://github.com/tree-sitter/tree-sitter), forked from
@@ -135,9 +135,6 @@ and the release build regenerate the parsers before compiling them.
 
 - the corpus in `test/corpus`, with the native build and with the Wasm build (the first run downloads the WASI SDK).
   Cases run with the `typescript` grammar unless they carry `:language(tsx)`;
-- an incremental-parsing check (`test/unit/incremental.test.ts`): `script/fuzz-corpus` runs `tree-sitter fuzz`, which
-  edits each corpus case of each grammar at random, reparses it, undoes the edits, and reparses again.
-  `TREE_SITTER_SEED`, `TREE_SITTER_ITERATIONS`, and `TREE_SITTER_EDITS` run other or more edits;
 - a check that the real-world files in `examples/`, the checked-in ones and those of the cloned repositories, fail to
   parse exactly as listed in `script/known-failures.txt`. `.ts` files are parsed with the `typescript` grammar and
   `.tsx` files with the `tsx` grammar. The first run clones the repositories. The example repositories are pinned to
@@ -161,7 +158,7 @@ and the release build regenerate the parsers before compiling them.
   willbooster-tree-sitter crate.
 
 The tests compile the parsers into `.tmp/tree-sitter-lib` instead of the CLI's cache shared by every checkout;
-`script/parse-examples` and `script/fuzz-corpus` build a parser of their own per run and delete it afterwards.
+`script/parse-examples` builds a parser of its own per run and deletes it afterwards.
 `mise.toml` sets `TREE_SITTER_LIBDIR` to `.tmp/tree-sitter-lib` as well, so other `tree-sitter` commands run in the
 checkout use this checkout's parsers too.
 

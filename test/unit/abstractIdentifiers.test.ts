@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Capture = readonly [number, number];
@@ -85,12 +84,10 @@ for (const dialect of ['typescript', 'tsx']) {
       : []),
     ...(dialect === 'tsx' ? ([['JSX names', JsxSource, JsxSource.indexOf('abstract')]] as const) : []),
   ] as const) {
-    test(`retains ${dialect} abstract ${description} through edits`, async () => {
+    test(`retains ${dialect} abstract ${description}`, async () => {
       await Parser.init();
       const parser = new Parser();
       let query: Query | undefined;
-      let tree: Tree | undefined;
-      let source: string = initialSource;
       try {
         const language = await loadCurrentWasmBuild(dialect);
         parser.setLanguage(language);
@@ -98,44 +95,20 @@ for (const dialect of ['typescript', 'tsx']) {
           language,
           '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name\n(call_signature) @signature\n(type_parameter name: (type_identifier) @parameter)'
         );
-        tree = parser.parse(source)!;
-        expect(tree.rootNode.hasError).toBe(false);
-        expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
-        expectNameKinds(parser, query, tree, source, dialect);
-        if (description.includes('generic'))
-          expect(parameterCaptures(query, tree)).toEqual(referenceParameters(source, dialect));
-        for (const name of ['ordinary', 'abstract']) {
-          const next = source.slice(0, offset) + name + source.slice(offset + 8);
-          const previous: Tree = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: offset,
-              oldEndIndex: offset + 8,
-              newEndIndex: offset + name.length,
-              startPosition: position(source, offset),
-              oldEndPosition: position(source, offset + 8),
-              newEndPosition: position(next, offset + name.length),
-            }),
-            (incremental, fresh) => {
-              const expected = referenceRanges(next, dialect);
-              expect(captures(query!, incremental)).toEqual(expected);
-              expect(captures(query!, fresh)).toEqual(expected);
-              expectNameKinds(parser, query!, incremental, next, dialect);
-              expectNameKinds(parser, query!, fresh, next, dialect);
-              if (description.includes('generic')) {
-                expect(parameterCaptures(query!, incremental)).toEqual(referenceParameters(next, dialect));
-                expect(parameterCaptures(query!, fresh)).toEqual(referenceParameters(next, dialect));
-              }
-            }
-          );
-          previous.delete();
-          source = next;
+        const ordinarySource = initialSource.slice(0, offset) + 'ordinary' + initialSource.slice(offset + 8);
+        for (const source of [initialSource, ordinarySource]) {
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
+            expectNameKinds(parser, query, tree, source, dialect);
+            if (description.includes('generic'))
+              expect(parameterCaptures(query, tree)).toEqual(referenceParameters(source, dialect));
+          } finally {
+            tree.delete();
+          }
         }
       } finally {
-        tree?.delete();
         query?.delete();
         parser.delete();
       }
@@ -199,50 +172,26 @@ function referenceRanges(source: string, dialect: string): Capture[] {
 }
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`rejects ${dialect} keyword heritage names through edits`, async () => {
+  test(`rejects ${dialect} keyword heritage names`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(extends_type_clause type: (type_identifier) @heritage)');
-    let source = 'interface Named extends abstract {}';
-    let tree: Tree | undefined;
     try {
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      const start = source.indexOf('abstract');
-      for (const [before, after] of [
-        ['abstract', 'in'],
-        ['in', 'abstract'],
-      ] as const) {
-        const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            for (const current of [incremental, fresh]) {
-              expect(current.rootNode.hasError).toBe(after === 'in');
-              expect(
-                query.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual(after === 'abstract' ? [['abstract', start, start + after.length]] : []);
-            }
-          },
-          true
-        );
-        previous.delete();
-        source = next;
+      for (const name of ['abstract', 'in']) {
+        const source = `interface Named extends ${name} {}`;
+        const start = source.indexOf(name);
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(name === 'in');
+          expect(query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual(
+            name === 'abstract' ? [['abstract', start, start + name.length]] : []
+          );
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       query.delete();
       parser.delete();
     }

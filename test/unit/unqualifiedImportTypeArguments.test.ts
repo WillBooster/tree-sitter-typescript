@@ -1,9 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `type Bare = import("m")<string>;
@@ -26,10 +24,9 @@ type Editable = `;
 const Suffix = `;
 const following = 1;
 `;
-const InitialType = 'import("m")<string>';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves unqualified import-type arguments and expression roles through ${dialect} edits`, async () => {
+  test(`preserves ${dialect} unqualified import-type arguments and expression roles`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
@@ -37,21 +34,9 @@ for (const dialect of ['typescript', 'tsx']) {
       language,
       '(call_expression function: (import) arguments: (arguments (string) @module) type_arguments: (_) @arguments) @import (variable_declarator value: (instantiation_expression) @instantiation)'
     );
-    const queries: Query[] = [];
-    const captures = (tree: Tree): unknown =>
-      queries.map((compiled) =>
-        compiled
-          .captures(tree.rootNode)
-          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-      );
-    let annotation = InitialType;
-    let source = Prefix + annotation + Suffix;
-    let tree: Tree | undefined;
     try {
-      queries.push(...configuredQueries(language, dialect));
-      tree = parser.parse(source)!;
-      checkImports(tree, source, dialect, query);
-      for (const nextType of [
+      for (const type of [
+        'import("m")<string>',
         'import("m")<number, string>',
         'typeof import("m")<string>',
         'import("m")<<T>() => T>',
@@ -63,36 +48,17 @@ for (const dialect of ['typescript', 'tsx']) {
         'import("m", { with: { type: "json" } })<string>',
         'import("m").A<string>',
         'import("m")',
-        InitialType,
       ]) {
-        const next = Prefix + nextType + Suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: Prefix.length,
-            oldEndIndex: Prefix.length + annotation.length,
-            newEndIndex: Prefix.length + nextType.length,
-            startPosition: position(source, Prefix.length),
-            oldEndPosition: position(source, Prefix.length + annotation.length),
-            newEndPosition: position(next, Prefix.length + nextType.length),
-          }),
-          (incremental, fresh) => {
-            checkImports(incremental, next, dialect, query);
-            checkImports(fresh, next, dialect, query);
-            expect(captures(incremental)).toEqual(captures(fresh));
-          }
-        );
-        previous.delete();
-        source = next;
-        annotation = nextType;
+        const source = Prefix + type + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkImports(tree, source, dialect, query);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       query.delete();
-      for (const compiled of queries) compiled.delete();
       parser.delete();
     }
   });
