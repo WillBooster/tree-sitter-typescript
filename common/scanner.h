@@ -1593,14 +1593,25 @@ static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, cons
 static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start);
 
 // Like TypeScript's `skipParameterStart`, reads `([a]: A) => B` as a parameter list rather than a parenthesized tuple:
-// a bracketed group followed by `:`, `,`, `?`, `=`, or `) =>` is a binding pattern.
+// a bracketed group holding a default or followed by `:`, `,`, `?`, `=`, or `) =>` is a binding pattern.
 static bool bracket_group_starts_parameter(TSLexer *lexer) {
     unsigned depth = 0;
+    bool angle = false;
     do {
         switch (lexer->lookahead) {
             case 0: return false;
             case '[': case '{': case '(': depth++; break;
             case ']': case '}': case ')': depth--; break;
+            case '<':
+                angle |= depth == 1;
+                break;
+            case '=':
+                // A default (`[a = /'/]`) appears only in a binding pattern; checking it first also keeps the default's
+                // regex or template contents from unbalancing the count. Type-parameter defaults sit after a `<`.
+                if (depth != 1 || angle) break;
+                advance(lexer);
+                if (lexer->lookahead != '>' && lexer->lookahead != '=') return true;
+                continue;
             case '"': case '\'': case '`': {
                 int32_t quote = lexer->lookahead;
                 advance(lexer);
