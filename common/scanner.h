@@ -3628,7 +3628,6 @@ static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word,
         else if (!other) word[length++] = (char)character;
     }
     if (first) return ASSERTION_IDENTIFIER_INVALID;
-    if (lexer->lookahead >= 0x80 && !set_contains(TS_WHITESPACE_RANGES, sizeof(TS_WHITESPACE_RANGES) / sizeof(TS_WHITESPACE_RANGES[0]), lexer->lookahead)) return ASSERTION_IDENTIFIER_INVALID;
     return other ? ASSERTION_IDENTIFIER_OTHER : ASSERTION_IDENTIFIER_WORD;
 }
 

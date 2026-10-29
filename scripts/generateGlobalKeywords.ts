@@ -76,8 +76,6 @@ ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 ${identifierCharacterRanges('TS_IDENTIFIER_START_RANGES', (character) => ts.isIdentifierStart(character, ts.ScriptTarget.Latest))}
 
 ${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIdentifierPart(character, ts.ScriptTarget.Latest))}
-
-${identifierCharacterRanges('TS_WHITESPACE_RANGES', (character) => ts.isWhiteSpaceLike(character))}
 `;
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
