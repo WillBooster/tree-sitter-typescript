@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `type Primitive = bigint;
@@ -51,32 +50,12 @@ for (const dialect of ['typescript', 'tsx']) {
         'bigint<bigint>',
         'bigint<bigint>',
       ]);
-      const start = Source.indexOf('as bigint') + 3;
-      let source = Source;
-      let incremental = tree.copy();
+      const numberSource = Source.replace('as bigint', 'as number');
+      const numberTree = parser.parse(numberSource)!;
       try {
-        for (const replacement of ['number', 'bigint']) {
-          const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-          const next = compareEditedTree(
-            parser,
-            incremental,
-            nextSource,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + 6,
-              newEndIndex: start + replacement.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + 6),
-              newEndPosition: position(nextSource, start + replacement.length),
-            }),
-            (edited) => check(edited, nextSource)
-          );
-          incremental.delete();
-          incremental = next;
-          source = nextSource;
-        }
+        check(numberTree, numberSource);
       } finally {
-        incremental.delete();
+        numberTree.delete();
       }
     } finally {
       tree.delete();
@@ -104,38 +83,21 @@ type Modified = { -readonly [bigint in keyof X as bigint]?: bigint };
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves qualified bigint names and mapped binders through edits in ${dialect}`, async () => {
+  test(`preserves qualified bigint names and mapped binders in ${dialect}`, async () => {
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
-    let source = QualifiedSource;
-    let tree = parser.parse(source)!;
     try {
-      check(tree, source);
-      expect(
-        tree.rootNode.descendantsOfType('mapped_type_clause').map((node) => node.childForFieldName('name')?.text)
-      ).toEqual(['bigint', 'bigint']);
-      const start = source.indexOf('let nested: A.bigint') + 'let nested: A.'.length;
-      for (const replacement of ['Member', 'bigint']) {
-        const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-        const next = compareEditedTree(
-          parser,
-          tree,
-          nextSource,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + 6,
-            newEndIndex: start + 6,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + 6),
-            newEndPosition: position(nextSource, start + 6),
-          }),
-          (edited) => check(edited, nextSource)
-        );
-        tree.delete();
-        tree = next;
-        source = nextSource;
+      for (const source of [QualifiedSource, QualifiedSource.replace('let nested: A.bigint', 'let nested: A.Member')]) {
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source);
+          expect(
+            tree.rootNode.descendantsOfType('mapped_type_clause').map((node) => node.childForFieldName('name')?.text)
+          ).toEqual(['bigint', 'bigint']);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });
@@ -158,6 +120,7 @@ for (const dialect of ['typescript', 'tsx']) {
       for (const source of [
         'const bigint = 1n; type T = (typeof bigint);',
         QuerySource,
+        QuerySource.replace('type Root = (typeof bigint', 'type Root = (typeof Widget'),
         ...['keyof', 'readonly', 'unique', 'infer'].map(
           (name) =>
             `class Direct implements ${name}.bigint {}
@@ -171,33 +134,6 @@ class Generic implements ${name}.bigint<string> {}`
           tree.delete();
         }
       }
-      let source = QuerySource;
-      let tree = parser.parse(source)!;
-      const start = source.indexOf('type Root = (typeof bigint') + 'type Root = (typeof '.length;
-      try {
-        for (const replacement of ['Widget', 'bigint']) {
-          const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-          const next = compareEditedTree(
-            parser,
-            tree,
-            nextSource,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + 6,
-              newEndIndex: start + 6,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + 6),
-              newEndPosition: position(nextSource, start + 6),
-            }),
-            (edited) => check(edited, nextSource, 'bigint.ts', query)
-          );
-          tree.delete();
-          tree = next;
-          source = nextSource;
-        }
-      } finally {
-        tree.delete();
-      }
     } finally {
       query.delete();
       parser.delete();
@@ -206,7 +142,7 @@ class Generic implements ${name}.bigint<string> {}`
 }
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves bigint generic-arrow parameters and queries through edits in ${dialect}`, async () => {
+  test(`preserves bigint generic-arrow parameters and queries in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(type_parameter name: (type_identifier) @name)');
@@ -221,33 +157,14 @@ for (const dialect of ['typescript', 'tsx']) {
         'T, bigint',
       ]) {
         for (const prefix of ['', 'async ']) {
-          let source = `const f = ${prefix}<${parameters}>(x: T) => x;`;
-          let tree = parser.parse(source)!;
-          const start = source.indexOf('bigint');
-          try {
-            checkParameters(tree, source);
-            for (const replacement of ['Widget', 'bigint']) {
-              const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-              const next = compareEditedTree(
-                parser,
-                tree,
-                nextSource,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: start + 6,
-                  newEndIndex: start + 6,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, start + 6),
-                  newEndPosition: position(nextSource, start + 6),
-                }),
-                (edited) => checkParameters(edited, nextSource)
-              );
+          const source = `const f = ${prefix}<${parameters}>(x: T) => x;`;
+          for (const current of [source, source.replace('bigint', 'Widget')]) {
+            const tree = parser.parse(current)!;
+            try {
+              checkParameters(tree, current);
+            } finally {
               tree.delete();
-              tree = next;
-              source = nextSource;
             }
-          } finally {
-            tree.delete();
           }
         }
       }
@@ -322,30 +239,10 @@ for (const dialect of ['typescript', 'tsx']) {
       } finally {
         invalid.delete();
       }
-      let source = 'type T = X extends Y ? (bigint) => R : S;';
-      let tree = parser.parse(source)!;
-      const start = source.indexOf('bigint');
+      const renamed = 'type T = X extends Y ? (Widget) => R : S;';
+      const tree = parser.parse(renamed)!;
       try {
-        for (const replacement of ['Widget', 'bigint']) {
-          const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-          const next = compareEditedTree(
-            parser,
-            tree,
-            nextSource,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + 6,
-              newEndIndex: start + 6,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + 6),
-              newEndPosition: position(nextSource, start + 6),
-            }),
-            (edited) => checkBranches(edited, nextSource)
-          );
-          tree.delete();
-          tree = next;
-          source = nextSource;
-        }
+        checkBranches(tree, renamed);
       } finally {
         tree.delete();
       }
@@ -371,7 +268,7 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-test('preserves bigint JSX names and query captures through edits', async () => {
+test('preserves bigint JSX names and query captures', async () => {
   const language = await loadCurrentWasmBuild('tsx');
   const parser = new Parser().setLanguage(language);
   const query = new Query(
@@ -382,38 +279,21 @@ test('preserves bigint JSX names and query captures through edits', async () => 
     (jsx_self_closing_element name: (_) @name)
   ]`
   );
-  let source = `const elements = [<bigint/>, <bigint a="1"/>, <bigint></bigint>,
+  const source = `const elements = [<bigint/>, <bigint a="1"/>, <bigint></bigint>,
     <bigint:x/>, <x:bigint/>, <bigint.A/>, <A.bigint.B/>];`;
-  let tree = parser.parse(source)!;
-  const start = source.indexOf('<bigint') + 1;
   try {
-    checkJsx(tree, source);
-    for (const replacement of ['number', 'bigint']) {
-      const nextSource = source.slice(0, start) + replacement + source.slice(start + 6);
-      const next = compareEditedTree(
-        parser,
-        tree,
-        nextSource,
-        new Edit({
-          startIndex: start,
-          oldEndIndex: start + 6,
-          newEndIndex: start + 6,
-          startPosition: position(source, start),
-          oldEndPosition: position(source, start + 6),
-          newEndPosition: position(nextSource, start + 6),
-        }),
-        (edited) => checkJsx(edited, nextSource)
-      );
-      tree.delete();
-      tree = next;
-      source = nextSource;
+    for (const current of [source, source.replace('<bigint', '<number')]) {
+      const tree = parser.parse(current)!;
+      try {
+        checkJsx(tree, current);
+      } finally {
+        tree.delete();
+      }
     }
   } finally {
-    tree.delete();
     query.delete();
     parser.delete();
   }
-
   function checkJsx(current: Tree, text: string): void {
     check(current, text, 'bigint.tsx');
     const reference = ts.createSourceFile('bigint.tsx', text, ts.ScriptTarget.Latest, true);

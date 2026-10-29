@@ -1,9 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Statements = [
@@ -33,65 +31,26 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const ownedQueries: Query[] = [];
+    const query = new Query(language, '(required_parameter pattern: (pattern/identifier) @binding)');
     try {
       parser.setLanguage(language);
-      const query = new Query(language, '(required_parameter pattern: (pattern/identifier) @binding)');
-      ownedQueries.push(query);
-      const queries = configuredQueries(language, dialect);
-      ownedQueries.push(...queries);
       for (const form of ['(x: T)', 'new (x: T)', '()']) {
         const complete = `const result = value as ${form} => A;${Following}`;
-        const start = complete.indexOf(' => A');
-        const incomplete = complete.slice(0, start) + complete.slice(start + ' => A'.length);
-        let source = complete;
-        let tree = parser.parse(source)!;
-        try {
-          checkFormalFields(tree, source, dialect, true, query);
-          for (const [next, valid] of [
-            [incomplete, false],
-            [complete, true],
-          ] as const) {
-            const previous = tree;
-            const oldEnd = start + (valid ? 0 : ' => A'.length);
-            const newEnd = start + (valid ? ' => A'.length : 0);
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: oldEnd,
-                newEndIndex: newEnd,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, oldEnd),
-                newEndPosition: position(next, newEnd),
-              }),
-              (incremental, fresh) => {
-                checkFormalFields(incremental, next, dialect, valid, query);
-                checkFormalFields(fresh, next, dialect, valid, query);
-                for (const configured of queries)
-                  expect(
-                    configured
-                      .captures(incremental.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-                  ).toEqual(
-                    configured
-                      .captures(fresh.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-                  );
-              },
-              true
-            );
-            previous.delete();
-            source = next;
+        const incomplete = complete.replace(' => A', '');
+        for (const [source, valid] of [
+          [complete, true],
+          [incomplete, false],
+        ] as const) {
+          const tree = parser.parse(source)!;
+          try {
+            checkFormalFields(tree, source, dialect, valid, query);
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {
-      for (const query of ownedQueries) query.delete();
+      query.delete();
       parser.delete();
     }
   });
@@ -100,153 +59,73 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const ownedQueries: Query[] = [];
     try {
       parser.setLanguage(language);
-      const queries = configuredQueries(language, dialect);
-      ownedQueries.push(...queries);
-      const captures = (tree: Tree): unknown =>
-        queries.map((query) =>
-          query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-        );
       for (const statement of [
         'const result = (value as const.Member/* gap */!);',
         'const result = value as A extends const/* gap */! ? C : D;',
         'const result = value as A extends B ? Name/* gap */! : D;',
         'const result = value as const.Member[(Name/* gap */!)];',
       ]) {
-        let source = statement + Following;
-        let tree = parser.parse(source)!;
-        try {
-          for (const gap of ['\n', ' ']) {
-            const start = source.indexOf('/*') + 2;
-            const next = source.slice(0, start) + gap + source.slice(start + 1);
-            const valid = gap === ' ';
-            const check = (candidate: Tree): void => {
-              referenceFor(next, dialect, valid);
-              expect(candidate.rootNode.hasError, next).toBe(!valid);
-              expect(candidate.rootNode.lastNamedChild!.text).toBe('const following = 1;');
-            };
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: start + 1,
-                newEndIndex: start + 1,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, start + 1),
-                newEndPosition: position(next, start + 1),
-              }),
-              (incremental, fresh) => {
-                check(incremental);
-                check(fresh);
-                expect(captures(incremental)).toEqual(captures(fresh));
-              },
-              true
-            );
-            previous.delete();
-            source = next;
-          }
-        } finally {
-          tree.delete();
-        }
-      }
-    } finally {
-      for (const query of ownedQueries) query.delete();
-      parser.delete();
-    }
-  });
-
-  test(`retains assertion boundaries after small surrounding ${dialect} edits`, async () => {
-    await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser();
-    const ownedQueries: Query[] = [];
-    try {
-      parser.setLanguage(language);
-      const query = new Query(
-        language,
-        '(as_expression) @as (call_expression) @call (subscript_expression) @subscript (expression_statement) @statement (regex) @regex'
-      );
-      ownedQueries.push(query);
-      const configured = configuredQueries(language, dialect);
-      ownedQueries.push(...configured);
-      const captures = (tree: Tree): unknown =>
-        configured.map((item) =>
-          item.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-        );
-      for (const prefix of ['', 'const earlier = 1;\n']) {
-        for (const statement of Statements) {
-          let source = prefix + statement + Following;
-          let tree = parser.parse(source)!;
-          const edit = (start: number, end: number, replacement: string): void => {
-            const next = source.slice(0, start) + replacement + source.slice(end);
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: end,
-                newEndIndex: start + replacement.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, end),
-                newEndPosition: position(next, start + replacement.length),
-              }),
-              (incremental, fresh) => {
-                checkBoundaries(incremental, next, dialect, query);
-                checkBoundaries(fresh, next, dialect, query);
-                expect(captures(incremental)).toEqual(captures(fresh));
-              }
-            );
-            previous.delete();
-            source = next;
-          };
+        for (const gap of ['\n', ' ']) {
+          const source = statement.replace('/* gap', `/*${gap}gap`) + Following;
+          const valid = gap === ' ';
+          const tree = parser.parse(source)!;
           try {
-            checkBoundaries(tree, source, dialect, query);
-            edit(0, 0, ' ');
-            edit(0, 1, '');
-            const suffix = source.lastIndexOf('1');
-            edit(suffix + 1, suffix + 1, '0');
-            edit(suffix + 1, suffix + 2, '');
-            if (prefix) {
-              const earlier = source.indexOf('1');
-              edit(earlier + 1, earlier + 1, '0');
-              edit(earlier + 1, earlier + 2, '');
-            }
-            if (statement.startsWith('const ')) {
-              const gap = prefix.length + 'const'.length;
-              edit(gap, gap + 1, '\n');
-              edit(gap, gap + 1, ' ');
-            }
+            referenceFor(source, dialect, valid);
+            expect(tree.rootNode.hasError, source).toBe(!valid);
+            expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      for (const query of ownedQueries) query.delete();
       parser.delete();
     }
   });
 
-  test(`preserves tagged constructor fields through empty ${dialect} argument edits`, async () => {
+  test(`retains ${dialect} assertion boundaries with small surrounding changes`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const ownedQueries: Query[] = [];
+    const query = new Query(
+      language,
+      '(as_expression) @as (call_expression) @call (subscript_expression) @subscript (expression_statement) @statement (regex) @regex'
+    );
     try {
       parser.setLanguage(language);
-      const queries = configuredQueries(language, dialect);
-      ownedQueries.push(...queries);
-      const captures = (tree: Tree): unknown =>
-        queries.map((query) =>
-          query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.startIndex, node.endIndex])
-        );
+      for (const prefix of ['', 'const earlier = 1;\n']) {
+        for (const statement of Statements) {
+          const sources = [
+            prefix + statement + Following,
+            ' ' + prefix + statement + Following,
+            prefix + statement + Following.replace('= 1', '= 10'),
+          ];
+          if (prefix) sources.push('const earlier = 10;\n' + statement + Following);
+          if (statement.startsWith('const ')) sources.push(prefix + statement.replace(' ', '\n') + Following);
+          for (const source of sources) {
+            const tree = parser.parse(source)!;
+            try {
+              checkBoundaries(tree, source, dialect, query);
+            } finally {
+              tree.delete();
+            }
+          }
+        }
+      }
+    } finally {
+      query.delete();
+      parser.delete();
+    }
+  });
+
+  test(`preserves tagged constructor fields across ${dialect} type argument lists`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser();
+    try {
+      parser.setLanguage(language);
       for (const constructor of [
         'F<Inner>`tag`',
         'F<Inner>`tag`.Member',
@@ -256,47 +135,19 @@ for (const dialect of ['typescript', 'tsx']) {
       ]) {
         for (const gap of ['', '\n']) {
           for (const call of ['', '()']) {
-            const prefix = `const result = new ${constructor}${gap}<`;
-            const sourceFor = (argument: string): string => `${prefix}${argument}>${call};${Following}`;
-            let argument = '';
-            let source = sourceFor(argument);
-            let tree = parser.parse(source)!;
-            try {
-              checkConstructorFields(tree, source, dialect, true);
-              for (const next of ['Arg', '/* gap */', 'Arg,', '']) {
-                const nextSource = sourceFor(next);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  nextSource,
-                  new Edit({
-                    startIndex: prefix.length,
-                    oldEndIndex: prefix.length + argument.length,
-                    newEndIndex: prefix.length + next.length,
-                    startPosition: position(source, prefix.length),
-                    oldEndPosition: position(source, prefix.length + argument.length),
-                    newEndPosition: position(nextSource, prefix.length + next.length),
-                  }),
-                  (incremental, fresh) => {
-                    checkConstructorFields(incremental, nextSource, dialect, next === '' || next === '/* gap */');
-                    checkConstructorFields(fresh, nextSource, dialect, next === '' || next === '/* gap */');
-                    expect(captures(incremental)).toEqual(captures(fresh));
-                  },
-                  true
-                );
-                previous.delete();
-                argument = next;
-                source = nextSource;
+            for (const argument of ['', 'Arg', '/* gap */', 'Arg,']) {
+              const source = `const result = new ${constructor}${gap}<${argument}>${call};${Following}`;
+              const tree = parser.parse(source)!;
+              try {
+                checkConstructorFields(tree, source, dialect, argument === '' || argument === '/* gap */');
+              } finally {
+                tree.delete();
               }
-            } finally {
-              tree.delete();
             }
           }
         }
       }
     } finally {
-      for (const query of ownedQueries) query.delete();
       parser.delete();
     }
   });

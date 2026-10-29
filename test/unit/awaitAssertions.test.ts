@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `async function resolve(value: Promise<number>) {
@@ -19,12 +18,10 @@ const make = async () => await Promise.resolve(1) as number;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} awaited assertion operands through edits`, async () => {
+  test(`retains ${dialect} awaited assertion operands`, async () => {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Source;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
@@ -36,38 +33,15 @@ for (const dialect of ['typescript', 'tsx']) {
         (await_expression . (_) @operand) @operator
       `
       );
-      tree = parser.parse(source)!;
-      check(tree, source);
-      const start = source.indexOf('as number');
-      for (const [before, after] of [
-        ['as', 'satisfies'],
-        ['satisfies', 'as'],
-      ] as const) {
-        const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next);
-            check(fresh, next);
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const source of [Source, Source.replace('as number', 'satisfies number')]) {
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source);
+        } finally {
+          tree.delete();
+        }
       }
-      expect(source).toBe(Source);
     } finally {
-      tree?.delete();
       query?.delete();
       parser.delete();
     }

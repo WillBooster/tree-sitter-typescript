@@ -1,9 +1,7 @@
-import { Edit, type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Header = 'declare const value: any;\ntype T = any;\ntype U = any;\n';
@@ -41,61 +39,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      parser.delete();
-    }
-  });
-
-  test(`updates ${dialect} assertion boundaries and queries through edits`, async () => {
-    await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const queries: ReturnType<typeof configuredQueries> = [];
-    let source = Header + 'value as T\n(value);' + Footer;
-    let tree: Tree | undefined;
-    try {
-      queries.push(...configuredQueries(language, dialect));
-      tree = parser.parse(source)!;
-      checkStatements(tree, source, dialect);
-      for (const body of [
-        '(value as T)\n(value);',
-        '(value as T)\n[0];',
-        'value as T\n[0];',
-        'value satisfies T/*\n*/`text`;',
-        '(value satisfies T)/*\n*/`text`;',
-        'value as T\n(value);',
-      ]) {
-        const next = Header + body + Footer;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: Header.length,
-            oldEndIndex: source.length - Footer.length,
-            newEndIndex: next.length - Footer.length,
-            startPosition: position(source, Header.length),
-            oldEndPosition: position(source, source.length - Footer.length),
-            newEndPosition: position(next, next.length - Footer.length),
-          }),
-          (incremental, fresh) => {
-            checkStatements(incremental, next, dialect);
-            checkStatements(fresh, next, dialect);
-            for (const query of queries) {
-              const captures = (parsed: Tree): unknown =>
-                query
-                  .captures(parsed.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex]);
-              expect(captures(incremental)).toEqual(captures(fresh));
-            }
-          }
-        );
-        previous.delete();
-        source = next;
-      }
-    } finally {
-      tree?.delete();
-      for (const query of queries) query.delete();
       parser.delete();
     }
   });

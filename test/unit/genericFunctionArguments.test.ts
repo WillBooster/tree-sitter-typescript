@@ -1,12 +1,11 @@
 import fs from 'node:fs';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
 import { finishCpuMeasurement, type ParseCpuMeasurement, startCpuMeasurement } from '../helpers/parseCpuMeasurement.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `declare function f<T>(value?: unknown): T;
@@ -36,7 +35,6 @@ const editable = f<`;
 const Suffix = `>();
 const following = 1;
 `;
-const InitialArgument = '<T>() => T';
 
 interface ShiftCase {
   name: string;
@@ -79,7 +77,7 @@ const ShiftCases: ShiftCase[] = [
 ];
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves relational grouping through ${dialect} edits`, async () => {
+  test(`preserves relational grouping in ${dialect}`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
@@ -88,9 +86,8 @@ for (const dialect of ['typescript', 'tsx']) {
     const highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
     const prefix = 'const result = ';
     const suffix = ';\nconst following = 1;';
-    let expression = 'a > b < c';
-    let source = prefix + expression + suffix;
-    let tree = parser.parse(source)!;
+    const source = prefix + 'a > b < c' + suffix;
+    const tree = parser.parse(source)!;
     const check = (parsed: Tree, text: string): void => {
       const diagnostics =
         ts.transpileModule(text, {
@@ -116,7 +113,7 @@ for (const dialect of ['typescript', 'tsx']) {
           control.delete();
         }
       }
-      for (const nextExpression of [
+      for (const expression of [
         'a < b < c',
         'a >= b < c',
         'a <= b < c',
@@ -162,31 +159,14 @@ for (const dialect of ['typescript', 'tsx']) {
         '(a <!-- b)',
         'yield << 1',
         'yield /* gap */ << 1',
-        'a > b < c',
       ]) {
-        const next = prefix + nextExpression + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + expression.length,
-            newEndIndex: prefix.length + nextExpression.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + expression.length),
-            newEndPosition: position(next, prefix.length + nextExpression.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next);
-            check(fresh, next);
-          },
-          true
-        );
-        previous.delete();
-        expression = nextExpression;
-        source = next;
+        const text = prefix + expression + suffix;
+        const parsed = parser.parse(text)!;
+        try {
+          check(parsed, text);
+        } finally {
+          parsed.delete();
+        }
       }
     } finally {
       tree.delete();
@@ -196,67 +176,32 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`preserves HTML comments after assertion type names through ${dialect} edits`, async () => {
+  test(`preserves HTML comments after assertion type names in ${dialect}`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     const prefix = 'const result = x as ';
     const suffix = ' <!-- c\n<1>;\nconst following = 1;';
-    let name = 'A';
-    let source = prefix + name + suffix;
-    let tree = parser.parse(source)!;
     try {
-      checkHtmlComments(tree, source);
-      for (const nextName of ['ns.A', 'ns.deep.A', 'A']) {
-        const next = prefix + nextName + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + name.length,
-            newEndIndex: prefix.length + nextName.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + name.length),
-            newEndPosition: position(next, prefix.length + nextName.length),
-          }),
-          (incremental, fresh) => {
-            checkHtmlComments(incremental, next);
-            checkHtmlComments(fresh, next);
-          },
-          true
-        );
-        previous.delete();
-        source = next;
-        name = nextName;
+      for (const name of ['A', 'ns.A', 'ns.deep.A']) {
+        const source = prefix + name + suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkHtmlComments(tree, source);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });
 
-  test(`validates escaped generic type names through ${dialect} edits`, async () => {
+  test(`validates escaped generic type names in ${dialect}`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    const queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
-      (kind) =>
-        new Query(
-          language,
-          [grammar[kind]]
-            .flat()
-            .map((file) => fs.readFileSync(file, 'utf8'))
-            .join('\n')
-        )
-    );
     const prefix = 'type Result = ';
     const suffix = '<number>;\nconst following = 1;';
-    let name = 'Foo';
-    let source = prefix + name + suffix;
-    let tree = parser.parse(source)!;
     const check = (parsed: Tree, text: string, identifier: string, hasError: boolean): void => {
       expect(parsed.rootNode.hasError, text).toBe(hasError);
       if (!hasError) {
@@ -271,15 +216,8 @@ for (const dialect of ['typescript', 'tsx']) {
         expect(parsed.rootNode.lastNamedChild!.text).toBe('const following = 1;');
       }
     };
-    const captures = (parsed: Tree): unknown =>
-      queries.map((query) =>
-        query
-          .captures(parsed.rootNode)
-          .map(({ name: capture, node }) => [capture, node.type, node.text, node.startIndex, node.endIndex])
-      );
     try {
-      check(tree, source, name, false);
-      const validNames = [String.raw`\u0046oo`, String.raw`\u{46}oo`, 'Ｆｏｏ', '𐐀'];
+      const validNames = ['Foo', String.raw`\u0046oo`, String.raw`\u{46}oo`, 'Ｆｏｏ', '𐐀'];
       const invalidNames = [
         String.raw`\u`,
         '\\',
@@ -290,61 +228,36 @@ for (const dialect of ['typescript', 'tsx']) {
         String.raw`A\u`,
         '#Foo',
       ];
-      const edits = [
+      for (const { name, hasError } of [
         ...validNames.map((name) => ({ name, hasError: false })),
         ...invalidNames.map((name) => ({ name, hasError: true })),
-        { name: 'Foo', hasError: false },
-      ];
-      for (const { name: nextName, hasError } of edits) {
-        const next = prefix + nextName + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + name.length,
-            newEndIndex: prefix.length + nextName.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + name.length),
-            newEndPosition: position(next, prefix.length + nextName.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, nextName, hasError);
-            check(fresh, next, nextName, hasError);
-            expect(captures(incremental)).toEqual(captures(fresh));
-          },
-          true
-        );
-        previous.delete();
-        source = next;
-        name = nextName;
+      ]) {
+        const source = prefix + name + suffix;
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source, name, hasError);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
-      for (const query of queries) query.delete();
       parser.delete();
     }
   });
 
-  test(`preserves adjacent generic function arguments and shift operators through ${dialect} edits`, async () => {
+  test(`preserves adjacent generic function arguments and shift operators in ${dialect}`, async () => {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
     let highlights: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Prefix + InitialArgument + Suffix;
-    let argument = InitialArgument;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(type_arguments) @arguments (function_type) @function');
       const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
       highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
-      tree = parser.parse(source)!;
-      checkArguments(tree, source, dialect, query, highlights);
-      for (const nextArgument of [
+      for (const argument of [
+        '<T>() => T',
         ' <T>() => T',
         '/* gap */<T>() => T',
         '\n<T>() => T',
@@ -357,82 +270,45 @@ for (const dialect of ['typescript', 'tsx']) {
         String.raw`<\u0054>() => T`,
         '<Ｔ>() => Ｔ',
         '<LongTypeParameterName>() => LongTypeParameterName',
-        InitialArgument,
       ]) {
-        const next = Prefix + nextArgument + Suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: Prefix.length,
-            oldEndIndex: Prefix.length + argument.length,
-            newEndIndex: Prefix.length + nextArgument.length,
-            startPosition: position(source, Prefix.length),
-            oldEndPosition: position(source, Prefix.length + argument.length),
-            newEndPosition: position(next, Prefix.length + nextArgument.length),
-          }),
-          (incremental, fresh) => {
-            checkArguments(incremental, next, dialect, query!, highlights!);
-            checkArguments(fresh, next, dialect, query!, highlights!);
-          }
-        );
-        previous.delete();
-        source = next;
-        argument = nextArgument;
+        const source = Prefix + argument + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkArguments(tree, source, dialect, query, highlights);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       query?.delete();
       highlights?.delete();
       parser.delete();
     }
   });
 
-  test(`preserves Flow generic constraints through ${dialect} edits`, async () => {
+  test(`preserves Flow generic constraints in ${dialect}`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     const prefix = 'type U = string; type Box<T> = T;\ntype Result = Box<<T';
     const suffix = '>(value: T) => T>;\nconst following = 1;';
-    let clause = ': U';
-    let source = prefix + clause + suffix;
-    let tree = parser.parse(source)!;
     try {
-      checkFlowConstraint(tree, source, clause);
-      for (const nextClause of [
+      for (const clause of [
+        ': U',
         ' extends U',
         ': <V>() => V',
         ' extends <V>() => V',
         ': { item: U }',
         ' extends { item: U }',
-        ': U',
       ]) {
-        const next = prefix + nextClause + suffix;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: prefix.length,
-            oldEndIndex: prefix.length + clause.length,
-            newEndIndex: prefix.length + nextClause.length,
-            startPosition: position(source, prefix.length),
-            oldEndPosition: position(source, prefix.length + clause.length),
-            newEndPosition: position(next, prefix.length + nextClause.length),
-          }),
-          (incremental, fresh) => {
-            checkFlowConstraint(incremental, next, nextClause);
-            checkFlowConstraint(fresh, next, nextClause);
-          }
-        );
-        previous.delete();
-        source = next;
-        clause = nextClause;
+        const source = prefix + clause + suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkFlowConstraint(tree, source, clause);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });

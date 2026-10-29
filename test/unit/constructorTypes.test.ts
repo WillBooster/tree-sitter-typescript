@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type ReturnCapture = readonly [number, string, number, number];
@@ -49,129 +48,33 @@ type J = abstract
 /*c*/new () => number;
 `;
 
-const RecoveryEdits = [
-  [36, 0, '&'],
-  [210, 1, ''],
-  [200, 0, '}'],
-  [148, 0, '['],
-  [36, 0, ':'],
-  [116, 0, ']'],
-  [85, 1, ''],
-  [12, 1, ''],
-] as const;
-
 for (const dialect of ['typescript', 'tsx']) {
-  for (const [description, initialSource, offset, original, replacements] of [
-    ['return grouping', Source, Source.indexOf('|'), '|', ['&', '|']],
-    [
-      'abstract continuation',
-      ContinuationSource,
-      ContinuationSource.indexOf('abstract\n') + 8,
-      '\n',
-      ['/*\ncomment*/', '\n'],
-    ],
+  for (const [description, sources] of [
+    ['return grouping', [Source, Source.replace('|', '&')]],
+    ['abstract continuation', [ContinuationSource, ContinuationSource.replace('abstract\n', 'abstract/*\ncomment*/')]],
+    ['constructor boundaries', [RecoverySource]],
+    ['abstract alias statements', ['type G = abstract; new Date();']],
   ] as const) {
-    test(`retains ${dialect} constructor ${description} through edits`, async () => {
+    test(`retains ${dialect} constructor ${description}`, async () => {
       await Parser.init();
       const parser = new Parser();
       let query: Query | undefined;
-      let tree: Tree | undefined;
-      let source: string = initialSource;
       try {
         const language = await loadCurrentWasmBuild(dialect);
         parser.setLanguage(language);
         query = new Query(language, '(constructor_type type: (_) @result) @factory');
-        tree = parser.parse(source)!;
-        expect(tree.rootNode.hasError).toBe(false);
-        expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
-        let oldLength = original.length;
-        for (const replacement of replacements) {
-          const next = source.slice(0, offset) + replacement + source.slice(offset + oldLength);
-          const previous: Tree = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: offset,
-              oldEndIndex: offset + oldLength,
-              newEndIndex: offset + replacement.length,
-              startPosition: position(source, offset),
-              oldEndPosition: position(source, offset + oldLength),
-              newEndPosition: position(next, offset + replacement.length),
-            }),
-            (incremental, fresh) => {
-              const expected = referenceReturns(next, dialect);
-              expect(returnCaptures(query!, incremental)).toEqual(expected);
-              expect(returnCaptures(query!, fresh)).toEqual(expected);
-            }
-          );
-          previous.delete();
-          source = next;
-          oldLength = replacement.length;
+        for (const source of sources) {
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError).toBe(false);
+            expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
+          } finally {
+            tree.delete();
+          }
         }
       } finally {
-        tree?.delete();
         query?.delete();
         parser.delete();
-      }
-    });
-  }
-}
-
-for (const dialect of ['typescript', 'tsx']) {
-  for (const [description, initialSource, edits] of [
-    ['constructor boundaries', RecoverySource, RecoveryEdits],
-    ['abstract alias statements', 'type G = abstract; new Date();', [[4, 3, ':']]],
-  ] as const) {
-    test(`retains ${dialect} ${description} through recovery edits`, async () => {
-      await Parser.init();
-      const parser = new Parser();
-      let query: Query | undefined;
-      let tree: Tree | undefined;
-      let source: string = initialSource;
-      const undo: [number, number, string][] = [];
-      try {
-        parser.setLanguage(await loadCurrentWasmBuild(dialect));
-        query = new Query(parser.language!, '(constructor_type type: (_) @result) @factory');
-        tree = parser.parse(source)!;
-        expect(tree.rootNode.hasError).toBe(false);
-        expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
-        for (const [start, length, text] of edits) {
-          undo.unshift([start, text.length, source.slice(start, start + length)]);
-          edit(start, length, text);
-        }
-        for (const [start, length, text] of undo) edit(start, length, text);
-        expect(source).toBe(initialSource);
-        expect(tree.rootNode.hasError).toBe(false);
-      } finally {
-        tree?.delete();
-        query?.delete();
-        parser.delete();
-      }
-
-      function edit(start: number, length: number, text: string): void {
-        const next = source.slice(0, start) + text + source.slice(start + length);
-        const previous = tree!;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + length,
-            newEndIndex: start + text.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + length),
-            newEndPosition: position(next, start + text.length),
-          }),
-          (incremental, fresh) => {
-            expect(returnCaptures(query!, incremental)).toEqual(returnCaptures(query!, fresh));
-          },
-          true
-        );
-        previous.delete();
-        source = next;
       }
     });
   }

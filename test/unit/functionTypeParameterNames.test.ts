@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit.js';
+import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/functionTypeParameterNames.ts'), 'utf8');
@@ -55,33 +55,15 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const start = source.indexOf('()') + 2,
                   end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement !== '=>');
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === '=>' ? [[name, 8, 8 + name.length]] : []);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(replacement !== '=>');
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual(replacement === '=>' ? [[name, 8, 8 + name.length]] : []);
                 source = next;
                 before = replacement;
               }
@@ -118,33 +100,15 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const start = source.indexOf(header) + header.length,
                     end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(replacement !== '(x:U)=>U');
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual(replacement === '(x:U)=>U' ? [[name, 8, 8 + name.length]] : []);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(replacement !== '(x:U)=>U');
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual(replacement === '(x:U)=>U' ? [[name, 8, 8 + name.length]] : []);
                   source = next;
                   before = replacement;
                 }
@@ -245,41 +209,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const before = replacement === contextual ? 'K' : contextual;
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -319,41 +265,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               const before = replacement === 'readonly' ? 'K' : 'readonly';
               const end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(false);
-                    expect(
-                      aliasQuery
-                        .captures(current.rootNode)
-                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                    ).toEqual([
-                      ['name', 'type_identifier', 'F', 5, 6],
-                      ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                    ]);
-                    expect(
-                      namesQuery
-                        .captures(current.rootNode)
-                        .filter(({ node }) => node.text === name)
-                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                    ).toEqual([[name, 8, 8 + name.length]]);
-                  }
-                },
-                true
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              expect(
+                aliasQuery
+                  .captures(tree.rootNode)
+                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+              ).toEqual([
+                ['name', 'type_identifier', 'F', 5, 6],
+                ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+              ]);
+              expect(
+                namesQuery
+                  .captures(tree.rootNode)
+                  .filter(({ node }) => node.text === name)
+                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual([[name, 8, 8 + name.length]]);
               source = next;
             }
           } finally {
@@ -367,81 +295,69 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership through leading mapped type edits', (name) => {
-    const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
-    try {
-      for (const optional of ['', '?']) {
-        for (const type of [
-          '{[K in | Value]:number}',
-          '{[K in & Value]:number}',
-          '{[K in ?Value]:number}',
-          '{[K in T as | Value]:number}',
-          '{[K in T as & Value]:number}',
-          '{[K in T as ?Value]:number}',
-        ]) {
-          let source = `type F=(${name}${optional}:${type})=>number;`;
-          let tree: Tree | undefined;
-          try {
-            tree = parser.parse(source)!;
-            expect(tree.rootNode.hasError).toBe(false);
-            const start = source.indexOf('Value');
-            for (const replacement of ['Other', 'Value']) {
-              const before = replacement === 'Other' ? 'Value' : 'Other';
-              const end = start + before.length;
-              const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(false);
-                    expect(
-                      aliasQuery
-                        .captures(current.rootNode)
-                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                    ).toEqual([
-                      ['name', 'type_identifier', 'F', 5, 6],
-                      ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                    ]);
-                    expect(
-                      namesQuery
-                        .captures(current.rootNode)
-                        .filter(({ node }) => node.text === name)
-                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                    ).toEqual([[name, 8, 8 + name.length]]);
-                  }
-                },
-                true
-              );
-              previous.delete();
-              source = next;
+  test.each(['unknown', 'never', 'unique'])(
+    'keeps %s binding ownership across leading mapped type variants',
+    (name) => {
+      const parser = new Parser().setLanguage(language);
+      const aliasQuery = new Query(
+        language,
+        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
+      );
+      const namesQuery = new Query(
+        language,
+        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+      );
+      try {
+        for (const optional of ['', '?']) {
+          for (const type of [
+            '{[K in | Value]:number}',
+            '{[K in & Value]:number}',
+            '{[K in ?Value]:number}',
+            '{[K in T as | Value]:number}',
+            '{[K in T as & Value]:number}',
+            '{[K in T as ?Value]:number}',
+          ]) {
+            let source = `type F=(${name}${optional}:${type})=>number;`;
+            let tree: Tree | undefined;
+            try {
+              tree = parser.parse(source)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              const start = source.indexOf('Value');
+              for (const replacement of ['Other', 'Value']) {
+                const before = replacement === 'Other' ? 'Value' : 'Other';
+                const end = start + before.length;
+                const next = source.slice(0, start) + replacement + source.slice(end);
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
+                source = next;
+              }
+            } finally {
+              tree?.delete();
             }
-          } finally {
-            tree?.delete();
           }
         }
+      } finally {
+        aliasQuery.delete();
+        namesQuery.delete();
+        parser.delete();
       }
-    } finally {
-      aliasQuery.delete();
-      namesQuery.delete();
-      parser.delete();
     }
-  });
+  );
   test.each(['unknown', 'never', 'unique'])(
     'keeps %s binding ownership through conditional computed-key renames',
     (name) => {
@@ -487,41 +403,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const before = replacement === contextual ? 'K' : contextual;
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -572,41 +470,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const before = replacement === contextual ? 'K' : contextual;
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -658,41 +538,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const before = replacement === 'void' ? 'K' : 'void';
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(false);
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
               }
             } finally {
@@ -746,41 +608,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['void', 'delete', 'K']) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(false);
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
                 before = replacement;
               }
@@ -796,7 +640,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership through conditional branch edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership across conditional branch variants', (name) => {
     const parser = new Parser().setLanguage(language);
     const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     const namesQuery = new Query(
@@ -827,41 +671,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             ]) {
               const end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(false);
-                    expect(
-                      aliasQuery
-                        .captures(current.rootNode)
-                        .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                    ).toEqual([
-                      ['name', 'type_identifier', 'F', 5, 6],
-                      ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                    ]);
-                    expect(
-                      namesQuery
-                        .captures(current.rootNode)
-                        .filter(({ node }) => node.text === name)
-                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                    ).toEqual([[name, 8, 8 + name.length]]);
-                  }
-                },
-                true
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              expect(
+                aliasQuery
+                  .captures(tree.rootNode)
+                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+              ).toEqual([
+                ['name', 'type_identifier', 'F', 5, 6],
+                ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+              ]);
+              expect(
+                namesQuery
+                  .captures(tree.rootNode)
+                  .filter(({ node }) => node.text === name)
+                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual([[name, 8, 8 + name.length]]);
               source = next;
               before = replacement;
             }
@@ -877,7 +703,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'keeps %s binding ownership through nested function return edits',
+    'keeps %s binding ownership across nested function return variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -904,41 +730,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['number', '{p:T}', 'T']) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(false);
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
                 before = replacement;
               }
@@ -955,7 +763,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
-    'keeps %s binding ownership through exact object delimiter edits',
+    'keeps %s binding ownership across exact object delimiter variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -984,41 +792,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['p:| T', 'p:& T', 'p:T | U', 'p:{nested:T}', '<T>(a:T):U', 'p:T']) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(false);
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
                 before = replacement;
               }
@@ -1034,92 +824,66 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])(
-    'restores %s binding fields after incomplete nested type arrow edits',
-    (name) => {
-      const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
-      try {
-        for (const optional of ['', '?']) {
-          for (const [opening, closing] of [
-            ['{', '}'],
-            ['{|', '}'],
-            ['{', '|}'],
-            ['{|', '|}'],
-          ]) {
-            let source = `type F=(${name}${optional}:${opening}p:(a:T)=>U${closing})=>number;`;
-            let tree: Tree | undefined;
-            try {
-              tree = parser.parse(source)!;
-              expect(tree.rootNode.hasError).toBe(false);
-              const start = source.indexOf('(a:T)') + 5;
-              let before = '=>U';
-              for (const replacement of ['', '=>U', '', '=>U']) {
-                const end = start + before.length;
-                const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    expectQueryAgreement(aliasQuery, incremental, fresh);
-                    expectQueryAgreement(namesQuery, incremental, fresh);
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement === '');
-                      if (replacement === '') continue;
-                      const valueEnd = next.length - 1;
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, valueEnd), 7, valueEnd],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
-                source = next;
-                before = replacement;
-              }
-            } finally {
-              tree?.delete();
+  test.each(['unknown', 'never', 'unique'])('keeps %s binding fields around incomplete nested type arrows', (name) => {
+    const parser = new Parser().setLanguage(language);
+    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
+    const namesQuery = new Query(
+      language,
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
+    );
+    try {
+      for (const optional of ['', '?']) {
+        for (const [opening, closing] of [
+          ['{', '}'],
+          ['{|', '}'],
+          ['{', '|}'],
+          ['{|', '|}'],
+        ]) {
+          let source = `type F=(${name}${optional}:${opening}p:(a:T)=>U${closing})=>number;`;
+          let tree: Tree | undefined;
+          try {
+            tree = parser.parse(source)!;
+            expect(tree.rootNode.hasError).toBe(false);
+            const start = source.indexOf('(a:T)') + 5;
+            let before = '=>U';
+            for (const replacement of ['', '=>U', '', '=>U']) {
+              const end = start + before.length;
+              const next = source.slice(0, start) + replacement + source.slice(end);
+              tree.delete();
+              tree = parser.parse(next)!;
+              expect(tree.rootNode.hasError).toBe(replacement === '');
+              if (replacement === '') continue;
+              const valueEnd = next.length - 1;
+              expect(
+                aliasQuery
+                  .captures(tree.rootNode)
+                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+              ).toEqual([
+                ['name', 'type_identifier', 'F', 5, 6],
+                ['value', 'function_type', next.slice(7, valueEnd), 7, valueEnd],
+              ]);
+              expect(
+                namesQuery
+                  .captures(tree.rootNode)
+                  .filter(({ node }) => node.text === name)
+                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual([[name, 8, 8 + name.length]]);
+              source = next;
+              before = replacement;
             }
+          } finally {
+            tree?.delete();
           }
         }
-      } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
-        parser.delete();
       }
+    } finally {
+      aliasQuery.delete();
+      namesQuery.delete();
+      parser.delete();
     }
-  );
+  });
   test.each(['unknown', 'never', 'unique'])(
-    'restores %s binding ownership after incomplete return property edits',
+    'keeps %s binding ownership around incomplete return properties',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -1146,44 +910,25 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['', '| T', '& T', 'T', '', 'T']) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const q of [aliasQuery, namesQuery]) expectQueryAgreement(q, incremental, fresh);
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement === '');
-                      expectNodeRanges(current.rootNode, next);
-                      if (replacement === '') continue;
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(replacement === '');
+                expectNodeRanges(tree.rootNode, next);
+                if (replacement === '') continue;
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
                 before = replacement;
               }
@@ -1200,7 +945,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   );
   test.each(['unknown', 'never', 'unique'])(
-    'keeps %s binding ownership through arrow return annotation edits',
+    'keeps %s binding ownership across arrow return annotation variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -1233,41 +978,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               ]) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(false);
-                      expect(
-                        aliasQuery
-                          .captures(current.rootNode)
-                          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                      ).toEqual([
-                        ['name', 'type_identifier', 'F', 5, 6],
-                        ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                      ]);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual([[name, 8, 8 + name.length]]);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(false);
+                expect(
+                  aliasQuery
+                    .captures(tree.rootNode)
+                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                ).toEqual([
+                  ['name', 'type_identifier', 'F', 5, 6],
+                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                ]);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual([[name, 8, 8 + name.length]]);
                 source = next;
                 before = replacement;
               }
@@ -1322,41 +1049,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const before = replacement === contextual ? 'K' : contextual;
                   const end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -1415,41 +1124,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const start = source.indexOf(before),
                     end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -1496,41 +1187,23 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const start = source.indexOf(before),
                     end = start + before.length;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      for (const current of [incremental, fresh]) {
-                        expect(current.rootNode.hasError).toBe(false);
-                        expect(
-                          aliasQuery
-                            .captures(current.rootNode)
-                            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                        ).toEqual([
-                          ['name', 'type_identifier', 'F', 5, 6],
-                          ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                        ]);
-                        expect(
-                          namesQuery
-                            .captures(current.rootNode)
-                            .filter(({ node }) => node.text === name)
-                            .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                        ).toEqual([[name, 8, 8 + name.length]]);
-                      }
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  expect(tree.rootNode.hasError).toBe(false);
+                  expect(
+                    aliasQuery
+                      .captures(tree.rootNode)
+                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+                  ).toEqual([
+                    ['name', 'type_identifier', 'F', 5, 6],
+                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+                  ]);
+                  expect(
+                    namesQuery
+                      .captures(tree.rootNode)
+                      .filter(({ node }) => node.text === name)
+                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                  ).toEqual([[name, 8, 8 + name.length]]);
                   source = next;
                 }
               } finally {
@@ -1546,7 +1219,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('restores %s annotation fields after HTML line-comment edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('keeps %s annotation fields around HTML line comments', (name) => {
     const parser = new Parser().setLanguage(language);
     const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     try {
@@ -1559,39 +1232,20 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             const start = source.indexOf(':') + 2;
             const end = start + (source.includes('/* c */') ? 7 : marker.length);
             const next = source.slice(0, start) + replacement + source.slice(end);
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: end,
-                newEndIndex: start + replacement.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, end),
-                newEndPosition: position(next, start + replacement.length),
-              }),
-              (incremental, fresh) => {
-                expectQueryAgreement(aliasQuery, incremental, fresh);
-                for (const current of [incremental, fresh]) {
-                  expect(current.rootNode.hasError).toBe(replacement === marker);
-                  if (replacement === marker) continue;
-                  const valueStart = next.indexOf('('),
-                    valueEnd = next.length - 1;
-                  expect(
-                    aliasQuery
-                      .captures(current.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
-                  ]);
-                }
-              },
-              true
-            );
-            previous.delete();
+            tree.delete();
+            tree = parser.parse(next)!;
+            expect(tree.rootNode.hasError).toBe(replacement === marker);
+            if (replacement === marker) continue;
+            const valueStart = next.indexOf('('),
+              valueEnd = next.length - 1;
+            expect(
+              aliasQuery
+                .captures(tree.rootNode)
+                .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
+            ).toEqual([
+              ['name', 'type_identifier', 'F', 5, 6],
+              ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
+            ]);
             source = next;
           }
         } finally {
@@ -1604,7 +1258,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'preserves %s bindings for valid decimal types and rejects invalid edits',
+    'preserves %s bindings for valid decimal types and rejects invalid ones',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const namesQuery = new Query(
@@ -1654,37 +1308,17 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 host.getSourceFile = (fileName) => (fileName === 'parameters.ts' ? reference : undefined);
                 const valid =
                   ts.createProgram(['parameters.ts'], options, host).getSyntacticDiagnostics(reference).length === 0;
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    expectQueryAgreement(namesQuery, incremental, fresh);
-                    expectQueryAgreement(query!, incremental, fresh);
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(!valid);
-                      const captures = namesQuery.captures(current.rootNode).filter(({ node }) => node.text === name);
-                      if (valid)
-                        expect(captures.map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
-                          [name, 8, 8 + name.length],
-                        ]);
-                      for (const { node } of captures)
-                        expect([node.text, node.startIndex, node.endIndex]).toEqual([name, 8, 8 + name.length]);
-                      expectNodeRanges(current.rootNode, next);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(!valid);
+                const captures = namesQuery.captures(tree.rootNode).filter(({ node }) => node.text === name);
+                if (valid)
+                  expect(captures.map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
+                    [name, 8, 8 + name.length],
+                  ]);
+                for (const { node } of captures)
+                  expect([node.text, node.startIndex, node.endIndex]).toEqual([name, 8, 8 + name.length]);
+                expectNodeRanges(tree.rootNode, next);
                 source = next;
                 before = replacement;
               }
@@ -1724,33 +1358,15 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['', '/* return */', '%', '^', '!', '~', '@', '#', '\\', '-', '+', 'Value']) {
                 const end = start + before.length,
                   next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement !== 'Value');
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === 'Value' ? [[name, 8, 8 + name.length]] : []);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(replacement !== 'Value');
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual(replacement === 'Value' ? [[name, 8, 8 + name.length]] : []);
                 source = next;
                 before = replacement;
               }
@@ -1866,34 +1482,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           ]) {
             const end = start + before.length;
             const next = source.slice(0, start) + replacement + source.slice(end);
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: end,
-                newEndIndex: start + replacement.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, end),
-                newEndPosition: position(next, start + replacement.length),
-              }),
-              (incremental, fresh) => {
-                for (const current of [incremental, fresh]) {
-                  expect(current.rootNode.hasError).toBe(replacement !== operand);
-                  const start = next.indexOf(name);
-                  expect(
-                    namesQuery
-                      .captures(current.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
-                }
-              },
-              true
-            );
-            previous.delete();
+            tree.delete();
+            tree = parser.parse(next)!;
+            expect(tree.rootNode.hasError).toBe(replacement !== operand);
+            const nameStart = next.indexOf(name);
+            expect(
+              namesQuery
+                .captures(tree.rootNode)
+                .filter(({ node }) => node.text === name)
+                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+            ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
             source = next;
             before = replacement;
           }
@@ -1917,7 +1515,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         ] as const
       ).map(([operator, operand]) => [name, operator, operand] as const)
     )
-  )('retains %s %s operand recovery through grouped separator edits', (name, operator, operand) => {
+  )('retains %s %s operand recovery across grouped separator variants', (name, operator, operand) => {
     const parser = new Parser().setLanguage(language);
     const namesQuery = new Query(
       language,
@@ -1936,34 +1534,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             for (const replacement of ['?', ':', ';', ',', operand]) {
               const end = start + before.length;
               const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  for (const current of [incremental, fresh]) {
-                    expect(current.rootNode.hasError).toBe(replacement !== operand);
-                    const start = next.indexOf(name);
-                    expect(
-                      namesQuery
-                        .captures(current.rootNode)
-                        .filter(({ node }) => node.text === name)
-                        .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                    ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
-                  }
-                },
-                true
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              expect(tree.rootNode.hasError).toBe(replacement !== operand);
+              const nameStart = next.indexOf(name);
+              expect(
+                namesQuery
+                  .captures(tree.rootNode)
+                  .filter(({ node }) => node.text === name)
+                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+              ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
               source = next;
               before = replacement;
             }
@@ -2007,34 +1587,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['', '/* operand */', '\\', String.raw`\u{}`, operand]) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement !== operand);
-                      const start = next.indexOf(name);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(replacement !== operand);
+                const nameStart = next.indexOf(name);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
                 source = next;
                 before = replacement;
               }
@@ -2078,34 +1640,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               for (const replacement of ['', '/* operand */', '\\', String.raw`\u{}`, operand]) {
                 const end = start + before.length;
                 const next = source.slice(0, start) + replacement + source.slice(end);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: end,
-                    newEndIndex: start + replacement.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, end),
-                    newEndPosition: position(next, start + replacement.length),
-                  }),
-                  (incremental, fresh) => {
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError).toBe(replacement !== operand);
-                      const start = next.indexOf(name);
-                      expect(
-                        namesQuery
-                          .captures(current.rootNode)
-                          .filter(({ node }) => node.text === name)
-                          .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                      ).toEqual(replacement === operand ? [[name, start, start + name.length]] : []);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
+                tree.delete();
+                tree = parser.parse(next)!;
+                expect(tree.rootNode.hasError).toBe(replacement !== operand);
+                const nameStart = next.indexOf(name);
+                expect(
+                  namesQuery
+                    .captures(tree.rootNode)
+                    .filter(({ node }) => node.text === name)
+                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
+                ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
                 source = next;
                 before = replacement;
               }
@@ -2121,7 +1665,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'reports incomplete %s operator operands and restores parameter roles',
+    'reports incomplete %s operator operands and keeps parameter roles of complete ones',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const parameterQuery = new Query(
@@ -2154,27 +1698,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                       ? start + 13
                       : start;
                   const next = source.slice(0, start) + replacement + source.slice(end);
-                  const previous = tree;
-                  tree = compareEditedTree(
-                    parser,
-                    previous,
-                    next,
-                    new Edit({
-                      startIndex: start,
-                      oldEndIndex: end,
-                      newEndIndex: start + replacement.length,
-                      startPosition: position(source, start),
-                      oldEndPosition: position(source, end),
-                      newEndPosition: position(next, start + replacement.length),
-                    }),
-                    (incremental, fresh) => {
-                      expectQueryAgreement(parameterQuery, incremental, fresh);
-                      check(incremental, next, replacement !== 'value');
-                      check(fresh, next, replacement !== 'value');
-                    },
-                    true
-                  );
-                  previous.delete();
+                  tree.delete();
+                  tree = parser.parse(next)!;
+                  check(tree, next, replacement !== 'value');
                   source = next;
                 }
                 function check(current: Tree, text: string, missing: boolean): void {
@@ -2205,7 +1731,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('restores %s type-operator fields after operand removal', (name) => {
+  test.each(['unknown', 'never', 'unique'])('reports %s type-operator fields with and without operands', (name) => {
     const parser = new Parser().setLanguage(language);
     const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     try {
@@ -2225,27 +1751,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               const start = source.indexOf(operator) + operator.length + 1;
               const end = source.indexOf(') =>');
               const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  expectQueryAgreement(aliasQuery, incremental, fresh);
-                  check(incremental, next, replacement !== operand);
-                  check(fresh, next, replacement !== operand);
-                },
-                true
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              check(tree, next, replacement !== operand);
               source = next;
             }
             function check(current: Tree, text: string, missing: boolean): void {
@@ -2271,7 +1779,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test.each(['unknown', 'never', 'unique'])('retains %s nested type-query recovery through operand edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('retains %s nested type-query recovery across operand variants', (name) => {
     const parser = new Parser().setLanguage(language);
     try {
       for (const optional of ['', '?']) {
@@ -2285,26 +1793,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               const start = source.indexOf('typeof ') + 7;
               const end = source.indexOf(')', start);
               const next = source.slice(0, start) + replacement + source.slice(end);
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + replacement.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + replacement.length),
-                }),
-                (incremental, fresh) => {
-                  check(incremental, next, replacement !== 'value');
-                  check(fresh, next, replacement !== 'value');
-                },
-                true
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              check(tree, next, replacement !== 'value');
               source = next;
             }
             function check(current: Tree, text: string, missing: boolean): void {
@@ -2338,7 +1829,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'retains %s callback bodies through conditional and colon edits',
+    'retains %s callback bodies across conditional and colon variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       try {
@@ -2364,27 +1855,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               'x',
             ]) {
               const start = source.indexOf(' => ') + 4;
-              const end = source.length - 1;
               const next = source.slice(0, start) + body + ';';
-              const previous = tree;
-              tree = compareEditedTree(
-                parser,
-                previous,
-                next,
-                new Edit({
-                  startIndex: start,
-                  oldEndIndex: end,
-                  newEndIndex: start + body.length,
-                  startPosition: position(source, start),
-                  oldEndPosition: position(source, end),
-                  newEndPosition: position(next, start + body.length),
-                }),
-                (incremental, fresh) => {
-                  check(incremental, next, body);
-                  check(fresh, next, body);
-                }
-              );
-              previous.delete();
+              tree.delete();
+              tree = parser.parse(next)!;
+              expect(tree.rootNode.hasError).toBe(false);
+              check(tree, next, body);
               source = next;
             }
             function check(current: Tree, text: string, body: string): void {
@@ -2410,7 +1885,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('retains %s optional extra-colon recovery through type edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('retains %s optional extra-colon recovery across type variants', (name) => {
     const parser = new Parser().setLanguage(language);
     const parameterQuery = new Query(
       language,
@@ -2433,26 +1908,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, extraColon);
-            check(fresh, next, extraColon);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next, extraColon);
         source = next;
       }
       function check(current: Tree, text: string, extraColon: boolean): void {
@@ -2483,7 +1941,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'retains %s optional callback recovery through return-type edits',
+    'retains %s optional callback recovery across return-type variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const aliasQuery = new Query(
@@ -2503,26 +1961,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           const start = source.indexOf(before);
           expect(start).toBeGreaterThanOrEqual(0);
           const next = source.slice(0, start) + after + source.slice(start + before.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before.length,
-              newEndIndex: start + after.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before.length),
-              newEndPosition: position(next, start + after.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next, missing);
-              check(fresh, next, missing);
-            },
-            true
-          );
-          previous.delete();
+          tree.delete();
+          tree = parser.parse(next)!;
+          check(tree, next, missing);
           source = next;
         }
         function check(current: Tree, text: string, missing: boolean): void {
@@ -2544,7 +1985,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test.each(['unknown', 'never', 'unique'])('retains %s optional callback ownership through arrow edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('retains %s optional callback ownership across arrow variants', (name) => {
     const parser = new Parser().setLanguage(language);
     const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     let source = `type F = (${name}?: number) => unknown;`;
@@ -2563,26 +2004,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, error);
-            check(fresh, next, error);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next, error);
         source = next;
       }
       function check(current: Tree, text: string, error: boolean): void {
@@ -2600,7 +2024,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test('retains index-signature fields through name and trivia edits', () => {
+  test('retains index-signature fields across name and trivia variants', () => {
     const parser = new Parser().setLanguage(language);
     const indexQuery = new Query(
       language,
@@ -2622,25 +2046,10 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, name);
-            check(fresh, next, name);
-          }
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        check(tree, next, name);
         source = next;
       }
       function check(current: Tree, text: string, firstName: string): void {
@@ -2668,7 +2077,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'retains %s initializer ownership through nested-type arrow edits',
+    'retains %s initializer ownership across nested-type arrow variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const valueQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
@@ -2690,26 +2099,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           const start = source.indexOf(before);
           expect(start).toBeGreaterThanOrEqual(0);
           const next = source.slice(0, start) + after + source.slice(start + before.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before.length,
-              newEndIndex: start + after.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before.length),
-              newEndPosition: position(next, start + after.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next, error);
-              check(fresh, next, error);
-            },
-            true
-          );
-          previous.delete();
+          tree.delete();
+          tree = parser.parse(next)!;
+          check(tree, next, error);
           source = next;
         }
         function check(current: Tree, text: string, error: boolean): void {
@@ -2726,7 +2118,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     }
   );
-  test('restores a valid function type after malformed parenthesized-type edits', () => {
+  test('recovers malformed parenthesized types and parses a valid function type', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(
       language,
@@ -2746,27 +2138,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            expectQueryAgreement(recoveryQuery, incremental, fresh);
-            check(incremental, next, valid);
-            check(fresh, next, valid);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next, valid);
         source = next;
       }
       function check(current: Tree, text: string, valid: boolean): void {
@@ -2788,7 +2162,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test('retains the initializer while an incomplete unique type is edited', () => {
+  test('retains the initializer with complete and incomplete unique types', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
     let source = 'const a = (unique: unique<A>);';
@@ -2802,26 +2176,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       ] as const) {
         const start = source.indexOf(before);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before.length,
-            newEndIndex: start + after.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before.length),
-            newEndPosition: position(next, start + after.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, error);
-            check(fresh, next, error);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next, error);
         source = next;
       }
       function check(current: Tree, text: string, error: boolean): void {
@@ -2837,7 +2194,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test('preserves the type field after extra-colon edits', () => {
+  test('preserves the type field across extra-colon variants', () => {
     const parser = new Parser().setLanguage(language);
     const recoveryQuery = new Query(language, '(parenthesized_expression type: (type_annotation) @annotation)');
     let source = 'const x = (unknown: x: number);';
@@ -2853,26 +2210,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       ]) {
         const start = source.indexOf(before!);
         const next = source.slice(0, start) + after + source.slice(start + before!.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, annotation!);
-            check(fresh, next, annotation!);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next, annotation!);
         source = next;
       }
       function check(current: Tree, text: string, annotation: string): void {
@@ -2888,7 +2228,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test.each(['unknown', 'never', 'unique'])('retains the annotated %s expression through arrow edits', (name) => {
+  test.each(['unknown', 'never', 'unique'])('retains the annotated %s expression across arrow variants', (name) => {
     const parser = new Parser().setLanguage(language);
     const roleQuery = new Query(
       language,
@@ -2915,26 +2255,10 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const start = source.indexOf(before);
         expect(start).toBeGreaterThanOrEqual(0);
         const next = source.slice(0, start) + after + source.slice(start + before.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, role, error);
-            check(fresh, next, role, error);
-          },
-          error
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        if (!error) expect(tree.rootNode.hasError).toBe(false);
+        check(tree, next, role, error);
         source = next;
       }
       function check(current: Tree, text: string, role: string, error = false): void {
@@ -2987,26 +2311,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         ['#unknown', 'void'],
       ]) {
         const next = source.slice(0, start) + after + source.slice(start + before!.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next);
-            check(fresh, next);
-          },
-          true
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        check(tree, next);
         expect(tree.rootNode.hasError).toBe(after !== 'value');
         source = next;
       }
@@ -3035,7 +2342,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'unknown /* binding',
     'never /* optional',
     'unique // binding',
-  ])('preserves %s name and type through edits', (marker) => {
+  ])('preserves %s name and type across variants', (marker) => {
     const parser = new Parser().setLanguage(language);
     let tree: Tree | undefined;
     let source = Source;
@@ -3051,25 +2358,10 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         ['parameter', word],
       ]) {
         const next = source.slice(0, start) + after + source.slice(start + before!.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next);
-            check(fresh, next);
-          }
-        );
-        previous.delete();
+        tree.delete();
+        tree = parser.parse(next)!;
+        expect(tree.rootNode.hasError).toBe(false);
+        check(tree, next);
         source = next;
       }
       expect(source).toBe(Source);
@@ -3116,9 +2408,3 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
 });
-
-function expectQueryAgreement(query: Query, incremental: Tree, fresh: Tree): void {
-  const captures = (tree: Tree): unknown[] =>
-    query.captures(tree.rootNode).map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex]);
-  expect(captures(incremental)).toEqual(captures(fresh));
-}

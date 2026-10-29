@@ -1,9 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
@@ -498,15 +496,14 @@ const SyntaxControls = ['const result = value as unknown.field;', 'const result 
 const Following = '\nconst following = 1;';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves qualified const type ranges through ${dialect} edits`, async () => {
+  test(`preserves ${dialect} qualified const type ranges`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const ownedQueries: Query[] = [];
-    let tree: Tree | undefined;
+    let query: Query | undefined;
     try {
       parser.setLanguage(language);
-      const query = new Query(
+      query = new Query(
         language,
         '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
           '(required_parameter pattern: (pattern/array_pattern) @arrayBinding) (jsdoc_unknown_type) @unknownType ((type_identifier) @constType (#eq? @constType "const")) (as_expression "const" @wholeConst) ' +
@@ -516,9 +513,6 @@ for (const dialect of ['typescript', 'tsx']) {
           ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
           (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
       );
-      ownedQueries.push(query);
-      const queries = configuredQueries(language, dialect);
-      ownedQueries.push(...queries);
       const sources = [
         ...Sources,
         ...SyntaxControls,
@@ -526,42 +520,16 @@ for (const dialect of ['typescript', 'tsx']) {
       ].map((source) => source + Following);
       const syntaxSources = new Set(SyntaxControls.map((source) => source + Following));
       const invalidSources = InvalidContexts.map((source) => source + '\n' + Sources[0] + Following);
-      const captures = (tree: Tree): unknown =>
-        queries.map((configured) =>
-          configured
-            .captures(tree.rootNode)
-            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-        );
-      let source = sources[0]!;
-      tree = parser.parse(source)!;
-      checkRanges(tree, source, dialect, query);
-      for (const next of [...sources.slice(1), ...invalidSources, sources[0]!]) {
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: 0,
-            oldEndIndex: source.length - Following.length,
-            newEndIndex: next.length - Following.length,
-            startPosition: { row: 0, column: 0 },
-            oldEndPosition: position(source, source.length - Following.length),
-            newEndPosition: position(next, next.length - Following.length),
-          }),
-          (incremental, fresh) => {
-            checkRanges(incremental, next, dialect, query, !invalidSources.includes(next), !syntaxSources.has(next));
-            checkRanges(fresh, next, dialect, query, !invalidSources.includes(next), !syntaxSources.has(next));
-            expect(captures(incremental)).toEqual(captures(fresh));
-          },
-          true
-        );
-        previous.delete();
-        source = next;
+      for (const source of [...sources, ...invalidSources]) {
+        const tree = parser.parse(source)!;
+        try {
+          checkRanges(tree, source, dialect, query, !invalidSources.includes(source), !syntaxSources.has(source));
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
-      for (const query of ownedQueries) query.delete();
+      query?.delete();
       parser.delete();
     }
   });

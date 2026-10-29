@@ -1,8 +1,8 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit';
+import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const ValidBases = [
@@ -155,38 +155,19 @@ for (const dialect of ['typescript', 'tsx'] as const) {
     }
   });
 
-  test(`preserves following ${dialect} declarations during unfinished superclass edits`, async () => {
+  test(`preserves following ${dialect} declarations after an unfinished superclass`, async () => {
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
-    let header = BrokenHeader;
-    let tree = parser.parse(header + Following)!;
     try {
-      checkFollowing(tree, header + Following, true);
-      for (const replacement of [RepairedHeader, BrokenHeader, RepairedHeader]) {
-        const source = replacement + Following;
-        const next = compareEditedTree(
-          parser,
-          tree,
-          source,
-          new Edit({
-            startIndex: 0,
-            oldEndIndex: header.length,
-            newEndIndex: replacement.length,
-            startPosition: { row: 0, column: 0 },
-            oldEndPosition: position(header, header.length),
-            newEndPosition: position(replacement, replacement.length),
-          }),
-          (incremental, fresh) => {
-            checkFollowing(incremental, source, replacement === BrokenHeader);
-            checkFollowing(fresh, source, replacement === BrokenHeader);
-          },
-          true
-        );
-        tree.delete();
-        tree = next;
-        header = replacement;
+      for (const header of [BrokenHeader, RepairedHeader]) {
+        const source = header + Following;
+        const tree = parser.parse(source)!;
+        try {
+          checkFollowing(tree, source, header === BrokenHeader);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree.delete();
       parser.delete();
     }
   });

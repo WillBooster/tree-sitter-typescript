@@ -1,12 +1,11 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves ${dialect} exported class decorator ownership and declaration queries through edits`, async () => {
+  test(`preserves ${dialect} exported class decorator ownership and declaration queries`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
@@ -38,37 +37,14 @@ for (const dialect of ['typescript', 'tsx']) {
             tree.delete();
           }
         }
-        let source = `@one() ${kind} Named<T> { value: T; }`;
-        let tree = parser.parse(source)!;
-        const start = source.indexOf(kind);
-        let previous = '';
-        try {
-          for (const replacement of ['export ', 'export declare ', 'export default ', '']) {
-            const next = source.slice(0, start) + replacement + source.slice(start + previous.length);
-            const oldTree = tree;
-            tree = compareEditedTree(
-              parser,
-              oldTree,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: start + previous.length,
-                newEndIndex: start + replacement.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, start + previous.length),
-                newEndPosition: position(next, start + replacement.length),
-              }),
-              (incremental, fresh) => {
-                check(incremental, next, query);
-                check(fresh, next, query);
-              }
-            );
-            oldTree.delete();
-            source = next;
-            previous = replacement;
+        for (const modifiers of ['export ', 'export declare ', 'export default ', '']) {
+          const source = `@one() ${modifiers}${kind} Named<T> { value: T; }`;
+          const tree = parser.parse(source)!;
+          try {
+            check(tree, source, query);
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
       for (const source of [

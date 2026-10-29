@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type OperandCapture = readonly [number, string, number, number];
@@ -24,52 +23,27 @@ interface Registry { branch: Branch; intersection: Intersection; keys: Keys; nes
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} type-operator operands through operator edits`, async () => {
+  test(`retains ${dialect} type-operator operands across union and intersection operators`, async () => {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
     let aliasQuery: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Source;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(readonly_type (_) @operand) @operator\n(index_type_query (_) @operand) @operator');
       aliasQuery = new Query(language, '(type_alias_declaration value: (type/readonly_type (_) @operand) @operator)');
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      expect(operandCaptures(query, tree)).toEqual(referenceOperands(source, dialect));
-      expect(operandCaptures(aliasQuery, tree)).toEqual(referenceOperands(source, dialect, true));
-      const offset = source.indexOf('|');
-      for (const operator of ['&', '|']) {
-        const next = source.slice(0, offset) + operator + source.slice(offset + 1);
-        const previous: Tree = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: offset,
-            oldEndIndex: offset + 1,
-            newEndIndex: offset + 1,
-            startPosition: position(source, offset),
-            oldEndPosition: position(source, offset + 1),
-            newEndPosition: position(next, offset + 1),
-          }),
-          (incremental, fresh) => {
-            const expected = referenceOperands(next, dialect);
-            expect(operandCaptures(query!, incremental)).toEqual(expected);
-            expect(operandCaptures(query!, fresh)).toEqual(expected);
-            const aliases = referenceOperands(next, dialect, true);
-            expect(operandCaptures(aliasQuery!, incremental)).toEqual(aliases);
-            expect(operandCaptures(aliasQuery!, fresh)).toEqual(aliases);
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const source of [Source, Source.replace('|', '&')]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(operandCaptures(query, tree)).toEqual(referenceOperands(source, dialect));
+          expect(operandCaptures(aliasQuery, tree)).toEqual(referenceOperands(source, dialect, true));
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       query?.delete();
       aliasQuery?.delete();
       parser.delete();

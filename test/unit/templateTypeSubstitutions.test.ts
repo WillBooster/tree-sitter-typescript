@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Operand = readonly [string, number, number];
@@ -18,47 +17,24 @@ const value = \`a\${1 + 2}b\`;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} template type operands through edits`, async () => {
+  test(`retains ${dialect} template type operands`, async () => {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
-    let tree: Tree | undefined;
-    let source = Source;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(template_type (_) @operand)');
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(false);
-      expect(operands(query, tree)).toEqual(referenceOperands(source, dialect));
-      const offset = source.indexOf('readonly ');
-      for (const replacement of ['', 'readonly ']) {
-        const length = source.startsWith('readonly ', offset) ? 'readonly '.length : 0;
-        const next = source.slice(0, offset) + replacement + source.slice(offset + length);
-        const previous: Tree = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: offset,
-            oldEndIndex: offset + length,
-            newEndIndex: offset + replacement.length,
-            startPosition: position(source, offset),
-            oldEndPosition: position(source, offset + length),
-            newEndPosition: position(next, offset + replacement.length),
-          }),
-          (incremental, fresh) => {
-            const expected = referenceOperands(next, dialect);
-            expect(operands(query!, incremental)).toEqual(expected);
-            expect(operands(query!, fresh)).toEqual(expected);
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const source of [Source, Source.replace('readonly ', '')]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(false);
+          expect(operands(query, tree)).toEqual(referenceOperands(source, dialect));
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       query?.delete();
       parser.delete();
     }

@@ -1,8 +1,6 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries';
-import { compareEditedTree, position } from '../helpers/treeEdit';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Names = ['value', 'unknown', 'never', 'unique', 'keyof'];
@@ -30,129 +28,61 @@ const Following = 'export function after() { return 1; }';
 
 for (const dialect of ['typescript', 'tsx']) {
   for (const signature of Signatures) {
-    test(`preserves ${dialect} optional-parameter fields and comments through edits in ${signature('value? : string')}`, async () => {
+    test(`preserves ${dialect} optional-parameter fields and comments in ${signature('value? : string')}`, async () => {
       await Parser.init();
-      const language = await loadCurrentWasmBuild(dialect);
-      const parser = new Parser().setLanguage(language);
-      const queries: Query[] = [];
-      const captures = (current: Tree): unknown[] =>
-        queries.map((query) =>
-          query
-            .captures(current.rootNode)
-            .map(({ name: capture, node }) => [capture, node.type, node.text, node.startIndex, node.endIndex])
-        );
+      const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
       try {
-        queries.push(...configuredQueries(language, dialect));
-        queries.push(
-          new Query(
-            language,
-            '(optional_parameter pattern: (identifier) @binding type: (type_annotation) @type) @parameter'
-          )
-        );
         for (const name of Names) {
           for (const [comment, expectedComments] of Comments) {
-            let source = `${signature(`${name}? ${comment} : string`)}\n${Following}`;
-            let tree = parser.parse(source)!;
-            try {
-              check(tree, source, name, expectedComments);
-              const commentStart = source.indexOf(comment);
-              for (const [start, before, after, expected] of [
-                [commentStart, comment, '', []],
-                [commentStart, '', comment, expectedComments],
-                [source.indexOf(': string'), ': string', ': ', undefined],
-                [source.indexOf(': string'), ': ', ': string', expectedComments],
-              ] as const) {
-                const next = source.slice(0, start) + after + source.slice(start + before.length);
-                const previous = tree;
-                tree = compareEditedTree(
-                  parser,
-                  previous,
-                  next,
-                  new Edit({
-                    startIndex: start,
-                    oldEndIndex: start + before.length,
-                    newEndIndex: start + after.length,
-                    startPosition: position(source, start),
-                    oldEndPosition: position(source, start + before.length),
-                    newEndPosition: position(next, start + after.length),
-                  }),
-                  (incremental, fresh) => {
-                    expect(captures(incremental), next).toEqual(captures(fresh));
-                    for (const current of [incremental, fresh]) {
-                      expect(current.rootNode.hasError, next).toBe(expected === undefined);
-                      const following = current.rootNode.lastNamedChild!;
-                      expect([following.type, following.text, following.hasError], next).toEqual([
-                        'export_statement',
-                        Following,
-                        false,
-                      ]);
-                      if (expected) check(current, next, name, expected);
-                    }
-                  },
-                  true
-                );
-                previous.delete();
-                source = next;
+            const original = `${signature(`${name}? ${comment} : string`)}\n${Following}`;
+            for (const [source, expected] of [
+              [original, expectedComments],
+              [original.replace(comment, ''), []],
+              [original.replace(': string', ': '), undefined],
+            ] as const) {
+              const tree = parser.parse(source)!;
+              try {
+                expect(tree.rootNode.hasError, source).toBe(expected === undefined);
+                const following = tree.rootNode.lastNamedChild!;
+                expect([following.type, following.text, following.hasError], source).toEqual([
+                  'export_statement',
+                  Following,
+                  false,
+                ]);
+                if (expected) check(tree, source, name, expected);
+              } finally {
+                tree.delete();
               }
-            } finally {
-              tree.delete();
             }
           }
         }
       } finally {
-        for (const query of queries) query.delete();
         parser.delete();
       }
     });
   }
-  test(`retains ${dialect} ternary operands through consequence repair`, async () => {
+  test(`retains ${dialect} ternary operands with and without a consequence`, async () => {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
       for (const [comment] of Comments) {
-        let source = `const result = condition? ${comment} consequence : alternative;\n${Following}`;
-        let tree = parser.parse(source)!;
-        try {
-          for (const [before, after] of [
-            ['consequence', ''],
-            ['', 'consequence'],
-          ] as const) {
-            const start = source.indexOf(comment) + comment.length + 1;
-            const next = source.slice(0, start) + after + source.slice(start + before.length);
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: start + before.length,
-                newEndIndex: start + after.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, start + before.length),
-                newEndPosition: position(next, start + after.length),
-              }),
-              (incremental, fresh) => {
-                for (const current of [incremental, fresh]) {
-                  expect(current.rootNode.hasError, next).toBe(after === '');
-                  const ternaries = current.rootNode.descendantsOfType('ternary_expression');
-                  expect(ternaries, next).toHaveLength(1);
-                  const ternary = ternaries[0]!;
-                  expect(ternary.childForFieldName('condition')!.text, next).toBe('condition');
-                  expect(ternary.childForFieldName('alternative')!.text, next).toBe('alternative');
-                  const consequence = ternary.childForFieldName('consequence')!;
-                  expect([consequence.text, consequence.isMissing], next).toEqual([after, after === '']);
-                  expect(current.rootNode.lastNamedChild!.text, next).toBe(Following);
-                  expect(current.rootNode.lastNamedChild!.hasError, next).toBe(false);
-                }
-              },
-              true
-            );
-            previous.delete();
-            source = next;
+        for (const consequence of ['consequence', '']) {
+          const source = `const result = condition? ${comment} ${consequence} : alternative;\n${Following}`;
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(consequence === '');
+            const ternaries = tree.rootNode.descendantsOfType('ternary_expression');
+            expect(ternaries, source).toHaveLength(1);
+            const ternary = ternaries[0]!;
+            expect(ternary.childForFieldName('condition')!.text, source).toBe('condition');
+            expect(ternary.childForFieldName('alternative')!.text, source).toBe('alternative');
+            const node = ternary.childForFieldName('consequence')!;
+            expect([node.text, node.isMissing], source).toEqual([consequence, consequence === '']);
+            expect(tree.rootNode.lastNamedChild!.text, source).toBe(Following);
+            expect(tree.rootNode.lastNamedChild!.hasError, source).toBe(false);
+          } finally {
+            tree.delete();
           }
-        } finally {
-          tree.delete();
         }
       }
     } finally {

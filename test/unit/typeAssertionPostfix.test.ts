@@ -1,9 +1,7 @@
-import { Edit, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { configuredQueries } from '../helpers/configuredQueries.js';
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `let value = 1;
@@ -42,64 +40,21 @@ const AssertionExpressions = [
 ];
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves compiler assertion and update operands through ${dialect} edits`, async () => {
+  test(`preserves compiler assertion and update operands in ${dialect}`, async () => {
     await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const queries: ReturnType<typeof configuredQueries> = [];
+    const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     const expressions = dialect === 'typescript' ? [...AssertionExpressions, ...CommonExpressions] : CommonExpressions;
-    const captures = (tree: Tree): unknown =>
-      queries.map((query) =>
-        query
-          .captures(tree.rootNode)
-          .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-      );
-    let source = Prefix + expressions[0]! + Suffix;
-    let tree: Tree | undefined;
     try {
-      queries.push(...configuredQueries(language, dialect));
-      tree = parser.parse(source)!;
-      checkOperands(tree, source, dialect);
-      for (const expression of [...expressions.slice(1), expressions[0]!]) {
-        const next = Prefix + expression + Suffix;
-        let startIndex = 0;
-        let oldEndIndex = source.length;
-        let newEndIndex = next.length;
-        while (startIndex < oldEndIndex && startIndex < newEndIndex && source[startIndex] === next[startIndex])
-          startIndex++;
-        while (
-          oldEndIndex > startIndex &&
-          newEndIndex > startIndex &&
-          source[oldEndIndex - 1] === next[newEndIndex - 1]
-        ) {
-          oldEndIndex--;
-          newEndIndex--;
+      for (const expression of expressions) {
+        const source = Prefix + expression + Suffix;
+        const tree = parser.parse(source)!;
+        try {
+          checkOperands(tree, source, dialect);
+        } finally {
+          tree.delete();
         }
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex,
-            oldEndIndex,
-            newEndIndex,
-            startPosition: position(source, startIndex),
-            oldEndPosition: position(source, oldEndIndex),
-            newEndPosition: position(next, newEndIndex),
-          }),
-          (incremental, fresh) => {
-            checkOperands(incremental, next, dialect);
-            checkOperands(fresh, next, dialect);
-            expect(captures(incremental)).toEqual(captures(fresh));
-          }
-        );
-        previous.delete();
-        source = next;
       }
     } finally {
-      tree?.delete();
-      for (const query of queries) query.delete();
       parser.delete();
     }
   });

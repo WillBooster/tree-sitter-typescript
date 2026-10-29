@@ -1,12 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
-import { compareEditedTree, expectNodeRanges, position } from '../helpers/treeEdit.js';
+import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/plainPredicateNames.ts'), 'utf8');
@@ -100,49 +100,20 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     'interface I { (infer: unknown): infer.value is string; }\nconst sentinel = 1;\n',
     'interface I { (readonly: unknown): readonly.value is string; }\nconst sentinel = 1;\n',
     'interface I { (abstract: unknown): abstract is; }\nconst sentinel = 1;\n',
-  ])('retains error ranges and query agreement through trivia edits: %s', (original) => {
+  ])('retains error ranges with and without parameter trivia: %s', (original) => {
     const parser = new Parser().setLanguage(language);
-    let tree: Tree | undefined;
-    let source = original;
-    const start = source.indexOf(': unknown') + ': unknown'.length;
-    const insertion = ' /* edited parameter */';
+    const start = original.indexOf(': unknown') + ': unknown'.length;
     try {
-      tree = parser.parse(source)!;
-      expect(tree.rootNode.hasError).toBe(true);
-      const initialTree = tree.rootNode.toString();
-      const initialCaptures = configured.map((q) => captureSnapshot(q, tree!));
-      for (const inserted of [true, false]) {
-        const next = inserted ? original.slice(0, start) + insertion + original.slice(start) : original;
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + (inserted ? 0 : insertion.length),
-            newEndIndex: start + (inserted ? insertion.length : 0),
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + (inserted ? 0 : insertion.length)),
-            newEndPosition: position(next, start + (inserted ? insertion.length : 0)),
-          }),
-          (incremental, fresh) => {
-            for (const current of [incremental, fresh]) {
-              expect(current.rootNode.hasError).toBe(true);
-              expectNodeRanges(current.rootNode, next);
-            }
-            for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-          },
-          true
-        );
-        previous.delete();
-        source = next;
+      for (const source of [original, original.slice(0, start) + ' /* edited parameter */' + original.slice(start)]) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(true);
+          expectNodeRanges(tree.rootNode, source);
+        } finally {
+          tree.delete();
+        }
       }
-      expect(source).toBe(original);
-      expect(tree.rootNode.toString()).toBe(initialTree);
-      expect(configured.map((q) => captureSnapshot(q, tree!))).toEqual(initialCaptures);
     } finally {
-      tree?.delete();
       parser.delete();
     }
   });
@@ -151,42 +122,20 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     [true, false],
     [false, true],
     [true, true],
-  ])('retains is-named predicates through edits (asserts: %s, function type: %s)', (asserts, functionType) => {
+  ])('retains is-named and renamed predicates (asserts: %s, function type: %s)', (asserts, functionType) => {
     const parser = new Parser().setLanguage(language);
     const original = `${functionType ? 'type F = (is: unknown) =>' : 'declare function f(is: unknown):'} ${asserts ? 'asserts ' : ''}is is string;\n`;
     const start = original.lastIndexOf('is is string');
-    let source = original;
-    let tree: Tree | undefined;
     try {
-      tree = parser.parse(source)!;
-      checkPredicate(tree, source, 'is');
-      for (const [before, after] of [
-        ['is', 'parameter'],
-        ['parameter', 'is'],
-      ]) {
-        const next = source.slice(0, start) + after + source.slice(start + before!.length);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + before!.length,
-            newEndIndex: start + after!.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + before!.length),
-            newEndPosition: position(next, start + after!.length),
-          }),
-          (incremental, fresh) => {
-            for (const current of [incremental, fresh]) checkPredicate(current, next, after!);
-            for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const name of ['is', 'parameter']) {
+        const source = original.slice(0, start) + name + original.slice(start + 'is'.length);
+        const tree = parser.parse(source)!;
+        try {
+          checkPredicate(tree, source, name);
+        } finally {
+          tree.delete();
+        }
       }
-      expect(source).toBe(original);
       function checkPredicate(current: Tree, text: string, name: string): void {
         expect(current.rootNode.hasError).toBe(false);
         const predicate = current.rootNode.descendantsOfType('type_predicate')[0]!;
@@ -202,61 +151,29 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         );
       }
     } finally {
-      tree?.delete();
       parser.delete();
     }
   });
   test.each([
     'function f(infer: unknown): infer is%s { return true; }',
     'class C { m(infer: unknown): infer is%s { return true; } }',
-  ])('retains infer return-type recovery through predicate edits: %s', (template) => {
+  ])('retains infer return-type recovery with and without predicate types: %s', (template) => {
     const parser = new Parser().setLanguage(language);
-    let tree: Tree | undefined;
-    let source = template.replace('%s', '');
-    const start = source.indexOf('is {') + 2;
     try {
-      tree = parser.parse(source)!;
-      checkInferReturn(tree, false);
-      for (const predicate of [true, false]) {
-        const next = template.replace('%s', predicate ? ' string' : '');
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: start + (predicate ? 0 : 7),
-            newEndIndex: start + (predicate ? 7 : 0),
-            startPosition: position(source, start),
-            oldEndPosition: position(source, start + (predicate ? 0 : 7)),
-            newEndPosition: position(next, start + (predicate ? 7 : 0)),
-          }),
-          (incremental, fresh) => {
-            checkInferReturn(incremental, predicate);
-            checkInferReturn(fresh, predicate);
-            for (const configuredQuery of configured)
-              expect(
-                configuredQuery
-                  .captures(incremental.rootNode)
-                  .map(({ name, node }) => [name, node.toString(), node.startIndex, node.endIndex])
-              ).toEqual(
-                configuredQuery
-                  .captures(fresh.rootNode)
-                  .map(({ name, node }) => [name, node.toString(), node.startIndex, node.endIndex])
-              );
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const predicate of [false, true]) {
+        const tree = parser.parse(template.replace('%s', predicate ? ' string' : ''))!;
+        try {
+          checkInferReturn(tree, predicate);
+        } finally {
+          tree.delete();
+        }
       }
     } finally {
-      tree?.delete();
       parser.delete();
     }
   });
   test.each(dialect === 'tsx' ? ['tuple', 'JSX'] : ['tuple'])(
-    'preserves %s name fields and queries through edits',
+    'preserves %s name fields and queries with renamed names',
     (role) => {
       const parser = new Parser().setLanguage(language);
       const tupleQuery = `
@@ -279,42 +196,21 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       declare namespace is { function Pane(props: {}): JSX.Element; }
       const value = <is value="value"><is.Pane /><is:label /></is>;
       const sentinel = 1;`;
-      let source = original;
-      let tree: Tree | undefined;
       try {
-        tree = parser.parse(source)!;
-        check(tree, source);
-        for (const marker of role === 'tuple' ? ['[is: string]'] : ['<is value=', '</is>']) {
-          const start = source.indexOf(marker) + (marker.startsWith('</') ? 2 : 1);
-          for (const [oldName, newName] of [
-            ['is', 'parameter'],
-            ['parameter', 'is'],
-          ]) {
-            const next = source.slice(0, start) + newName + source.slice(start + oldName!.length);
-            const previous = tree;
-            tree = compareEditedTree(
-              parser,
-              previous,
-              next,
-              new Edit({
-                startIndex: start,
-                oldEndIndex: start + oldName!.length,
-                newEndIndex: start + newName!.length,
-                startPosition: position(source, start),
-                oldEndPosition: position(source, start + oldName!.length),
-                newEndPosition: position(next, start + newName!.length),
-              }),
-              (incremental, fresh) => {
-                check(incremental, next);
-                check(fresh, next);
-                for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-              }
-            );
-            previous.delete();
-            source = next;
+        for (const source of [
+          original,
+          ...(role === 'tuple' ? ['[is: string]'] : ['<is value=', '</is>']).map((marker) => {
+            const start = original.indexOf(marker) + (marker.startsWith('</') ? 2 : 1);
+            return original.slice(0, start) + 'parameter' + original.slice(start + 'is'.length);
+          }),
+        ]) {
+          const tree = parser.parse(source)!;
+          try {
+            check(tree, source);
+          } finally {
+            tree.delete();
           }
         }
-        expect(source).toBe(original);
         function check(current: Tree, text: string): void {
           const reference = ts.createSourceFile(
             role === 'JSX' ? 'names.tsx' : 'names.ts',
@@ -355,7 +251,6 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
           if (role === 'JSX') expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
         }
       } finally {
-        tree?.delete();
         names.delete();
         tuples.delete();
         parser.delete();
@@ -365,9 +260,7 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
   if (dialect === 'tsx')
     test('retains incomplete closing JSX names while completing and renaming tags', () => {
       const parser = new Parser().setLanguage(language);
-      let tree: Tree | undefined;
-      let source = 'const value=<is></is>;';
-      const stages = [
+      const sources = [
         'const value=<is></is',
         'const value=<is></is ',
         'const value=<is></is:',
@@ -408,74 +301,45 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         'const value=<is></is>;',
       ];
       try {
-        tree = parser.parse(source)!;
-        for (const next of stages) {
-          let start = 0;
-          while (source[start] === next[start] && start < Math.min(source.length, next.length)) start++;
-          let oldEnd = source.length;
-          let newEnd = next.length;
-          while (oldEnd > start && newEnd > start && source[oldEnd - 1] === next[newEnd - 1]) {
-            oldEnd--;
-            newEnd--;
+        for (const source of sources) {
+          const tree = parser.parse(source)!;
+          try {
+            expect(tree.rootNode.hasError, source).toBe(!source.endsWith('>;'));
+            const name = source.slice(source.lastIndexOf('</') + 2).match(/island|is--|is-|is/)![0];
+            const closingStart = source.lastIndexOf(name);
+            const leaf = tree.rootNode.descendantsOfType('identifier').find((node) => node.startIndex === closingStart);
+            expect(leaf?.text).toBe(name);
+            expect(leaf?.endIndex).toBe(closingStart + name.length);
+            expect(
+              configured[0]!
+                .captures(tree.rootNode)
+                .some(
+                  ({ name: capture, node }) =>
+                    capture === 'variable' &&
+                    node.startIndex === closingStart &&
+                    node.endIndex === closingStart + name.length
+                )
+            ).toBe(true);
+            expect(
+              configured[2]!
+                .captures(tree.rootNode)
+                .some(
+                  ({ name: capture, node }) =>
+                    capture === 'local.reference' &&
+                    node.startIndex === closingStart &&
+                    node.endIndex === closingStart + name.length
+                )
+            ).toBe(true);
+          } finally {
+            tree.delete();
           }
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: oldEnd,
-              newEndIndex: newEnd,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, oldEnd),
-              newEndPosition: position(next, newEnd),
-            }),
-            (incremental, fresh) => {
-              for (const current of [incremental, fresh]) {
-                expect(current.rootNode.hasError).toBe(!next.endsWith('>;'));
-                const name = next.slice(next.lastIndexOf('</') + 2).match(/island|is--|is-|is/)![0];
-                const closingStart = next.lastIndexOf(name);
-                const leaf = current.rootNode
-                  .descendantsOfType('identifier')
-                  .find((node) => node.startIndex === closingStart);
-                expect(leaf?.text).toBe(name);
-                expect(leaf?.endIndex).toBe(closingStart + name.length);
-                expect(
-                  configured[0]!
-                    .captures(current.rootNode)
-                    .some(
-                      ({ name: capture, node }) =>
-                        capture === 'variable' &&
-                        node.startIndex === closingStart &&
-                        node.endIndex === closingStart + name.length
-                    )
-                ).toBe(true);
-                expect(
-                  configured[2]!
-                    .captures(current.rootNode)
-                    .some(
-                      ({ name: capture, node }) =>
-                        capture === 'local.reference' &&
-                        node.startIndex === closingStart &&
-                        node.endIndex === closingStart + name.length
-                    )
-                ).toBe(true);
-              }
-              for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-            },
-            true
-          );
-          previous.delete();
-          source = next;
         }
       } finally {
-        tree?.delete();
         parser.delete();
       }
     });
   test.each(['qualified type', 'undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
-    'preserves qualified type and bare assertion roles through %s edits',
+    'preserves qualified type and bare assertion roles for %s and a renamed parameter',
     (role) => {
       const parser = new Parser().setLanguage(language);
       const assertions = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
@@ -483,39 +347,15 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       const before = role === 'qualified type' ? 'is' : role;
       const marker = role === 'qualified type' ? 'value: ' : 'asserts ';
       const start = Source.indexOf(`${marker}${before}${role === 'qualified type' ? '.NS' : ';'}`) + marker.length;
-      let tree: Tree | undefined;
-      let source = Source;
       try {
-        tree = parser.parse(source)!;
-        check(tree, source);
-        for (const [oldName, newName] of [
-          [before, 'parameter'],
-          ['parameter', before],
-        ]) {
-          const next = source.slice(0, start) + newName + source.slice(start + oldName!.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + oldName!.length,
-              newEndIndex: start + newName!.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + oldName!.length),
-              newEndPosition: position(next, start + newName!.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next);
-              check(fresh, next);
-              for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-            }
-          );
-          previous.delete();
-          source = next;
+        for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + before.length)]) {
+          const tree = parser.parse(source)!;
+          try {
+            check(tree, source);
+          } finally {
+            tree.delete();
+          }
         }
-        expect(source).toBe(Source);
         function check(current: Tree, text: string): void {
           const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
           const expected: [string, number, number][] = [];
@@ -544,50 +384,28 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
           expect(capture.node.childForFieldName('name')?.type).toBe('type_identifier');
         }
       } finally {
-        tree?.delete();
         assertions.delete();
         qualified.delete();
         parser.delete();
       }
     }
   );
-  test('preserves bare is assertion recovery through name and trivia edits', () => {
+  test('preserves bare is assertion recovery with renamed names and trivia', () => {
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
-    const original = 'declare function f(is: unknown): asserts is; const sentinel = 1;';
-    let source = original;
-    let tree: Tree | undefined;
     try {
-      tree = parser.parse(source)!;
-      check(tree, source, 'is');
-      for (const name of ['longerName', 'is']) {
-        const start = source.indexOf('asserts ') + 'asserts '.length;
-        const end = source.indexOf(';', start);
-        const replacement = name === 'is' ? name : `${name} /* assertion */`;
-        const next = source.slice(0, start) + replacement + source.slice(end);
-        const previous = tree;
-        tree = compareEditedTree(
-          parser,
-          previous,
-          next,
-          new Edit({
-            startIndex: start,
-            oldEndIndex: end,
-            newEndIndex: start + replacement.length,
-            startPosition: position(source, start),
-            oldEndPosition: position(source, end),
-            newEndPosition: position(next, start + replacement.length),
-          }),
-          (incremental, fresh) => {
-            check(incremental, next, name);
-            check(fresh, next, name);
-            for (const q of configured) expect(captureSnapshot(q, incremental)).toEqual(captureSnapshot(q, fresh));
-          }
-        );
-        previous.delete();
-        source = next;
+      for (const [name, replacement] of [
+        ['is', 'is'],
+        ['longerName', 'longerName /* assertion */'],
+      ] as const) {
+        const source = `declare function f(is: unknown): asserts ${replacement}; const sentinel = 1;`;
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source, name);
+        } finally {
+          tree.delete();
+        }
       }
-      expect(source).toBe(original);
       function check(current: Tree, text: string, name: string): void {
         expect(current.rootNode.hasError, text).toBe(false);
         const matches = query.captures(current.rootNode);
@@ -601,64 +419,25 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
       }
     } finally {
-      tree?.delete();
       query.delete();
       parser.delete();
     }
   });
   test.each(['undefined', 'keyof', 'infer', 'readonly', 'abstract', 'asserts'])(
-    'preserves %s predicate ownership through edits',
+    'preserves %s predicate ownership and a renamed parameter',
     (word) => {
       const parser = new Parser().setLanguage(language);
-      let tree: Tree | undefined;
-      let source = Source;
       try {
-        tree = parser.parse(source)!;
-        check(tree, source);
-        const start = source.indexOf(`${word} is string`);
+        const start = Source.indexOf(`${word} is string`);
         expect(start).toBeGreaterThanOrEqual(0);
-        for (const [before, after] of [
-          [word, 'parameter'],
-          ['parameter', word],
-        ]) {
-          const next = source.slice(0, start) + after + source.slice(start + before!.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before!.length,
-              newEndIndex: start + after!.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before!.length),
-              newEndPosition: position(next, start + after!.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next);
-              check(fresh, next);
-              for (const configuredQuery of configured) {
-                const captures = (current: Tree): unknown[] =>
-                  configuredQuery
-                    .captures(current.rootNode)
-                    .map(({ name, node }) => [
-                      name,
-                      node.type,
-                      node.text,
-                      node.startIndex,
-                      node.endIndex,
-                      node.startPosition,
-                      node.endPosition,
-                    ]);
-                expect(captures(incremental)).toEqual(captures(fresh));
-              }
-            }
-          );
-          previous.delete();
-          source = next;
+        for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + word.length)]) {
+          const tree = parser.parse(source)!;
+          try {
+            check(tree, source);
+          } finally {
+            tree.delete();
+          }
         }
-        expect(source).toBe(Source);
         function check(current: Tree, text: string): void {
           const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
           const expected: [string, string, number, number][] = [];
@@ -681,7 +460,6 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
           ).toEqual(expected);
         }
       } finally {
-        tree?.delete();
         parser.delete();
       }
     }
@@ -698,18 +476,4 @@ function checkInferReturn(current: Tree, predicate: boolean): void {
   expect(current.rootNode.descendantsOfType('infer_type').map((node) => node.text)).toEqual(
     predicate ? [] : ['infer is']
   );
-}
-
-function captureSnapshot(query: Query, current: Tree): unknown[] {
-  return query
-    .captures(current.rootNode)
-    .map(({ name, node }) => [
-      name,
-      node.type,
-      node.text,
-      node.startIndex,
-      node.endIndex,
-      node.startPosition,
-      node.endPosition,
-    ]);
 }

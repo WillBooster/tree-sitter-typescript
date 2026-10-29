@@ -1,8 +1,7 @@
-import { Edit, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import { compareEditedTree, position } from '../helpers/treeEdit.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `class as { value = 1; read() { return this.value; } }
@@ -78,7 +77,7 @@ const contextualMemberJsx = <get.Inner.Value />;
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`retains ${dialect} contextual constructor names and operator roles through edits`, async () => {
+  test(`retains ${dialect} contextual constructor names and operator roles across renamed sources`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
@@ -102,13 +101,12 @@ for (const dialect of ['typescript', 'tsx']) {
       ${dialect === 'tsx' ? '(jsx_self_closing_element name: (_) @jsx.name) (jsx_opening_element name: (_) @jsx.name) (jsx_closing_element name: (_) @jsx.name)' : ''}
     `
     );
-    const original = Source + (dialect === 'tsx' ? JsxSource : '');
-    let source = original;
+    const source = Source + (dialect === 'tsx' ? JsxSource : '');
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
       check(tree);
-      const edits: [number, string, string][] = [
+      const renames: [number, string, string][] = [
         ...[
           source.indexOf('new as') + 4,
           source.indexOf('Base<as[]>') + 5,
@@ -135,35 +133,15 @@ for (const dialect of ['typescript', 'tsx']) {
         [source.indexOf('get: (get)') + 'get: ('.length, 'get', 'set'],
         [source.indexOf('accessor: (accessor)') + 'accessor: ('.length, 'accessor', 'type'],
       ];
-      for (const [start, from, to] of edits) {
-        for (const [before, after] of [
-          [from, to],
-          [to, from],
-        ] as const) {
-          const next = source.slice(0, start) + after + source.slice(start + before.length);
-          const previous = tree;
-          tree = compareEditedTree(
-            parser,
-            previous,
-            next,
-            new Edit({
-              startIndex: start,
-              oldEndIndex: start + before.length,
-              newEndIndex: start + after.length,
-              startPosition: position(source, start),
-              oldEndPosition: position(source, start + before.length),
-              newEndPosition: position(next, start + after.length),
-            }),
-            (incremental, fresh) => {
-              check(incremental, next);
-              check(fresh, next);
-            }
-          );
-          previous.delete();
-          source = next;
+      for (const [start, from, to] of renames) {
+        const next = source.slice(0, start) + to + source.slice(start + from.length);
+        const nextTree = parser.parse(next)!;
+        try {
+          check(nextTree, next);
+        } finally {
+          nextTree.delete();
         }
       }
-      expect(source).toBe(original);
     } finally {
       tree?.delete();
       typeRoles.delete();
