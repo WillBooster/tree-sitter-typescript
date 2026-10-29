@@ -1559,6 +1559,7 @@ static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capac
 static bool scan_type_identifier_escape(TSLexer *lexer);
 
 static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
+static bool type_end_word_can_follow(TSLexer *lexer);
 
 static bool scan_as_const_type(TSLexer *lexer, const bool *valid_symbols, const TSLexerCheckpoint *name_start);
 static bool whole_const_assertion_can_end(TSLexer *lexer, bool trivia, bool line_break);
@@ -1591,6 +1592,43 @@ static bool assertion_type_identifier_allowed(const char *word, AssertionIdentif
 static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word);
 static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start);
 
+// Like TypeScript's `skipParameterStart`, reads `([a]: A) => B` as a parameter list rather than a parenthesized tuple:
+// a bracketed group followed by `:`, `,`, `?`, `=`, or `) =>` is a binding pattern.
+static bool bracket_group_starts_parameter(TSLexer *lexer) {
+    unsigned depth = 0;
+    do {
+        switch (lexer->lookahead) {
+            case 0: return false;
+            case '[': case '{': case '(': depth++; break;
+            case ']': case '}': case ')': depth--; break;
+            case '"': case '\'': case '`': {
+                int32_t quote = lexer->lookahead;
+                advance(lexer);
+                while (lexer->lookahead != quote && !lexer->eof(lexer)) {
+                    if (lexer->lookahead == '\\') advance(lexer);
+                    advance(lexer);
+                }
+                break;
+            }
+            default: break;
+        }
+        advance(lexer);
+    } while (depth > 0);
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    switch (lexer->lookahead) {
+        case ':': case ',': case '?': return true;
+        case '=':
+            advance(lexer);
+            return lexer->lookahead != '>';
+        case ')':
+            advance(lexer);
+            if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
+            advance(lexer);
+            return lexer->lookahead == '>';
+        default: return false;
+    }
+}
+
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage, AssertionNameFallback *fallback) {
     bool conditional_parameter = valid_symbols[CONDITIONAL_PREDEFINED_PARAMETER_NAME];
     bool assertion_return = valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_START] || valid_symbols[AS_ASSERTS_PREDICATE_START];
@@ -1600,6 +1638,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     lexer->mark_end(lexer);
     if (valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] && lexer->lookahead == ')') return scan_assertion_formal_parameter_boundary(lexer, valid_symbols);
     if (valid_symbols[AS_PARAMETER_ARRAY_START] && lexer->lookahead == '[') {
+        if (valid_symbols[AS_FORMAL_PARAMETER_BOUNDARY] && bracket_group_starts_parameter(lexer)) return false;
         lexer->result_symbol = AS_PARAMETER_ARRAY_START;
         return true;
     }
@@ -1649,7 +1688,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
         bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
-        if (untyped_parameter && (strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) return false;
+        if (untyped_parameter && !optional_parameter && (strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) return false;
         if (!untyped_parameter && lexer->lookahead != ':') return false;
         if (!untyped_parameter && (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME])) {
             advance(lexer);
@@ -1684,10 +1723,15 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         } else {
             return false;
         }
-        if (!scan_type_group(lexer, untyped_parameter ? UNTYPED_PARAMETER_GROUP_END : ')', false, true, NULL, false, NULL) || !scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
-        advance(lexer);
-        if (lexer->lookahead != '>') return false;
-        advance(lexer);
+        bool arrow = scan_type_group(lexer, untyped_parameter ? UNTYPED_PARAMETER_GROUP_END : ')', false, true, NULL, false, NULL) &&
+                     scan_default_trivia(lexer, true, false) && lexer->lookahead == '=';
+        if (arrow) {
+            advance(lexer);
+            arrow = lexer->lookahead == '>';
+            if (arrow) advance(lexer);
+        }
+        // TypeScript reads `(name?` as a parameter list even without the arrow (`(keyof ?)` misses `=>`).
+        if (!arrow) return optional_parameter && untyped_parameter;
         if (strcmp(word, "bigint") == 0) {
             if (untyped_parameter && valid_symbols[PREDEFINED_PARAMETER_NAME]) lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
             return true;
@@ -3453,6 +3497,8 @@ static bool scan_function_signature_end(Scanner *scanner, TSLexer *lexer, const 
 static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_name_can_end(TSLexer *lexer, bool line_break);
 static bool const_assertion_consequence_can_start(TSLexer *lexer);
+static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier kind, const char *word, bool escaped,
+                                          bool parameter_start);
 static bool type_argument_can_start(TSLexer *lexer);
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_assertion_type_end(TSLexer *lexer, const bool *valid_symbols, bool trivia, bool line_break);
@@ -3629,6 +3675,11 @@ static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_star
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
+    return assertion_type_word_can_start(lexer, kind, word, escaped, parameter_start);
+}
+
+static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier kind, const char *word, bool escaped,
+                                          bool parameter_start) {
     bool allowed = kind == ASSERTION_IDENTIFIER_OTHER;
     if (kind == ASSERTION_IDENTIFIER_WORD) {
         allowed = !assertion_binding_word_is_reserved(word) || strcmp(word, "function") == 0 ||
@@ -3812,9 +3863,27 @@ static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
             advance(lexer);
             return lexer->lookahead == operator;
         }
-        case 'e': return line_break || !scan_word(lexer, "extends", true);
-        default: return true;
+        default: return line_break || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead) ||
+                        type_end_word_can_follow(lexer);
     }
+}
+
+// The lexer would read a keyword operator from the start of a longer name (`a as A asT`), so a completed type must not
+// end before such a name.
+static bool type_end_word_can_follow(TSLexer *lexer) {
+    char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+    bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
+    static const char *const operators[] = {"as", "satisfies", "in", "instanceof", "of", "extends"};
+    const unsigned count = sizeof(operators) / sizeof(operators[0]);
+    if (ascii_word) {
+        for (unsigned i = 0; i < count; i++) {
+            if (strcmp(word, operators[i]) == 0) return strcmp(word, "extends") != 0;
+        }
+    }
+    for (unsigned i = 0; i < count; i++) {
+        if (strncmp(word, operators[i], strlen(operators[i])) == 0) return false;
+    }
+    return true;
 }
 
 static bool scan_argumentless_new_end(TSLexer *lexer) {
@@ -3853,7 +3922,16 @@ static bool scan_type_angle_opening(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     if (!scan_default_trivia(lexer, true, false)) return false;
     lexer->result_symbol = TYPE_ARGUMENT_OPENING;
-    return lexer->lookahead != 'c' || !scan_word(lexer, "const", false);
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+    char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+    bool escaped = false;
+    AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
+    if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
+    // The variance keyword may still root a qualified type name (`A<in.a>`), though not a type of its own (`A<in>`).
+    if (kind == ASSERTION_IDENTIFIER_WORD && !escaped && strcmp(word, "in") == 0) {
+        return scan_default_trivia(lexer, true, false) && lexer->lookahead == '.';
+    }
+    return assertion_type_word_can_start(lexer, kind, word, escaped, false);
 }
 
 static bool scan_type_reference_name(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {

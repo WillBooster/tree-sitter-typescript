@@ -463,3 +463,47 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 }
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`matches TypeScript syntax validity at ${dialect} assertion boundaries`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser();
+    try {
+      parser.setLanguage(language);
+      for (const source of [
+        'x = a as ([a]: A) => void;',
+        'x = a as ([a, b]) => void;',
+        'x = a as ([]: A) => void;',
+        'x = a as ([a]?: A) => void;',
+        'x = a as ([a] = [1]) => void;',
+        'x = a as ([A] | B);',
+        'x = a as ([A][]);',
+        'a as A asT;',
+        'a as A satisfiesT;',
+        'a as A instanceofT;',
+        'a as A as T;',
+        'a as (keyof ?);',
+        'a as (readonly ?);',
+        'a as (unique ?);',
+        'a as (keyof ?) => A;',
+        'a as (keyof A);',
+        'a as Box<in>!;',
+        'a as !Box<class.Member>;',
+        'a as Box<A>!;',
+      ]) {
+        const valid =
+          ts.transpileModule(source, { fileName: `a.${dialect === 'tsx' ? 'tsx' : 'ts'}`, reportDiagnostics: true })
+            .diagnostics!.length === 0;
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError, source).toBe(!valid);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}
