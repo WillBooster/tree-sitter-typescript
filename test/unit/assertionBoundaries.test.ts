@@ -436,3 +436,30 @@ function referenceFor(source: string, dialect: string, valid = true): ts.SourceF
   expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
   return reference;
 }
+
+for (const dialect of ['typescript', 'tsx']) {
+  test(`ends ${dialect} assertion names at U+0085 like TypeScript`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser();
+    try {
+      parser.setLanguage(language);
+      for (const source of ['a as T\u0085;', 'a as const.M\u0085;', 'a as typeof b\u0085;', 'a as A.B\u0085;']) {
+        const tree = parser.parse(source)!;
+        try {
+          expect(
+            ts.transpileModule(source, { fileName: `a.${dialect === 'tsx' ? 'tsx' : 'ts'}`, reportDiagnostics: true })
+              .diagnostics
+          ).toHaveLength(0);
+          expect(tree.rootNode.hasError, JSON.stringify(source)).toBe(false);
+          const type = tree.rootNode.descendantsOfType('as_expression')[0]!.lastNamedChild!;
+          expect(type.text).toBe(source.slice('a as '.length, source.indexOf('\u0085')));
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}

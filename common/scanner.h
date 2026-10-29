@@ -196,6 +196,7 @@ static inline bool is_whitespace(int32_t c) {
         case '\f':
         case '\r':
         case ' ':
+        case 0x85:
         case 0xA0:
         case 0x1680:
         case 0x200B:

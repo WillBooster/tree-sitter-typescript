@@ -92,7 +92,7 @@ module.exports = function defineGrammar(dialect) {
 
     extras: ($, previous) => [
       ...previous.filter((rule) => rule.type !== 'PATTERN'),
-      /[\s\p{Zs}\uFEFF\u2028\u2029\u200B]/u,
+      /[\s\p{Zs}\u0085\uFEFF\u2028\u2029\u200B]/u,
     ],
 
     externals: ($, previous) => [
@@ -459,6 +459,11 @@ module.exports = function defineGrammar(dialect) {
     },
 
     rules: {
+      // TypeScript's scanner reads U+0085 as whitespace, so a name cannot contain it.
+      identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
+
+      private_property_identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
+
       labeled_statement: ($) =>
         prec.dynamic(
           -1,
@@ -3559,6 +3564,14 @@ function expressionReservedIdentifier() {
   return choice(
     ...TYPESCRIPT_CONTEXTUAL_KEYWORDS.filter((word) => word !== 'new'),
     JavaScript.grammar.rules._reserved_identifier
+  );
+}
+
+function excludeFromNamePatterns(rule, escapedCharacter) {
+  return mapRule(rule, (part) =>
+    part.type === 'PATTERN' && part.value.startsWith('[^')
+      ? { ...part, value: `[^${escapedCharacter}${part.value.slice(2)}` }
+      : part
   );
 }
 

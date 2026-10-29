@@ -102,9 +102,9 @@ in e
   (expression_statement
     (identifier))
   (expression_statement
-    (identifier))
-  (expression_statement
-    (identifier))
+    (binary_expression
+      (identifier)
+      (identifier)))
   (expression_statement
     (identifier))
   (expression_statement
