@@ -1610,6 +1610,19 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
                 }
                 break;
             }
+            case '/':
+                advance(lexer);
+                if (lexer->lookahead == '/') {
+                    while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
+                } else if (lexer->lookahead == '*') {
+                    advance(lexer);
+                    while (!lexer->eof(lexer)) {
+                        bool star = lexer->lookahead == '*';
+                        advance(lexer);
+                        if (star && lexer->lookahead == '/') break;
+                    }
+                }
+                continue;
             default: break;
         }
         advance(lexer);
@@ -1688,6 +1701,14 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             if (!scan_default_trivia(lexer, true, true)) return false;
         }
         bool untyped_parameter = lexer->lookahead == ')' || lexer->lookahead == ',';
+        // TypeScript reads `(name?` as a parameter list even before a type (`(unique ? A)` misses `,` and `=>`).
+        if (optional_parameter && (is_identifier_part(lexer->lookahead) || lexer->lookahead == '(' || lexer->lookahead == '[' ||
+                                   lexer->lookahead == '{' || lexer->lookahead == '"' || lexer->lookahead == '\'' ||
+                                   lexer->lookahead == '`')) {
+            if (!valid_symbols[PREDEFINED_PARAMETER_NAME]) return false;
+            lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
+            return true;
+        }
         if (untyped_parameter && !optional_parameter && (strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) return false;
         if (!untyped_parameter && lexer->lookahead != ':') return false;
         if (!untyped_parameter && (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME])) {
@@ -1730,7 +1751,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
             arrow = lexer->lookahead == '>';
             if (arrow) advance(lexer);
         }
-        // TypeScript reads `(name?` as a parameter list even without the arrow (`(keyof ?)` misses `=>`).
+        // As above, `(keyof ?)` stays a parameter list that misses `=>`.
         if (!arrow) return optional_parameter && untyped_parameter;
         if (strcmp(word, "bigint") == 0) {
             if (untyped_parameter && valid_symbols[PREDEFINED_PARAMETER_NAME]) lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
