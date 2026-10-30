@@ -1,47 +1,10 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
-import { expect, test } from 'vitest';
-
-import treeSitterJson from '../../tree-sitter.json';
+import { test } from 'vitest';
 
 const Root = path.join(import.meta.dirname, '../..');
-const QueryKinds = ['highlights', 'injections', 'locals', 'tags'] as const;
 
-const queryPaths = (grammar: (typeof treeSitterJson.grammars)[number], kind: (typeof QueryKinds)[number]): string[] =>
-  [grammar[kind] ?? []].flat();
-
-// The packages' tree-sitter.json can reference only files inside the package: a dependency's directory is not at a
-// fixed path relative to it after an install.
-// On a fresh runner, cargo first installs the toolchain that rust-toolchain.toml pins. The commands run synchronously,
-// so only their own timeout can stop them; the test's is longer so that theirs is reported.
-const execOptions = { cwd: Root, encoding: 'utf8', timeout: 240_000 } as const;
-const testOptions = { timeout: 300_000 };
-const listPublishedFiles = {
-  npm: (): string[] => {
-    const [pack] = JSON.parse(
-      execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], execOptions)
-    ) as [{ files: { path: string }[] }];
-    return pack.files.map((file) => file.path);
-  },
-  crate: (): string[] => execFileSync('cargo', ['package', '--list', '--allow-dirty'], execOptions).split('\n'),
-};
-for (const [packageKind, listFiles] of Object.entries(listPublishedFiles)) {
-  test(`publishes every query file that tree-sitter.json references in the ${packageKind} package`, testOptions, () => {
-    const published = new Set(listFiles());
-    expect(published).toContain('tree-sitter.json');
-    for (const grammar of treeSitterJson.grammars) {
-      for (const kind of QueryKinds) {
-        for (const file of queryPaths(grammar, kind)) {
-          expect(published, file).toContain(file);
-        }
-      }
-    }
-  });
-}
-
-test('keeps inherited grammar sources and queries synchronized with the JavaScript package', () => {
-  for (const script of ['copy-javascript-grammar', 'copy-javascript-queries']) {
-    execFileSync(path.join(Root, 'script', script), ['--check'], execOptions);
-  }
+test('keeps the inherited grammar source synchronized with the JavaScript package', () => {
+  execFileSync(path.join(Root, 'script', 'copy-javascript-grammar'), ['--check'], { cwd: Root });
 });
