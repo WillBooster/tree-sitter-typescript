@@ -94,7 +94,7 @@ fuzzed with. Use version 15.0.0 or later within 15.x:
 
 ```sh
 cargo add willbooster-tree-sitter@15.0.0 --rename tree-sitter
-cargo add willbooster-tree-sitter-typescript@18.0.0 --rename tree-sitter-typescript
+cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 
 ```rust
