@@ -5,7 +5,7 @@
 [![Test](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test.yml)
 [![Test rust](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml/badge.svg)](https://github.com/WillBooster/tree-sitter-typescript/actions/workflows/test-rust.yml)
 [![semantic-release](https://img.shields.io/badge/%20%20%F0%9F%93%A6%F0%9F%9A%80-semantic--release-e10079.svg)](https://github.com/semantic-release/semantic-release)
-[![wbfy](https://img.shields.io/badge/wbfy-20.49.0-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
+[![wbfy](https://img.shields.io/badge/wbfy-20.51.1-1e90ff.svg)](https://github.com/WillBooster/shared/tree/main/packages/wbfy)
 [![crates.io](https://img.shields.io/crates/v/willbooster-tree-sitter-typescript.svg)](https://crates.io/crates/willbooster-tree-sitter-typescript)
 
 TypeScript and TSX grammars for [tree-sitter](https://github.com/tree-sitter/tree-sitter), forked from
@@ -31,6 +31,13 @@ heritage references such as `class C implements Foo<<T>() => T> {}` and `number<
 rejects. Separated angles (`number< <T>() => T>`) and a parenthesized argument (`number<(<T>() => T)>`) are valid.
 Use the TypeScript compiler when syntax validation is required. Malformed input may group following declarations
 inside error nodes; consumers must not depend on a particular recovery-tree shape.
+
+## Support Scope
+
+This fork maintains only full parsing: valid input yields a correct tree, and invalid input yields `ERROR` or `MISSING`
+nodes without crashing, hanging, or taking more than linear time. Incremental parsing works as in upstream tree-sitter
+but is not tested here, and no queries (highlights, locals, injections, tags) are shipped. Node types, field names, and
+the trees that error recovery produces may change; such changes are released as new major versions.
 
 ## Usage
 
@@ -79,9 +86,7 @@ const parser = new Parser();
 parser.setLanguage(await Language.load(typescript));
 ```
 
-The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`, and the
-highlighting, injection, locals, and tags queries that `tree-sitter.json` lists: this grammar's in `queries/` and, in
-`javascript/queries/`, those of the JavaScript grammar it extends.
+The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`.
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
@@ -98,7 +103,7 @@ parser.set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())?;
 // or `tree_sitter_typescript::LANGUAGE_TSX` for TSX
 ```
 
-The crate ships the same `tree-sitter.json` and query files as the npm package.
+The crate ships the same `tree-sitter.json` as the npm package.
 
 ## Development
 
@@ -144,12 +149,8 @@ and the release build regenerate the parsers before compiling them.
   linear time with each grammar, measured in the parsing thread's CPU time, since consumers parse files while they are
   being edited. It loads the Wasm builds through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after
   regenerating the parsers;
-- a check (`test/unit/packageFiles.test.ts`) that the queries `tree-sitter.json` lists are published in the npm
-  package and the crate, and that `javascript/queries/` matches the queries of the installed
-  @willbooster/tree-sitter-javascript. After updating that dependency, run `bun run build-wasm` and then `script/copy-javascript-queries` (it reads
-  `tree-sitter-tsx.wasm`) to refresh
-  the copies and the derived `queries/javascript-tags.scm`. TypeScript uses that JSX-free tags file; TSX and Flow
-  use the complete JavaScript tags;
+- a check (`test/unit/packageFiles.test.ts`) that `javascript/grammar.js` and `javascript/LICENSE` match those of the
+  installed @willbooster/tree-sitter-javascript;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility
   (`test/unit/workers.test.ts`, running the Worker in `test/fixtures/worker/`);

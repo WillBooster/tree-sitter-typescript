@@ -20,8 +20,6 @@ include = [
   "tsx/grammar.js",
   "tsx/src/*",
   "/tree-sitter.json",
-  "/queries/*.scm",
-  "/javascript/queries/*.scm",
   "/javascript/grammar.js",
   "/javascript/LICENSE",
   "/LICENSE",
