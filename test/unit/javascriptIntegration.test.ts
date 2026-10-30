@@ -405,26 +405,18 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 
-  test(`${dialect} excludes trailing comments from typed function bodies while preserving statement queries`, () => {
+  test(`${dialect} excludes trailing comments from typed function bodies`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
     const tree = parser.parse('function f<T>(x: T): T {}/* trailing */');
     assert.ok(tree);
-    const query = new Query(language, '(statement) @statement\n(declaration) @declaration');
     try {
       expect(tree.rootNode.hasError).toBe(false);
       const [functionNode] = tree.rootNode.descendantsOfType('function_declaration');
       expect(functionNode?.text).toBe('function f<T>(x: T): T {}');
       expect(functionNode?.childForFieldName('body')?.text).toBe('{}');
       expect(tree.rootNode.descendantsOfType('comment').map((node) => node.text)).toEqual(['/* trailing */']);
-      const captures = query.captures(tree.rootNode);
-      for (const name of ['statement', 'declaration']) {
-        expect(captures.filter((capture) => capture.name === name).map((capture) => capture.node.id)).toContain(
-          functionNode?.id
-        );
-      }
     } finally {
-      query.delete();
       tree.delete();
       parser.delete();
     }

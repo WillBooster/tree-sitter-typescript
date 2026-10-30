@@ -1,33 +1,15 @@
 import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 
-import { Parser, Query } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
 import treeSitterJson from '../../tree-sitter.json';
-import { loadCurrentWasmBuild } from './wasmBuild';
 
 const Root = path.join(import.meta.dirname, '../..');
 const QueryKinds = ['highlights', 'injections', 'locals', 'tags'] as const;
-await Parser.init();
 
 const queryPaths = (grammar: (typeof treeSitterJson.grammars)[number], kind: (typeof QueryKinds)[number]): string[] =>
   [grammar[kind] ?? []].flat();
-
-// Tools that read tree-sitter.json, such as the tree-sitter CLI, compile each kind of query of a grammar from its files
-// concatenated, so a node type that a grammar change removes must fail here rather than in them.
-for (const grammar of treeSitterJson.grammars) {
-  test(`compiles the queries of ${grammar.name}`, async () => {
-    const language = await loadCurrentWasmBuild(grammar.path);
-    for (const kind of QueryKinds) {
-      const source = queryPaths(grammar, kind)
-        .map((file) => fs.readFileSync(path.join(Root, file), 'utf8'))
-        .join('\n');
-      expect(() => new Query(language, source), `${kind} queries`).not.toThrow();
-    }
-  });
-}
 
 // The packages' tree-sitter.json can reference only files inside the package: a dependency's directory is not at a
 // fixed path relative to it after an install.

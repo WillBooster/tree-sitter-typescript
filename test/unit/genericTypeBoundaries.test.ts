@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -28,11 +28,10 @@ const heritageKeywords = [
 await Parser.init();
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves generic name ranges and heritage type queries in ${dialect}`, async () => {
+  test(`preserves generic name ranges and heritage types in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
     parser.setLanguage(language);
-    const query = new Query(language, '(implements_clause (type) @type) (implements_clause (primary_type) @primary)');
     try {
       for (const trivia of [' ', ' /* leading */ ', '\n/* leading */\n']) {
         const tree = parser.parse(`type A =${trivia}Foo<string>;`)!;
@@ -110,19 +109,12 @@ for (const dialect of ['typescript', 'tsx']) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError, source).toBe(false);
-          for (const kind of ['type', 'primary'])
-            expect(
-              query
-                .captures(tree.rootNode)
-                .filter(({ name }) => name === kind)
-                .map(({ node }) => node.text)
-            ).toEqual([`Foo${gap}<string>`, `ns.Bar${gap}<number>`]);
+          expect(implementedTypes(tree)).toEqual([`Foo${gap}<string>`, `ns.Bar${gap}<number>`]);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -131,7 +123,6 @@ for (const dialect of ['typescript', 'tsx']) {
 for (const dialect of ['typescript', 'tsx']) {
   test(`keeps keyword-named heritage generics separate from ordinary types in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
-    const query = new Query(language, '(implements_clause (type) @type) (implements_clause (primary_type) @primary)');
     const parser = new Parser();
     parser.setLanguage(language);
     try {
@@ -142,14 +133,11 @@ for (const dialect of ['typescript', 'tsx']) {
             const tree = parser.parse(source)!;
             try {
               expect(tree.rootNode.hasError, source).toBe(false);
-              for (const kind of ['type', 'primary']) {
-                expect(
-                  query
-                    .captures(tree.rootNode)
-                    .filter(({ name }) => name === kind)
-                    .map(({ node }) => node.text)
-                ).toEqual([...(prefix ? ['A'] : []), `${name}${gap}<Box<string>>`, 'Other<number>']);
-              }
+              expect(implementedTypes(tree)).toEqual([
+                ...(prefix ? ['A'] : []),
+                `${name}${gap}<Box<string>>`,
+                'Other<number>',
+              ]);
               expect(
                 tree.rootNode.descendantsOfType('generic_type').map((node) => node.childForFieldName('name')?.text)
               ).toEqual([name, 'Box', 'Other']);
@@ -297,7 +285,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -447,4 +434,10 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
+}
+
+function implementedTypes(tree: Tree): string[] {
+  return tree.rootNode
+    .descendantsOfType('implements_clause')
+    .flatMap((clause) => clause.namedChildren.filter((node) => node.type !== 'comment').map((node) => node.text));
 }

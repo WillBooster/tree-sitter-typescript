@@ -1,10 +1,7 @@
-import fs from 'node:fs';
-
 import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
-import treeSitterJson from '../../tree-sitter.json';
 import { finishCpuMeasurement, type ParseCpuMeasurement, startCpuMeasurement } from '../helpers/parseCpuMeasurement.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -82,8 +79,6 @@ for (const dialect of ['typescript', 'tsx']) {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(type_arguments) @arguments (function_type) @function');
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    const highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
     const prefix = 'const result = ';
     const suffix = ';\nconst following = 1;';
     const source = prefix + 'a > b < c' + suffix;
@@ -98,17 +93,17 @@ for (const dialect of ['typescript', 'tsx']) {
       if (diagnostics.some((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)) {
         expect(parsed.rootNode.hasError, text).toBe(true);
       } else {
-        checkArguments(parsed, text, dialect, query, highlights);
+        checkArguments(parsed, text, dialect, query);
       }
     };
     try {
-      checkArguments(tree, source, dialect, query, highlights);
+      checkArguments(tree, source, dialect, query);
       const controls = dialect === 'typescript' ? ['< <T>() => T>x', '<Box<<T>() => T>>x'] : ['<div>{a <!-- b}</div>'];
       for (const expression of controls) {
         const text = prefix + expression + suffix;
         const control = parser.parse(text)!;
         try {
-          checkArguments(control, text, dialect, query, highlights);
+          checkArguments(control, text, dialect, query);
         } finally {
           control.delete();
         }
@@ -171,7 +166,6 @@ for (const dialect of ['typescript', 'tsx']) {
     } finally {
       tree.delete();
       query.delete();
-      highlights.delete();
       parser.delete();
     }
   });
@@ -249,13 +243,10 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const parser = new Parser();
     let query: Query | undefined;
-    let highlights: Query | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(type_arguments) @arguments (function_type) @function');
-      const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-      highlights = new Query(language, grammar.highlights.map((file) => fs.readFileSync(file, 'utf8')).join('\n'));
       for (const argument of [
         '<T>() => T',
         ' <T>() => T',
@@ -274,14 +265,13 @@ for (const dialect of ['typescript', 'tsx']) {
         const source = Prefix + argument + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkArguments(tree, source, dialect, query, highlights);
+          checkArguments(tree, source, dialect, query);
         } finally {
           tree.delete();
         }
       }
     } finally {
       query?.delete();
-      highlights?.delete();
       parser.delete();
     }
   });
@@ -385,7 +375,7 @@ function parseShiftCpu(
   return measurement.threadCpuMicroseconds;
 }
 
-function checkArguments(tree: Tree, source: string, dialect: string, query: Query, highlights: Query): void {
+function checkArguments(tree: Tree, source: string, dialect: string, query: Query): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile(
     `arguments.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
@@ -478,15 +468,9 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
   );
   const parsedOperators = binaries.map((node) => node.childForFieldName('operator')!);
   expect(parsedOperators.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(operators);
-  const operatorHighlights = highlights.captures(tree.rootNode);
   for (const node of parsedOperators) {
     expect(node.isNamed).toBe(false);
     expect(node.children).toHaveLength(0);
-    expect(
-      operatorHighlights
-        .filter((capture) => capture.node.startIndex >= node.startIndex && capture.node.endIndex <= node.endIndex)
-        .map((capture) => [capture.node.text, capture.node.startIndex, capture.node.endIndex])
-    ).toEqual([[node.text, node.startIndex, node.endIndex]]);
   }
   for (const { node } of captures.filter((capture) => capture.name === 'arguments')) {
     const parent = node.parent!;

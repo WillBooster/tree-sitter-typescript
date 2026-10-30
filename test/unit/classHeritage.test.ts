@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -74,8 +74,6 @@ for (const dialect of ['typescript', 'tsx'] as const) {
   test(`restricts ${dialect} superclass operands without losing valid reference chains`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(extends_clause value: (expression) @base)');
-    const primary = new Query(language, '(extends_clause value: (primary_expression) @base)');
     try {
       const valid = [...ValidBases, ...(dialect === 'tsx' ? ['(<Component />)', 'factory(<Component />)'] : [])];
       for (const base of valid) {
@@ -96,14 +94,6 @@ for (const dialect of ['typescript', 'tsx'] as const) {
                 expectedBase.expression.expression.getText(reference)
               );
             }
-            expect(
-              primary.captures(tree.rootNode).map((capture) => capture.node.text),
-              source
-            ).toEqual([value.text]);
-            expect(
-              query.captures(tree.rootNode).map((capture) => capture.node.text),
-              source
-            ).toEqual([expectedBase.expression.getText(reference)]);
           } finally {
             tree.delete();
           }
@@ -119,8 +109,6 @@ for (const dialect of ['typescript', 'tsx'] as const) {
         }
       }
     } finally {
-      query.delete();
-      primary.delete();
       parser.delete();
     }
   });

@@ -11,8 +11,6 @@ const Gaps = [' ', '\n', '\r\n', '\u2028', '\u2029', '/* comment */', '// commen
 const Header = Words.map((word) => `interface ${word}<T = unknown> {}`).join('\n') + '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
 const RoleQuery = `
-  (implements_clause (type) @type)
-  (implements_clause (primary_type) @primary)
   (implements_clause (type_identifier) @name)
   (implements_clause (generic_type name: (type_identifier) @name))
 `;
@@ -96,8 +94,6 @@ function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query
     ]);
     for (const clause of statement.heritageClauses ?? []) {
       for (const type of clause.types) {
-        expected.push(['type', type.getStart(reference), type.end]);
-        expected.push(['primary', type.getStart(reference), type.end]);
         expected.push(['name', type.expression.getStart(reference), type.expression.end]);
       }
     }

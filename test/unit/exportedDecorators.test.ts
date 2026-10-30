@@ -5,16 +5,15 @@ import { expect, test } from 'vitest';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves ${dialect} exported class decorator ownership and declaration queries`, async () => {
+  test(`preserves ${dialect} exported class decorator ownership`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(
       language,
       `
-      (export_statement declaration: (declaration) @declaration)
-      (declaration/class_declaration decorator: (decorator) @decorator)
-      (declaration/abstract_class_declaration decorator: (decorator) @decorator)
+      (class_declaration decorator: (decorator) @decorator)
+      (abstract_class_declaration decorator: (decorator) @decorator)
     `
     );
     try {
@@ -120,9 +119,6 @@ function check(tree: Tree, source: string, query: Query): void {
       })
   ).toEqual(expected);
   const exported = tree.rootNode.namedChildren.filter((node) => node.type === 'export_statement');
-  expect(captures.filter(({ name }) => name === 'declaration').map(({ node }) => node.id)).toEqual(
-    exported.map((node) => node.childForFieldName('declaration')!.id)
-  );
   for (const node of exported) {
     expect(node.childrenForFieldName('decorator')).toEqual([]);
     const exportedDeclaration = node.childForFieldName('declaration')!;

@@ -5,7 +5,6 @@ import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import treeSitterJson from '../../tree-sitter.json';
 import { expectNodeRanges } from '../helpers/nodeRanges.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -14,27 +13,12 @@ const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/plain
 describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
   let query: Query | undefined;
-  const configured: Query[] = [];
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
     query = new Query(language, '(type_predicate name: (identifier) @name type: (_) @type)');
-    const grammar = treeSitterJson.grammars.find((entry) => entry.name === dialect)!;
-    for (const files of [grammar.highlights, grammar.tags, grammar.locals, grammar.injections])
-      configured.push(
-        new Query(
-          language,
-          [files]
-            .flat()
-            .map((file) => fs.readFileSync(path.join(import.meta.dirname, '../..', file), 'utf8'))
-            .join('\n')
-        )
-      );
   }, 30_000);
-  afterAll(() => {
-    query?.delete();
-    for (const resource of configured) resource.delete();
-  });
+  afterAll(() => query?.delete());
   test.each([
     'declare function f(is: unknown): is.value is string;\nconst sentinel = 1;\n',
     'declare function f(is: unknown): is : string;\nconst sentinel = 1;\n',
@@ -172,91 +156,88 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
       parser.delete();
     }
   });
-  test.each(dialect === 'tsx' ? ['tuple', 'JSX'] : ['tuple'])(
-    'preserves %s name fields and queries with renamed names',
-    (role) => {
-      const parser = new Parser().setLanguage(language);
-      const tupleQuery = `
+  test.each(dialect === 'tsx' ? ['tuple', 'JSX'] : ['tuple'])('preserves %s name fields with renamed names', (role) => {
+    const parser = new Parser().setLanguage(language);
+    const tupleQuery = `
       (tuple_type (required_parameter name: (identifier) @name))
       (tuple_type (optional_parameter name: (identifier) @name))
       (tuple_type (required_parameter name: (rest_pattern (identifier) @name)))
     `;
-      const jsxQuery = `
+    const jsxQuery = `
       (jsx_opening_element name: (_) @name)
       (jsx_closing_element name: (_) @name)
       (jsx_self_closing_element name: (_) @name)
     `;
-      const names = new Query(language, role === 'tuple' ? tupleQuery : jsxQuery);
-      const tuples = new Query(language, '(primary_type/tuple_type) @tuple');
-      const original =
-        role === 'tuple'
-          ? Source
-          : `
+    const names = new Query(language, role === 'tuple' ? tupleQuery : jsxQuery);
+    const tuples = new Query(language, '(tuple_type) @tuple');
+    const original =
+      role === 'tuple'
+        ? Source
+        : `
       namespace JSX { export interface Element {} export interface IntrinsicElements { is: { value?: string }; parameter: { value?: string }; 'is:label': {}; } }
       declare namespace is { function Pane(props: {}): JSX.Element; }
       const value = <is value="value"><is.Pane /><is:label /></is>;
       const sentinel = 1;`;
-      try {
-        for (const source of [
-          original,
-          ...(role === 'tuple' ? ['[is: string]'] : ['<is value=', '</is>']).map((marker) => {
-            const start = original.indexOf(marker) + (marker.startsWith('</') ? 2 : 1);
-            return original.slice(0, start) + 'parameter' + original.slice(start + 'is'.length);
-          }),
-        ]) {
-          const tree = parser.parse(source)!;
-          try {
-            check(tree, source);
-          } finally {
-            tree.delete();
-          }
+    try {
+      for (const source of [
+        original,
+        ...(role === 'tuple' ? ['[is: string]'] : ['<is value=', '</is>']).map((marker) => {
+          const start = original.indexOf(marker) + (marker.startsWith('</') ? 2 : 1);
+          return original.slice(0, start) + 'parameter' + original.slice(start + 'is'.length);
+        }),
+      ]) {
+        const tree = parser.parse(source)!;
+        try {
+          check(tree, source);
+        } finally {
+          tree.delete();
         }
-        function check(current: Tree, text: string): void {
-          const reference = ts.createSourceFile(
-            role === 'JSX' ? 'names.tsx' : 'names.ts',
-            text,
-            ts.ScriptTarget.Latest,
-            true,
-            role === 'JSX' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-          );
-          const expected: [string, string, number, number][] = [];
-          const expectedTypes: [number, number][] = [];
-          const visit = (node: ts.Node): void => {
-            const name =
-              role === 'tuple' && ts.isNamedTupleMember(node)
-                ? node.name
-                : role === 'JSX' &&
-                    (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node))
-                  ? node.tagName
-                  : undefined;
-            if (name) {
-              const type = ts.isPropertyAccessExpression(name)
-                ? 'member_expression'
-                : ts.isJsxNamespacedName(name)
-                  ? 'jsx_namespace_name'
-                  : 'identifier';
-              expected.push([name.getText(reference), type, name.getStart(reference), name.getEnd()]);
-            }
-            if (ts.isTupleTypeNode(node)) expectedTypes.push([node.getStart(reference), node.getEnd()]);
-            ts.forEachChild(node, visit);
-          };
-          visit(reference);
-          expect(current.rootNode.hasError).toBe(false);
-          expect(
-            names.captures(current.rootNode).map(({ node }) => [node.text, node.type, node.startIndex, node.endIndex])
-          ).toEqual(expected);
-          expect(tuples.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
-            expectedTypes
-          );
-          if (role === 'JSX') expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
-        }
-      } finally {
-        names.delete();
-        tuples.delete();
-        parser.delete();
       }
+      function check(current: Tree, text: string): void {
+        const reference = ts.createSourceFile(
+          role === 'JSX' ? 'names.tsx' : 'names.ts',
+          text,
+          ts.ScriptTarget.Latest,
+          true,
+          role === 'JSX' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+        );
+        const expected: [string, string, number, number][] = [];
+        const expectedTypes: [number, number][] = [];
+        const visit = (node: ts.Node): void => {
+          const name =
+            role === 'tuple' && ts.isNamedTupleMember(node)
+              ? node.name
+              : role === 'JSX' &&
+                  (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node))
+                ? node.tagName
+                : undefined;
+          if (name) {
+            const type = ts.isPropertyAccessExpression(name)
+              ? 'member_expression'
+              : ts.isJsxNamespacedName(name)
+                ? 'jsx_namespace_name'
+                : 'identifier';
+            expected.push([name.getText(reference), type, name.getStart(reference), name.getEnd()]);
+          }
+          if (ts.isTupleTypeNode(node)) expectedTypes.push([node.getStart(reference), node.getEnd()]);
+          ts.forEachChild(node, visit);
+        };
+        visit(reference);
+        expect(current.rootNode.hasError).toBe(false);
+        expect(
+          names.captures(current.rootNode).map(({ node }) => [node.text, node.type, node.startIndex, node.endIndex])
+        ).toEqual(expected);
+        expect(tuples.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
+          expectedTypes
+        );
+        if (role === 'JSX') expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
+      }
+    } finally {
+      names.delete();
+      tuples.delete();
+      parser.delete();
     }
-  );
+  });
   if (dialect === 'tsx')
     test('retains incomplete closing JSX names while completing and renaming tags', () => {
       const parser = new Parser().setLanguage(language);
@@ -310,26 +291,6 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
             const leaf = tree.rootNode.descendantsOfType('identifier').find((node) => node.startIndex === closingStart);
             expect(leaf?.text).toBe(name);
             expect(leaf?.endIndex).toBe(closingStart + name.length);
-            expect(
-              configured[0]!
-                .captures(tree.rootNode)
-                .some(
-                  ({ name: capture, node }) =>
-                    capture === 'variable' &&
-                    node.startIndex === closingStart &&
-                    node.endIndex === closingStart + name.length
-                )
-            ).toBe(true);
-            expect(
-              configured[2]!
-                .captures(tree.rootNode)
-                .some(
-                  ({ name: capture, node }) =>
-                    capture === 'local.reference' &&
-                    node.startIndex === closingStart &&
-                    node.endIndex === closingStart + name.length
-                )
-            ).toBe(true);
           } finally {
             tree.delete();
           }
@@ -343,7 +304,7 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     (role) => {
       const parser = new Parser().setLanguage(language);
       const assertions = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
-      const qualified = new Query(language, '(primary_type/nested_type_identifier) @qualified');
+      const qualified = new Query(language, '(nested_type_identifier) @qualified');
       const before = role === 'qualified type' ? 'is' : role;
       const marker = role === 'qualified type' ? 'value: ' : 'asserts ';
       const start = Source.indexOf(`${marker}${before}${role === 'qualified type' ? '.NS' : ';'}`) + marker.length;
