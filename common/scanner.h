@@ -1422,7 +1422,7 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
     bool forbidden_identifier = !identifier && valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER];
     if (!valid_symbols[symbol] && !forbidden_identifier) return false;
     lexer->mark_end(lexer);
-    // Record the operand decision on both keyword and identifier tokens so restored nodes cannot keep stale roles.
+    // Read up to two following words past mark_end without adding them to the token.
     // Advancing without skipping after mark_end preserves the consuming keyword's start across probed comments.
     bool scanned_content = false;
     for (unsigned words = 0; words <= 2; words++) {
