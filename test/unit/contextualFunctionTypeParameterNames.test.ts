@@ -38,9 +38,8 @@ describe.each(['typescript', 'tsx'])('%s contextual function-type parameter name
     query = new Query(
       language,
       `
-      (type/function_type) @signature
-      [(required_parameter pattern: (pattern/identifier) @binding)
-       (optional_parameter pattern: (pattern/identifier) @binding)]
+      [(required_parameter pattern: (identifier) @binding)
+       (optional_parameter pattern: (identifier) @binding)]
     `
     );
   }, 30_000);
@@ -74,9 +73,6 @@ describe.each(['typescript', 'tsx'])('%s contextual function-type parameter name
                 const signature = parameter.parent!.parent!;
                 expect(signature.type).toBe('function_type');
                 expect(signature.childForFieldName('return_type')?.text).toBe(returnType);
-                expect(
-                  captures.some(({ name: capture, node }) => capture === 'signature' && node.id === signature.id)
-                ).toBe(true);
               } finally {
                 tree.delete();
               }

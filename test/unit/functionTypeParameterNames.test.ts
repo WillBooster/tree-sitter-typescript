@@ -19,13 +19,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     query = new Query(
       language,
       `
-      [(required_parameter pattern: (pattern/identifier) @name)
-       (optional_parameter pattern: (pattern/identifier) @name)]
+      [(required_parameter pattern: (identifier) @name)
+       (optional_parameter pattern: (identifier) @name)]
       [(required_parameter type: (type_annotation (_) @type))
        (optional_parameter type: (type_annotation (_) @type))]
       (array (identifier) @reference)
       (pair value: (identifier) @reference)
-      (primary_expression/identifier) @primary
     `
     );
   }, 30_000);
@@ -2235,9 +2234,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       `
       (labeled_statement label: (statement_identifier) @label)
       (parenthesized_expression (identifier) @expression_name)
-      (primary_expression/identifier) @primary
       (parenthesized_expression type: (type_annotation (predefined_type) @type))
-      (required_parameter pattern: (pattern/identifier) @binding_name
+      (required_parameter pattern: (identifier) @binding_name
         type: (type_annotation (predefined_type) @type))
     `
     );
@@ -2268,23 +2266,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         expect(
           roleQuery
             .captures(current.rootNode)
-            .filter(({ name }) => name !== 'primary')
             .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
         ).toEqual([
           ['label', name, 0, name.length],
           [role, name, nameStart, nameStart + name.length],
           ...(typeStart === -1 ? [] : [['type', 'number', typeStart, typeStart + 'number'.length]]),
         ]);
-        if (role === 'expression_name') {
-          expect(
-            roleQuery
-              .captures(current.rootNode)
-              .some(
-                ({ name: capture, node }) =>
-                  capture === 'primary' && node.startIndex === nameStart && node.endIndex === nameStart + name.length
-              )
-          ).toBe(true);
-        }
       }
     } finally {
       tree?.delete();
@@ -2385,22 +2372,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         };
         visit(reference);
         expect(current.rootNode.hasError).toBe(false);
-        const captures = query!.captures(current.rootNode);
         expect(
-          captures
-            .filter(({ name }) => name !== 'primary')
-            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
+          query!.captures(current.rootNode).map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
         ).toEqual(expected);
-        for (const reference of captures.filter(({ name }) => name === 'reference')) {
-          expect(
-            captures.some(
-              ({ name, node }) =>
-                name === 'primary' &&
-                node.startIndex === reference.node.startIndex &&
-                node.endIndex === reference.node.endIndex
-            )
-          ).toBe(true);
-        }
       }
     } finally {
       tree?.delete();

@@ -32,7 +32,7 @@ for (const dialect of ['typescript', 'tsx']) {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
       query = new Query(language, '(readonly_type (_) @operand) @operator\n(index_type_query (_) @operand) @operator');
-      aliasQuery = new Query(language, '(type_alias_declaration value: (type/readonly_type (_) @operand) @operator)');
+      aliasQuery = new Query(language, '(type_alias_declaration value: (readonly_type (_) @operand) @operator)');
       for (const source of [Source, Source.replace('|', '&')]) {
         const tree = parser.parse(source)!;
         try {

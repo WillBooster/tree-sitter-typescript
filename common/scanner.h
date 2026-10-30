@@ -144,7 +144,8 @@ static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, c
 static bool is_reserved_word(const char *name);
 
 typedef struct {
-    // A reused block arrow or postfix update can bypass the boundary state; serialize the pending semicolon.
+    // A block arrow or postfix update can end without passing through the boundary state, and each stack version
+    // restores the scanner from the state serialized with its last external token; serialize the pending semicolon.
     // Nested await end tokens must not clear it before the enclosing statement consumes it.
     bool automatic_semicolon_pending;
     bool heritage_type_pending;

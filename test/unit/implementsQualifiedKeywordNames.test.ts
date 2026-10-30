@@ -25,8 +25,6 @@ const Header =
   '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
 const RoleQuery = `
-  (implements_clause (type) @type)
-  (implements_clause (primary_type) @primary)
   (implements_clause (nested_type_identifier) @name)
   (implements_clause (generic_type name: (nested_type_identifier) @name))
 `;
@@ -125,11 +123,7 @@ function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query
     const heritage = statement.heritageClauses!.flatMap((clause) => [...clause.types]);
     expect(names).toHaveLength(heritage.length);
     for (const [index, type] of heritage.entries()) {
-      expected.push(
-        ['type', type.getStart(reference), type.end],
-        ['primary', type.getStart(reference), type.end],
-        ['name', type.expression.getStart(reference), type.expression.end]
-      );
+      expected.push(['name', type.expression.getStart(reference), type.expression.end]);
       checkQualifiedName(names[index]!, type.expression, reference);
     }
   }

@@ -31,7 +31,7 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const query = new Query(language, '(required_parameter pattern: (pattern/identifier) @binding)');
+    const query = new Query(language, '(required_parameter pattern: (identifier) @binding)');
     try {
       parser.setLanguage(language);
       for (const form of ['(x: T)', 'new (x: T)', '()']) {

@@ -54,7 +54,7 @@ test('matches TypeScript on named-export modifiers and identifier fields', async
   await expectSpecifiers(sources, 'export');
 });
 
-test('queries distinguish binding imports from side-effect imports', async () => {
+test('distinguishes binding imports from side-effect imports', async () => {
   const source = `
 import value from "default";
 import * as namespace from "namespace";

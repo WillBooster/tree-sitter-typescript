@@ -112,7 +112,7 @@ type Return = (value: unknown) => (typeof bigint);
 `;
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves bigint queries and keyword-qualified heritage in ${dialect}`, async () => {
+  test(`preserves bigint type queries and keyword-qualified heritage in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(type_query) @query');
@@ -142,7 +142,7 @@ class Generic implements ${name}.bigint<string> {}`
 }
 
 for (const dialect of ['typescript', 'tsx']) {
-  test(`preserves bigint generic-arrow parameters and queries in ${dialect}`, async () => {
+  test(`preserves bigint generic-arrow parameters in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
     const query = new Query(language, '(type_parameter name: (type_identifier) @name)');
@@ -268,7 +268,7 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-test('preserves bigint JSX names and query captures', async () => {
+test('preserves bigint JSX names', async () => {
   const language = await loadCurrentWasmBuild('tsx');
   const parser = new Parser().setLanguage(language);
   const query = new Query(

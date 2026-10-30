@@ -183,7 +183,7 @@ for (const dialect of ['typescript', 'tsx']) {
 
   test(`${dialect} keeps typed default declarations separate from following expressions`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(export_statement declaration: (declaration) @declaration)');
+    const query = new Query(language, '(export_statement declaration: (_) @declaration)');
     try {
       for (const declaration of [
         'interface Shape<T> { value: T }',

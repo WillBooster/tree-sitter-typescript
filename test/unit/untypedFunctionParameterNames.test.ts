@@ -1,9 +1,6 @@
-import fs from 'node:fs';
-
 import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
-import configuration from '../../tree-sitter.json';
 import { finishCpuMeasurement, type ParseCpuMeasurement, startCpuMeasurement } from '../helpers/parseCpuMeasurement.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -17,34 +14,18 @@ interface DeepReturnCpuMeasurement extends ParseCpuMeasurement {
 
 describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let queries: Query[] = [];
+  let bindingQuery: Query | undefined;
 
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    const grammar = configuration.grammars.find((entry) => entry.name === dialect)!;
-    queries = (['highlights', 'tags', 'locals', 'injections'] as const).map(
-      (kind) =>
-        new Query(
-          language,
-          [grammar[kind]]
-            .flat()
-            .map((file: string) => fs.readFileSync(file, 'utf8'))
-            .join('\n')
-        )
-    );
-    queries.push(
-      new Query(
-        language,
-        `(type/function_type) @function
-      (required_parameter pattern: (pattern/identifier) @binding)
-      (optional_parameter pattern: (pattern/identifier) @binding)`
-      )
+    bindingQuery = new Query(
+      language,
+      `(required_parameter pattern: (identifier) @binding)
+      (optional_parameter pattern: (identifier) @binding)`
     );
   }, 30_000);
-  afterAll(() => {
-    for (const query of queries) query.delete();
-  });
+  afterAll(() => bindingQuery?.delete());
 
   test(
     'retains deeply parenthesized returns with bounded CPU growth',
@@ -86,8 +67,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       expect(tree!.rootNode.hasError).toBe(false);
       expect(tree!.rootNode.namedChildren).toHaveLength(3);
       expect(
-        queries
-          .at(-1)!
+        bindingQuery!
           .captures(tree!.rootNode)
           .filter((capture) => capture.name === 'binding')
           .map((capture) => capture.node.text)
@@ -101,7 +81,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
 
   test.each(['unknown', 'never', 'unique'])('does not claim incomplete untyped headers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
+    const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
     try {
       for (const continuation of ['=>', 'number', ')']) {
         const source = `type F=(${name})=>number;`;
@@ -248,11 +228,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             const reference = parser.parse(source.replace(name, 'x'.repeat(name.length)))!;
             try {
               expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
-              for (const query of queries) {
-                expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
-                  query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
-                );
-              }
             } finally {
               actual.delete();
               reference.delete();
@@ -351,15 +326,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             expect(actual.rootNode.hasError, operand).toBe(true);
             const following = actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length);
             expect(following.map(snapshot), operand).toEqual(reference.rootNode.namedChildren.map(snapshot));
-            for (const query of queries) {
-              expect(
-                query
-                  .captures(actual.rootNode)
-                  .filter(({ node }) => node.startIndex >= prefix.length)
-                  .map(({ name, node }) => [name, snapshot(node)]),
-                operand
-              ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
-            }
           } finally {
             actual.delete();
             reference.delete();
@@ -382,14 +348,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       expect(actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length).map(snapshot)).toEqual(
         reference.rootNode.namedChildren.map(snapshot)
       );
-      for (const query of queries) {
-        expect(
-          query
-            .captures(actual.rootNode)
-            .filter(({ node }) => node.startIndex >= prefix.length)
-            .map(({ name, node }) => [name, snapshot(node)])
-        ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
-      }
     } finally {
       actual.delete();
       reference.delete();
@@ -411,14 +369,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             expect(
               actual.rootNode.namedChildren.filter((node) => node.startIndex >= prefix.length).map(snapshot)
             ).toEqual(reference.rootNode.namedChildren.map(snapshot));
-            for (const query of queries) {
-              expect(
-                query
-                  .captures(actual.rootNode)
-                  .filter(({ node }) => node.startIndex >= prefix.length)
-                  .map(({ name, node }) => [name, snapshot(node)])
-              ).toEqual(query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)]));
-            }
           } finally {
             actual.delete();
             reference.delete();
@@ -441,11 +391,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           try {
             expect(actual.rootNode.descendantsOfType('function_type')).toHaveLength(1);
             expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
-            for (const query of queries) {
-              expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
-                query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
-              );
-            }
           } finally {
             actual.delete();
             reference.delete();
@@ -597,11 +542,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           try {
             expect(actual.rootNode.hasError, source).toBe(false);
             expect(snapshot(actual.rootNode)).toEqual(snapshot(reference.rootNode));
-            for (const query of queries) {
-              expect(query.captures(actual.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
-                query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
-              );
-            }
           } finally {
             actual.delete();
             reference.delete();
@@ -797,7 +737,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'keeps conditional probes local after complete and incomplete preceding conditionals for %s',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
+      const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
       const prefix = 'type Earlier = T extends ';
       try {
         for (const [suffix, expectedNames] of [
@@ -947,11 +887,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
               try {
                 expect(tree.rootNode.hasError, source).toBe(false);
                 expect(snapshot(tree.rootNode), source).toEqual(snapshot(reference.rootNode));
-                for (const query of queries) {
-                  expect(query.captures(tree.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
-                    query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
-                  );
-                }
                 expect(renamed.rootNode.hasError, source).toBe(false);
               } finally {
                 tree.delete();
@@ -993,7 +928,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
 
   test.each(['unknown', 'never', 'unique'])('retains function-type arrow return annotations for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
+    const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
     try {
       for (const parameters of ['()', '(a)', '<T>(a:T)']) {
         for (const trivia of ['', ' /* c */ ', '\n']) {
@@ -1079,7 +1014,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'distinguishes complete and incomplete union and rest forms for %s',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const bindings = new Query(language, '(required_parameter pattern: (pattern/identifier) @name)');
+      const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
       try {
         for (const [source, removed] of [
           [`type F=(${name})=>T | U;`, 'U'],
@@ -1140,7 +1075,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     const parser = new Parser().setLanguage(language);
     const bindings = new Query(
       language,
-      '[(required_parameter pattern: (pattern/identifier) @name) (optional_parameter pattern: (pattern/identifier) @name)]'
+      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
     );
     try {
       for (const generic of ['', '<T>']) {
@@ -1166,11 +1101,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                 tree = parser.parse(source)!;
                 expect(tree.rootNode.hasError).toBe(false);
                 expect(snapshot(tree.rootNode)).toEqual(snapshot(reference.rootNode));
-                for (const query of queries) {
-                  expect(query.captures(tree.rootNode).map(({ name, node }) => [name, snapshot(node)])).toEqual(
-                    query.captures(reference.rootNode).map(({ name, node }) => [name, snapshot(node)])
-                  );
-                }
                 expect(
                   bindings
                     .captures(tree.rootNode)

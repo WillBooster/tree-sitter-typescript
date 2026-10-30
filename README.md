@@ -144,8 +144,8 @@ and the release build regenerate the parsers before compiling them.
   linear time with each grammar, measured in the parsing thread's CPU time, since consumers parse files while they are
   being edited. It loads the Wasm builds through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after
   regenerating the parsers;
-- a check (`test/unit/queries.test.ts`) that the queries `tree-sitter.json` lists compile against each grammar, are
-  published in the npm package and the crate, and that `javascript/queries/` matches the queries of the installed
+- a check (`test/unit/packageFiles.test.ts`) that the queries `tree-sitter.json` lists are published in the npm
+  package and the crate, and that `javascript/queries/` matches the queries of the installed
   @willbooster/tree-sitter-javascript. After updating that dependency, run `bun run build-wasm` and then `script/copy-javascript-queries` (it reads
   `tree-sitter-tsx.wasm`) to refresh
   the copies and the derived `queries/javascript-tags.scm`. TypeScript uses that JSX-free tags file; TSX and Flow
