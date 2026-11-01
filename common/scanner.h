@@ -1595,43 +1595,36 @@ static bool assertion_type_identifier_allowed(const char *word, AssertionIdentif
 static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word);
 static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start);
 
+typedef struct {
+    bool expression_start;
+    bool property_name;
+} ParameterProbe;
+
+static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe);
+static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe);
+static void skip_parameter_probe_literal(TSLexer *lexer, int32_t quote);
+static bool parameter_probe_keyword_starts_expression(const char *word);
+static bool skip_parameter_probe_regex(TSLexer *lexer);
+
 // Like TypeScript's `skipParameterStart`, reads `([a]: A) => B` as a parameter list rather than a parenthesized tuple:
 // a bracketed group holding a default or followed by `:`, `,`, `?`, `=`, or `) =>` is a binding pattern.
+// code-gauge-allow functionNcss 45 -- Keeps balanced-group traversal and its terminating parameter lookahead together.
 static bool bracket_group_starts_parameter(TSLexer *lexer) {
     unsigned depth = 0;
     bool angle = false;
+    ParameterProbe probe = {.expression_start = true};
     do {
-        switch (lexer->lookahead) {
+        switch (next_parameter_probe_token(lexer, &probe)) {
             case 0: return false;
             case '[': case '{': case '(': depth++; break;
             case ']': case '}': case ')': depth--; break;
-            case '<':
-                angle |= depth == 1;
-                break;
+            case '<': angle |= depth == 1; break;
             case '=':
-                // A default (`[a = /'/]`) appears only in a binding pattern; checking it first also keeps the default's
-                // regex or template contents from unbalancing the count. Type-parameter defaults sit after a `<`.
-                if (depth != 1 || angle) break;
-                advance(lexer);
-                if (lexer->lookahead != '>' && lexer->lookahead != '=') return true;
-                continue;
-            case '"': case '\'': case '`': {
-                int32_t quote = lexer->lookahead;
-                advance(lexer);
-                while (lexer->lookahead != quote && !lexer->eof(lexer)) {
-                    if (lexer->lookahead == '\\') advance(lexer);
-                    advance(lexer);
-                }
+                // Type-parameter defaults sit after a `<`; a binding default can contain arbitrary expressions.
+                if (depth == 1 && !angle && lexer->lookahead != '>' && lexer->lookahead != '=') return true;
                 break;
-            }
-            case '/': {
-                bool comment = false;
-                skip_comment(lexer, &comment, false);
-                continue;
-            }
             default: break;
         }
-        advance(lexer);
     } while (depth > 0);
     if (!scan_default_trivia(lexer, true, false)) return false;
     switch (lexer->lookahead) {
@@ -1646,6 +1639,92 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
             return lexer->lookahead == '>';
         default: return false;
     }
+}
+
+// code-gauge-allow functionNcss 38 -- Keeps lexical goal updates with the token dispatch that determines them.
+static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
+    int32_t c = lexer->lookahead;
+    if (!c) return 0;
+    if (is_whitespace(c)) {
+        advance(lexer);
+        return -1;
+    }
+    if (is_identifier_part(c)) {
+        char word[16] = {0};
+        bool keyword = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
+        probe->property_name = false;
+        probe->expression_start = keyword && parameter_probe_keyword_starts_expression(word);
+        return -1;
+    }
+    if (c == '/') return scan_parameter_probe_slash(lexer, probe);
+    advance(lexer);
+    switch (c) {
+        case '\'': case '"': case '`':
+            skip_parameter_probe_literal(lexer, c);
+            probe->expression_start = false;
+            break;
+        case '!':
+            probe->expression_start |= lexer->lookahead == '=';
+            break;
+        case '+': case '-':
+            if (lexer->lookahead == c) {
+                advance(lexer);
+            } else {
+                probe->expression_start = true;
+            }
+            break;
+        default:
+            probe->expression_start = c != ']' && c != '}' && c != ')' && c != '.';
+            break;
+    }
+    probe->property_name = c == '.';
+    return c;
+}
+
+static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe) {
+    bool comment = false;
+    if (skip_comment(lexer, &comment, false) != NO_COMMENT) return -1;
+    if (probe->expression_start) {
+        if (!skip_parameter_probe_regex(lexer)) return 0;
+        while (is_identifier_part(lexer->lookahead)) advance(lexer);
+    }
+    probe->expression_start = !probe->expression_start;
+    probe->property_name = false;
+    return -1;
+}
+
+static void skip_parameter_probe_literal(TSLexer *lexer, int32_t quote) {
+    while (lexer->lookahead != quote && !lexer->eof(lexer)) {
+        if (lexer->lookahead == '\\') advance(lexer);
+        advance(lexer);
+    }
+    if (!lexer->eof(lexer)) advance(lexer);
+}
+
+static bool parameter_probe_keyword_starts_expression(const char *word) {
+    return strcmp(word, "return") == 0 || strcmp(word, "throw") == 0 || strcmp(word, "typeof") == 0 ||
+        strcmp(word, "void") == 0 || strcmp(word, "delete") == 0 || strcmp(word, "new") == 0 ||
+        strcmp(word, "yield") == 0 || strcmp(word, "await") == 0 || strcmp(word, "in") == 0 ||
+        strcmp(word, "instanceof") == 0;
+}
+
+static bool skip_parameter_probe_regex(TSLexer *lexer) {
+    bool character_class = false;
+    while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+        int32_t c = lexer->lookahead;
+        advance(lexer);
+        if (c == '\\') {
+            if (lexer->eof(lexer) || is_line_terminator(lexer->lookahead)) return false;
+            advance(lexer);
+        } else if (c == '[') {
+            character_class = true;
+        } else if (c == ']') {
+            character_class = false;
+        } else if (c == '/' && !character_class) {
+            return true;
+        }
+    }
+    return false;
 }
 
 static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *valid_symbols, bool heritage, AssertionNameFallback *fallback) {
