@@ -1595,11 +1595,17 @@ static bool assertion_type_identifier_allowed(const char *word, AssertionIdentif
 static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word);
 static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool line_break, const TSLexerCheckpoint *start);
 
+typedef enum {
+    PARAMETER_PROBE_WORD_NONE,
+    PARAMETER_PROBE_WORD_AWAIT,
+    PARAMETER_PROBE_WORD_YIELD,
+} ParameterProbeWord;
+
 typedef struct {
     bool expression_start;
     bool property_name;
     bool ambiguous_slash;
-    bool contextual_word;
+    ParameterProbeWord contextual_word;
 } ParameterProbe;
 
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe);
@@ -1644,7 +1650,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 49 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss 50 -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -1661,7 +1667,7 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
     switch (c) {
         case '\'': case '"': case '`':
             skip_parameter_probe_literal(lexer, c);
-            probe->contextual_word = false;
+            probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
             probe->expression_start = false;
             break;
         case '<':
@@ -1671,24 +1677,24 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         case '!':
             probe->expression_start |= lexer->lookahead == '=';
             break;
-        case '*':
-            if (lexer->lookahead == '*') {
-                advance(lexer);
-            } else {
-                probe->contextual_word = false;
-            }
+        case '*': {
+            bool exponentiation = lexer->lookahead == '*';
+            if (exponentiation) advance(lexer);
+            if (!exponentiation || probe->contextual_word != PARAMETER_PROBE_WORD_AWAIT)
+                probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
             probe->expression_start = true;
             break;
+        }
         case '+': case '-':
             if (lexer->lookahead == c) {
                 advance(lexer);
             } else {
-                probe->contextual_word = false;
+                probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
                 probe->expression_start = true;
             }
             break;
         default:
-            probe->contextual_word = false;
+            probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
             probe->expression_start = c != ']' && c != '}' && c != ')' && c != '.';
             break;
     }
@@ -1701,8 +1707,13 @@ static void scan_parameter_probe_word(TSLexer *lexer, ParameterProbe *probe) {
     bool keyword_candidate = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
     probe->property_name = false;
     bool prefix = keyword_candidate && parameter_probe_keyword_starts_expression(word);
-    probe->contextual_word = (keyword_candidate && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0)) ||
-        (probe->contextual_word && prefix);
+    if (keyword_candidate && strcmp(word, "await") == 0) {
+        probe->contextual_word = PARAMETER_PROBE_WORD_AWAIT;
+    } else if (keyword_candidate && strcmp(word, "yield") == 0) {
+        probe->contextual_word = PARAMETER_PROBE_WORD_YIELD;
+    } else if (!keyword_candidate || (strcmp(word, "in") != 0 && strcmp(word, "instanceof") != 0)) {
+        probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
+    }
     probe->expression_start = prefix;
 }
 
@@ -1710,7 +1721,7 @@ static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe)
     bool comment = false;
     if (skip_comment(lexer, &comment, false) != NO_COMMENT) return -1;
     // Angle syntax and contextual await/yield words need parser context to distinguish regexes from division.
-    probe->ambiguous_slash |= probe->contextual_word;
+    probe->ambiguous_slash |= probe->contextual_word != PARAMETER_PROBE_WORD_NONE;
     if (probe->ambiguous_slash) return -1;
     if (probe->expression_start) {
         if (!skip_parameter_probe_regex(lexer)) return 0;

@@ -47,6 +47,8 @@ const Operators = [
   '===',
   '!==',
 ];
+const UnaryOperands = ['typeof /]/', 'void /]/', 'delete /]/.lastIndex', 'new /]/'];
+const NonGeneratorWrappers = ['function ordinary()', 'async function asynchronous()'];
 const InvalidTypes = ['([[x = /]/]: T) => A', '([[x = /unterminated]]: T) => A', '([[x = /[abc/]]: T) => A'];
 const TsxParameters = [
   '[[x = <div></div>]]',
@@ -90,6 +92,19 @@ for (const dialect of ['typescript', 'tsx']) {
               `function ordinary() { value as ([[x = ${name} ${operator} /]/]]: T) => A; }\nconst following = 1;`
           ),
         ]),
+        ...['async function asynchronous()', 'async function* asynchronousGenerator()'].flatMap((wrapper) =>
+          UnaryOperands.map(
+            (operand) => `${wrapper} { value as ([[x = await ${operand}]]: T) => A; }\nconst following = 1;`
+          )
+        ),
+        ...['function* generator()', 'async function* asynchronousGenerator()'].flatMap((wrapper) =>
+          UnaryOperands.map(
+            (operand) => `${wrapper} { value as ([[x = yield ${operand}]]: T) => A; }\nconst following = 1;`
+          )
+        ),
+        ...NonGeneratorWrappers.map(
+          (wrapper) => `${wrapper} { value as ([[x = yield ** /]/]]: T) => A; }\nconst following = 1;`
+        ),
         'class C { #return = 1; method() { return value as ([[x = this.#return / divisor], y = other / divisor]: T) => A; } }\nconst following = 1;',
       ];
       for (const source of sources) {
@@ -106,6 +121,10 @@ for (const dialect of ['typescript', 'tsx']) {
           regex: [],
           function_type: [],
           binary_expression: [],
+          await_expression: [],
+          yield_expression: [],
+          unary_expression: [],
+          new_expression: [],
         };
         const collect = (node: ts.Node): void => {
           const kind = ts.isArrayBindingPattern(node)
@@ -116,7 +135,15 @@ for (const dialect of ['typescript', 'tsx']) {
                 ? 'regex'
                 : ts.isFunctionTypeNode(node)
                   ? 'function_type'
-                  : undefined;
+                  : ts.isAwaitExpression(node)
+                    ? 'await_expression'
+                    : ts.isYieldExpression(node)
+                      ? 'yield_expression'
+                      : ts.isTypeOfExpression(node) || ts.isVoidExpression(node) || ts.isDeleteExpression(node)
+                        ? 'unary_expression'
+                        : ts.isNewExpression(node)
+                          ? 'new_expression'
+                          : undefined;
           if (kind) expected[kind]!.push([node.getStart(reference), node.end, node.getText(reference)]);
           if (
             ts.isBinaryExpression(node) &&
