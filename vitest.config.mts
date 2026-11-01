@@ -14,8 +14,6 @@ export default defineConfig({
         test: {
           name: 'node',
           globals: true,
-          // Incremental-edit tests take up to about 5 seconds on GitHub's macOS Intel runner while test files run in
-          // parallel, which reaches Vitest's 5-second default.
           testTimeout: 30_000,
           include: ['test/unit/**/*.test.ts'],
           exclude: ['test/unit/browser/**', ...growthTestFiles],
