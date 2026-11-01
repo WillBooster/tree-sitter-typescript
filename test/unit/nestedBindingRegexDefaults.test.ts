@@ -22,6 +22,7 @@ const Parameters = [
   '[[x = value! / divisor], y = other / divisor]',
   '[[x = 3.4 / divisor], y = other / divisor]',
   '[[x = value < /word/ / divisor]]',
+  '[[x = foo<T> / divisor]]',
   '[[x = (value / divisor) + /]/.test(text)]]',
   '[[x = /* ] */ /]/]]',
   '[[x = // ]\n/]/]]',
@@ -54,6 +55,10 @@ for (const dialect of ['typescript', 'tsx']) {
       ];
       const sources = [
         ...types.map((type) => `value as ${type};\nconst following = 1;`),
+        ...['await', 'yield'].map(
+          (name) =>
+            `function ordinary() { value as ([[x = ${name} / divisor / second]]: T) => A; }\nconst following = 1;`
+        ),
         'class C { #return = 1; method() { return value as ([[x = this.#return / divisor], y = other / divisor]: T) => A; } }\nconst following = 1;',
       ];
       for (const source of sources) {
@@ -65,6 +70,7 @@ for (const dialect of ['typescript', 'tsx']) {
           object_pattern: [],
           regex: [],
           function_type: [],
+          binary_expression: [],
         };
         const collect = (node: ts.Node): void => {
           const kind = ts.isArrayBindingPattern(node)
@@ -77,6 +83,12 @@ for (const dialect of ['typescript', 'tsx']) {
                   ? 'function_type'
                   : undefined;
           if (kind) expected[kind]!.push([node.getStart(reference), node.end, node.getText(reference)]);
+          if (
+            ts.isBinaryExpression(node) &&
+            node.operatorToken.kind !== ts.SyntaxKind.EqualsToken &&
+            node.operatorToken.kind !== ts.SyntaxKind.CommaToken
+          )
+            expected.binary_expression!.push([node.getStart(reference), node.end, node.getText(reference)]);
           ts.forEachChild(node, collect);
         };
         collect(reference);

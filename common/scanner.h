@@ -1642,7 +1642,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 42 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss 43 -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -1654,6 +1654,7 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         char word[16] = {0};
         bool keyword = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
         probe->property_name = false;
+        probe->ambiguous_slash |= keyword && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0);
         probe->expression_start = keyword && parameter_probe_keyword_starts_expression(word);
         return -1;
     }
@@ -1689,7 +1690,7 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
 static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe) {
     bool comment = false;
     if (skip_comment(lexer, &comment, false) != NO_COMMENT) return -1;
-    // After `<`, a slash can belong to a TSX closing tag or a comparison's regex operand; retain the legacy probe.
+    // Angle syntax and contextual await/yield words need parser context to distinguish regexes from division.
     if (probe->ambiguous_slash) return -1;
     if (probe->expression_start) {
         if (!skip_parameter_probe_regex(lexer)) return 0;
@@ -1711,8 +1712,7 @@ static void skip_parameter_probe_literal(TSLexer *lexer, int32_t quote) {
 static bool parameter_probe_keyword_starts_expression(const char *word) {
     return strcmp(word, "return") == 0 || strcmp(word, "throw") == 0 || strcmp(word, "typeof") == 0 ||
         strcmp(word, "void") == 0 || strcmp(word, "delete") == 0 || strcmp(word, "new") == 0 ||
-        strcmp(word, "yield") == 0 || strcmp(word, "await") == 0 || strcmp(word, "in") == 0 ||
-        strcmp(word, "instanceof") == 0;
+        strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0;
 }
 
 static bool skip_parameter_probe_regex(TSLexer *lexer) {
