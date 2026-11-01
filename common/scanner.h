@@ -1598,6 +1598,7 @@ static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, c
 typedef struct {
     bool expression_start;
     bool property_name;
+    bool ambiguous_slash;
 } ParameterProbe;
 
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe);
@@ -1641,7 +1642,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 38 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss 42 -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -1663,6 +1664,10 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
             skip_parameter_probe_literal(lexer, c);
             probe->expression_start = false;
             break;
+        case '<':
+            probe->ambiguous_slash = true;
+            probe->expression_start = true;
+            break;
         case '!':
             probe->expression_start |= lexer->lookahead == '=';
             break;
@@ -1677,13 +1682,15 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
             probe->expression_start = c != ']' && c != '}' && c != ')' && c != '.';
             break;
     }
-    probe->property_name = c == '.';
+    probe->property_name = c == '.' || c == '#';
     return c;
 }
 
 static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe) {
     bool comment = false;
     if (skip_comment(lexer, &comment, false) != NO_COMMENT) return -1;
+    // After `<`, a slash can belong to a TSX closing tag or a comparison's regex operand; retain the legacy probe.
+    if (probe->ambiguous_slash) return -1;
     if (probe->expression_start) {
         if (!skip_parameter_probe_regex(lexer)) return 0;
         while (is_identifier_part(lexer->lookahead)) advance(lexer);

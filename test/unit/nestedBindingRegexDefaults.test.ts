@@ -21,11 +21,19 @@ const Parameters = [
   '[[x = count-- / divisor], y = other / divisor]',
   '[[x = value! / divisor], y = other / divisor]',
   '[[x = 3.4 / divisor], y = other / divisor]',
+  '[[x = value < /word/ / divisor]]',
   '[[x = (value / divisor) + /]/.test(text)]]',
   '[[x = /* ] */ /]/]]',
   '[[x = // ]\n/]/]]',
 ];
 const InvalidTypes = ['([[x = /]/]: T) => A', '([[x = /unterminated]]: T) => A', '([[x = /[abc/]]: T) => A'];
+const TsxParameters = [
+  '[[x = <div></div>]]',
+  '[[x = <div><span /></div>]]',
+  '[[x = <div attribute={a / b}></div> / divisor]]',
+  '[[x = /]/, y = <div></div>]]',
+  '[[x = ((<T,>(value: T) => value)(input)) < /word/ / divisor]]',
+];
 const TypeControls = [
   '([<T = U>() => T])',
   '({[x = y]: T})',
@@ -38,9 +46,17 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
     try {
-      const types = [...Parameters.map((parameter) => `(${parameter}: T) => A`), ...TypeControls];
-      for (const type of types) {
-        const source = `value as ${type};\nconst following = 1;`;
+      const parameters = [...Parameters, ...(dialect === 'tsx' ? TsxParameters : [])];
+      const types = [
+        ...parameters.map((parameter) => `(${parameter}: T) => A`),
+        ...TypeControls,
+        ...(dialect === 'tsx' ? ['([[x = <div></div>]]: T) => A // /'] : []),
+      ];
+      const sources = [
+        ...types.map((type) => `value as ${type};\nconst following = 1;`),
+        'class C { #return = 1; method() { return value as ([[x = this.#return / divisor], y = other / divisor]: T) => A; } }\nconst following = 1;',
+      ];
+      for (const source of sources) {
         const fileName = dialect === 'tsx' ? 'binding.tsx' : 'binding.ts';
         const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
         expect(ts.transpileModule(source, { fileName, reportDiagnostics: true }).diagnostics ?? [], source).toEqual([]);
