@@ -27,6 +27,26 @@ const Parameters = [
   '[[x = /* ] */ /]/]]',
   '[[x = // ]\n/]/]]',
 ];
+const Operators = [
+  '+',
+  '-',
+  '*',
+  '%',
+  '&',
+  '|',
+  '^',
+  '&&',
+  '||',
+  '??',
+  '>',
+  '>=',
+  '>>',
+  '>>>',
+  '==',
+  '!=',
+  '===',
+  '!==',
+];
 const InvalidTypes = ['([[x = /]/]: T) => A', '([[x = /unterminated]]: T) => A', '([[x = /[abc/]]: T) => A'];
 const TsxParameters = [
   '[[x = <div></div>]]',
@@ -60,13 +80,26 @@ for (const dialect of ['typescript', 'tsx']) {
           `function ordinary() { value as ([[x = ${name} / divisor / second]]: T) => A; }\nconst following = 1;`,
           `function ordinary() { value as ([[x = ${name}, y = /]/]]: T) => A; }\nconst following = 1;`,
           `function ordinary() { value as ([[x = f(${name}, /]/)]]: T) => A; }\nconst following = 1;`,
+          `function ordinary() { value as ([[x = f(${name}) / divisor, y = /]/]]: T) => A; }\nconst following = 1;`,
+          ...['++', '--', '!'].map(
+            (postfix) =>
+              `function ordinary() { value as ([[x = ${name}${postfix} / divisor]]: T) => A; }\nconst following = 1;`
+          ),
+          ...Operators.map(
+            (operator) =>
+              `function ordinary() { value as ([[x = ${name} ${operator} /]/]]: T) => A; }\nconst following = 1;`
+          ),
         ]),
         'class C { #return = 1; method() { return value as ([[x = this.#return / divisor], y = other / divisor]: T) => A; } }\nconst following = 1;',
       ];
       for (const source of sources) {
         const fileName = dialect === 'tsx' ? 'binding.tsx' : 'binding.ts';
         const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
-        expect(ts.transpileModule(source, { fileName, reportDiagnostics: true }).diagnostics ?? [], source).toEqual([]);
+        const diagnostics = ts.transpileModule(source, { fileName, reportDiagnostics: true }).diagnostics ?? [];
+        expect(
+          diagnostics.map(({ code, messageText }) => [code, ts.flattenDiagnosticMessageText(messageText, ' ')]),
+          source
+        ).toEqual([]);
         const expected: Record<string, Range[]> = {
           array_pattern: [],
           object_pattern: [],

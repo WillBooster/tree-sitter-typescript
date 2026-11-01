@@ -1603,6 +1603,7 @@ typedef struct {
 } ParameterProbe;
 
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe);
+static void scan_parameter_probe_word(TSLexer *lexer, ParameterProbe *probe);
 static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe);
 static void skip_parameter_probe_literal(TSLexer *lexer, int32_t quote);
 static bool parameter_probe_keyword_starts_expression(const char *word);
@@ -1643,7 +1644,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 53 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss 49 -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -1652,11 +1653,7 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         return -1;
     }
     if (is_identifier_part(c)) {
-        char word[16] = {0};
-        bool keyword = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
-        probe->property_name = false;
-        probe->contextual_word |= keyword && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0);
-        probe->expression_start = keyword && parameter_probe_keyword_starts_expression(word);
+        scan_parameter_probe_word(lexer, probe);
         return -1;
     }
     if (c == '/') return scan_parameter_probe_slash(lexer, probe);
@@ -1664,11 +1661,8 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
     switch (c) {
         case '\'': case '"': case '`':
             skip_parameter_probe_literal(lexer, c);
-            probe->expression_start = false;
-            break;
-        case '=': case ',': case ';': case ':': case '(': case '[': case '{':
             probe->contextual_word = false;
-            probe->expression_start = true;
+            probe->expression_start = false;
             break;
         case '<':
             probe->ambiguous_slash = true;
@@ -1677,19 +1671,39 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         case '!':
             probe->expression_start |= lexer->lookahead == '=';
             break;
+        case '*':
+            if (lexer->lookahead == '*') {
+                advance(lexer);
+            } else {
+                probe->contextual_word = false;
+            }
+            probe->expression_start = true;
+            break;
         case '+': case '-':
             if (lexer->lookahead == c) {
                 advance(lexer);
             } else {
+                probe->contextual_word = false;
                 probe->expression_start = true;
             }
             break;
         default:
+            probe->contextual_word = false;
             probe->expression_start = c != ']' && c != '}' && c != ')' && c != '.';
             break;
     }
     probe->property_name = c == '.' || c == '#';
     return c;
+}
+
+static void scan_parameter_probe_word(TSLexer *lexer, ParameterProbe *probe) {
+    char word[16] = {0};
+    bool keyword_candidate = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
+    probe->property_name = false;
+    bool prefix = keyword_candidate && parameter_probe_keyword_starts_expression(word);
+    probe->contextual_word = (keyword_candidate && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0)) ||
+        (probe->contextual_word && prefix);
+    probe->expression_start = prefix;
 }
 
 static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe) {
