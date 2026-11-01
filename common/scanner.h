@@ -1599,6 +1599,7 @@ typedef struct {
     bool expression_start;
     bool property_name;
     bool ambiguous_slash;
+    bool contextual_word;
 } ParameterProbe;
 
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe);
@@ -1642,7 +1643,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 43 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss 53 -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -1654,7 +1655,7 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         char word[16] = {0};
         bool keyword = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
         probe->property_name = false;
-        probe->ambiguous_slash |= keyword && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0);
+        probe->contextual_word |= keyword && (strcmp(word, "await") == 0 || strcmp(word, "yield") == 0);
         probe->expression_start = keyword && parameter_probe_keyword_starts_expression(word);
         return -1;
     }
@@ -1664,6 +1665,10 @@ static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe)
         case '\'': case '"': case '`':
             skip_parameter_probe_literal(lexer, c);
             probe->expression_start = false;
+            break;
+        case '=': case ',': case ';': case ':': case '(': case '[': case '{':
+            probe->contextual_word = false;
+            probe->expression_start = true;
             break;
         case '<':
             probe->ambiguous_slash = true;
@@ -1691,6 +1696,7 @@ static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe)
     bool comment = false;
     if (skip_comment(lexer, &comment, false) != NO_COMMENT) return -1;
     // Angle syntax and contextual await/yield words need parser context to distinguish regexes from division.
+    probe->ambiguous_slash |= probe->contextual_word;
     if (probe->ambiguous_slash) return -1;
     if (probe->expression_start) {
         if (!skip_parameter_probe_regex(lexer)) return 0;

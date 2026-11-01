@@ -31,6 +31,7 @@ const InvalidTypes = ['([[x = /]/]: T) => A', '([[x = /unterminated]]: T) => A',
 const TsxParameters = [
   '[[x = <div></div>]]',
   '[[x = <div><span /></div>]]',
+  '[[x = <div>[y = /text]</div>]]',
   '[[x = <div attribute={a / b}></div> / divisor]]',
   '[[x = /]/, y = <div></div>]]',
   '[[x = ((<T,>(value: T) => value)(input)) < /word/ / divisor]]',
@@ -55,10 +56,11 @@ for (const dialect of ['typescript', 'tsx']) {
       ];
       const sources = [
         ...types.map((type) => `value as ${type};\nconst following = 1;`),
-        ...['await', 'yield'].map(
-          (name) =>
-            `function ordinary() { value as ([[x = ${name} / divisor / second]]: T) => A; }\nconst following = 1;`
-        ),
+        ...['await', 'yield'].flatMap((name) => [
+          `function ordinary() { value as ([[x = ${name} / divisor / second]]: T) => A; }\nconst following = 1;`,
+          `function ordinary() { value as ([[x = ${name}, y = /]/]]: T) => A; }\nconst following = 1;`,
+          `function ordinary() { value as ([[x = f(${name}, /]/)]]: T) => A; }\nconst following = 1;`,
+        ]),
         'class C { #return = 1; method() { return value as ([[x = this.#return / divisor], y = other / divisor]: T) => A; } }\nconst following = 1;',
       ];
       for (const source of sources) {
