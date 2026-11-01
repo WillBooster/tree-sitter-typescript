@@ -16,5 +16,15 @@
       "matchPackageNames": ["willbooster-tree-sitter"],
       "minimumReleaseAge": "0 days",
     },
+    // 16.0.0: Version 16.0.0 exhibits quadratic Wasm memory growth on ambiguous TypeScript and TSX input with this grammar, risking host termination: https://github.com/WillBooster/tree-sitter/issues/323. Version 16.0.1 fixes a separate callback issue, not this report: https://github.com/WillBooster/tree-sitter/pull/324.
+    {
+      "matchPackageNames": ["@willbooster/web-tree-sitter"],
+      "allowedVersions": "!/^16\\.0\\.0$/",
+    },
+    // 16.0.0: The Cargo package is willbooster-tree-sitter, locked at 15.5.4 before this update. Its version must match the web runtime, which is reverted because of https://github.com/WillBooster/tree-sitter/issues/323; keeping 16 would violate the existing runtime pairing: https://github.com/WillBooster/tree-sitter-typescript/pull/27.
+    {
+      "matchPackageNames": ["tree-sitter"],
+      "allowedVersions": "!/^16\\.0\\.0$/",
+    },
   ],
 }
