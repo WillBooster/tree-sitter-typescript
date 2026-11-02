@@ -60,6 +60,15 @@ function withPrimaryExpressionTargets($, lists, typeArgumentsOnly = []) {
   );
 }
 
+// The conflicts of JavaScript's arrow functions arise in their heads.
+function withArrowFunctionHeads($, lists) {
+  return lists.map((list) =>
+    list.flatMap((entry) =>
+      entry.name === 'arrow_function' ? [$._arrow_function_expression_head, $._arrow_function_block_head] : [entry]
+    )
+  );
+}
+
 const IMPLEMENTS_TYPE_OPERATOR_NAMES = ['keyof', 'readonly', 'unique', 'infer'];
 
 // Dynamic precedences for the readings of `<` and `>` that GLR keeps where TypeScript's parser, which tries type
@@ -332,7 +341,7 @@ module.exports = function defineGrammar(dialect) {
       [$.infer_type, $.type_predicate],
       [$.asserts, $.type_predicate],
       [$.asserts, $.primary_type],
-      [$.arrow_function, $.method_definition, $._type_arguments_target],
+      [$._arrow_function_expression_head, $._arrow_function_block_head, $.method_definition, $._type_arguments_target],
       [$._type_arguments_target, $._type_query_identifier],
       [$._postfix_primary_expression, $._type_query_identifier],
       [$._type_arguments_target, $._type_query_identifier, $._postfix_primary_expression],
@@ -342,7 +351,7 @@ module.exports = function defineGrammar(dialect) {
       [$.export_specifier, $._local_export_specifier, $._module_export_name],
       [$.export_specifier, $._module_export_name],
       [$.export_specifier, $._local_export_specifier],
-      ...withPrimaryExpressionTargets($, previous, ['pattern', 'rest_pattern']),
+      ...withArrowFunctionHeads($, withPrimaryExpressionTargets($, previous, ['pattern', 'rest_pattern'])),
       [$.for_in_clause, $._lexical_binding_identifier],
       [$.for_in_clause, $._constructor_atom],
       [
@@ -357,12 +366,12 @@ module.exports = function defineGrammar(dialect) {
       [$._property_name, $._static_named_field_tail],
       [$._property_name, $._accessor_named_field_tail],
 
-      [$.class],
-      [$.class, $._parameter_name],
+      [$._class_head],
+      [$._class_head, $._parameter_name],
 
       [$.nested_identifier, $.nested_type_identifier, $._generic_nested_type_identifier, $._type_arguments_target],
 
-      [$._call_signature, $.function_type],
+      [$._call_signature, $._function_type_head],
 
       [$._type_arguments_target, $._parameter_name],
       [$._postfix_primary_expression, $._parameter_name],
@@ -418,22 +427,17 @@ module.exports = function defineGrammar(dialect) {
       [$._tuple_label, $.predefined_type],
       [$.rest_pattern, $.primary_type, $._type_arguments_target],
 
-      [$.object, $.object_type],
-      [$.object, $.object_pattern, $.object_type],
+      [$.object, $.object_pattern, $._object_type_head],
       [$.object, $.object_pattern, $._property_name],
-      [$.object_pattern, $.object_type],
-      [$.object_pattern, $.object_type],
 
-      [$.array, $.tuple_type],
-      [$.array, $.array_pattern, $.tuple_type],
-      [$.array_pattern, $.tuple_type],
+      [$.array, $.array_pattern, $._tuple_type_head],
       [$.array_pattern, $.pattern, $._type_arguments_target],
       [$.array_pattern, $.pattern],
       [$.array_pattern, $._type_arguments_target, $.predefined_type],
       [$.jsx_namespace_name, $.predefined_type],
       [$.predefined_type, $.type_parameter],
 
-      [$.template_literal_type, $.template_string],
+      [$._template_literal_type_head, $._template_string_head],
       ...(dialect === 'typescript'
         ? [[$.primary_type, $.type_parameter]]
         : [
@@ -462,7 +466,7 @@ module.exports = function defineGrammar(dialect) {
       assertion_bindings: () => [...JavaScript.grammar.reserved.global, 'enum'],
     },
 
-    rules: {
+    rules: withSharedHeads({
       // TypeScript's scanner reads U+0085 as whitespace, so a name cannot contain it.
       identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
 
@@ -2267,6 +2271,14 @@ module.exports = function defineGrammar(dialect) {
 
       template_type: ($) => seq('${', $.type, '}'),
 
+      string: ($) => choice(seq($._double_string_head, '"'), seq($._single_string_head, "'")),
+
+      _double_string_head: ($) =>
+        seq('"', repeat(choice(alias($.unescaped_double_string_fragment, $.string_fragment), $.escape_sequence))),
+
+      _single_string_head: ($) =>
+        seq("'", repeat(choice(alias($.unescaped_single_string_fragment, $.string_fragment), $.escape_sequence))),
+
       template_literal_type: ($) =>
         seq('`', repeat(choice(alias($._template_chars, $.string_fragment), $.template_type)), '`'),
 
@@ -2517,8 +2529,29 @@ module.exports = function defineGrammar(dialect) {
           choice(optional($._line_break_after_field), field('type', $.type_annotation))
         ),
 
-      arrow_function: ($, previous) =>
-        choice(previous, replaceSymbol(previous, '_call_signature', $._arrow_call_signature)),
+      // The body is followed only by `_arrow_context_end` or `_function_context_end`, so the heads, which end with it,
+      // are shared by every context of an arrow function.
+      arrow_function: ($) =>
+        prec.right(
+          seq(
+            choice(
+              seq($._arrow_function_expression_head, $._arrow_context_end),
+              seq($._arrow_function_block_head, $._function_context_end)
+            ),
+            optional($._completed_arrow_function)
+          )
+        ),
+
+      _arrow_function_expression_head: ($) => arrowFunctionHead($, field('body', $.expression)),
+
+      _arrow_function_block_head: ($) =>
+        arrowFunctionHead(
+          $,
+          seq(
+            field('body', $.statement_block),
+            optional(seq($._arrow_function_block_end, optional($._arrow_function_block_continuation)))
+          )
+        ),
 
       _arrow_call_signature: ($) =>
         seq(
@@ -2642,7 +2675,7 @@ module.exports = function defineGrammar(dialect) {
         ),
 
       _reserved_identifier: (_, previous) => choice(...TYPESCRIPT_CONTEXTUAL_KEYWORDS, previous),
-    },
+    }),
   });
 };
 
@@ -3326,6 +3359,9 @@ function assertionTypePrecedences($, lists) {
       $._const_assertion_non_postfix_constraint_readonly_type,
     ],
   };
+  for (const [name, heads] of Object.entries(sharedHeads($))) {
+    variants[name] = [...(variants[name] ?? []), ...heads];
+  }
   return lists.flatMap((list) => [
     list,
     ...list.flatMap((higher, index) =>
@@ -3598,6 +3634,152 @@ function excludeFromNamePatterns(rule, escapedCharacter) {
     part.type === 'PATTERN' && part.value.startsWith('[^')
       ? { ...part, value: `[^${escapedCharacter}${part.value.slice(2)}` }
       : part
+  );
+}
+
+/**
+ * Rules whose members before the last required one move into a hidden `_<rule>_head` rule. The generator copies a
+ * rule's states for every context that allows different tokens after the rule, and never merges copies whose following
+ * tokens differ in external tokens; the head is always followed by the same tokens, so every context shares its states.
+ */
+const SHARED_HEAD_RULES = [
+  '_as_arrow_function_type',
+  '_as_constructor_type',
+  '_as_non_postfix_arrow_function_type',
+  '_as_non_postfix_constructor_type',
+  '_decorated_export_abstract_class',
+  '_decorated_export_ambient_abstract_class',
+  '_decorated_export_ambient_class',
+  '_decorated_export_class',
+  '_type_query_subscript_expression',
+  '_unprefixed_type_arguments',
+  'abstract_class_declaration',
+  'arguments',
+  'class',
+  'class_declaration',
+  'conditional_type',
+  'constructor_type',
+  'function_expression',
+  'function_type',
+  'generator_function',
+  'lookup_type',
+  'object_type',
+  'template_literal_type',
+  'template_string',
+  'tuple_type',
+  'type_arguments',
+];
+
+function withSharedHeads(rules) {
+  const result = { ...rules };
+  for (const name of SHARED_HEAD_RULES) {
+    const base = JavaScript.grammar.rules[name];
+    const rule = rules[name] ?? ((_, previous) => previous);
+    result[name] = ($, previous) => {
+      const { wrap, last } = splitHead(rule($, previous));
+      return wrap(seq($[headName(name)], last));
+    };
+    result[headName(name)] = ($) => splitHead(rule($, base)).head;
+  }
+  return result;
+}
+
+function sharedHeads($) {
+  return {
+    ...Object.fromEntries(SHARED_HEAD_RULES.map((name) => [name, [$[headName(name)]]])),
+    arrow_function: [$._arrow_function_expression_head, $._arrow_function_block_head],
+    string: [$._double_string_head, $._single_string_head],
+  };
+}
+
+function headName(name) {
+  return `${name.startsWith('_') ? '' : '_'}${name}_head`;
+}
+
+/**
+ * Splits `rule` before its last required member: `wrap(seq(head, last))` matches what `rule` matches.
+ *
+ * @param {Rule} rule
+ * @return {{ head: Rule, last: Rule, wrap: (rule: Rule) => Rule }}
+ */
+function splitHead(rule) {
+  switch (rule.type) {
+    case 'PREC':
+    case 'PREC_LEFT':
+    case 'PREC_RIGHT':
+    case 'PREC_DYNAMIC': {
+      const inner = splitHead(rule.content);
+      return {
+        head: { ...rule, content: inner.head },
+        last: inner.last,
+        wrap: (content) => ({ ...rule, content: inner.wrap(content) }),
+      };
+    }
+    case 'CHOICE': {
+      const parts = rule.members.map((member) => splitHead(member));
+      if (parts.some((part) => splitEnding(part) !== splitEnding(parts[0]))) {
+        throw new Error('The alternatives of a shared-head rule must end alike');
+      }
+      return { head: choice(...parts.map((part) => part.head)), last: parts[0].last, wrap: parts[0].wrap };
+    }
+    case 'SEQ': {
+      const index = rule.members.findLastIndex((member) => !isOptional(member));
+      const tail = rule.members.slice(index);
+      if (tail.length === 1 && isSplittable(tail[0])) {
+        const inner = splitHead(tail[0]);
+        return { ...inner, head: seq(...rule.members.slice(0, index), inner.head) };
+      }
+      if (index < 1) throw new Error('A shared head must not be empty');
+      return {
+        head: seq(...rule.members.slice(0, index)),
+        last: tail.length === 1 ? tail[0] : seq(...tail),
+        wrap: (content) => content,
+      };
+    }
+    default: {
+      throw new Error(`Cannot split a ${rule.type} rule`);
+    }
+  }
+}
+
+function splitEnding({ last, wrap }) {
+  return JSON.stringify(wrap(last));
+}
+
+function isOptional(rule) {
+  return rule.type === 'REPEAT' || (rule.type === 'CHOICE' && rule.members.some((member) => member.type === 'BLANK'));
+}
+
+function isSplittable(rule) {
+  return (
+    ['SEQ', 'PREC', 'PREC_LEFT', 'PREC_RIGHT', 'PREC_DYNAMIC'].includes(rule.type) ||
+    (rule.type === 'CHOICE' && rule.members.some((member) => isSplittable(member)))
+  );
+}
+
+function arrowFunctionHead($, body) {
+  return prec.right(
+    functionContext((async) =>
+      seq(
+        ...(async ? [alias($._async_keyword, 'async')] : []),
+        choice(
+          field(
+            'parameter',
+            choice(
+              alias($._reserved_identifier, $.identifier),
+              alias($._async_keyword, $.identifier),
+              alias($.undefined, $.identifier),
+              $.identifier
+            )
+          ),
+          $._call_signature,
+          $._arrow_call_signature
+        ),
+        '=>',
+        async ? $._async_function_start : $._sync_function_start,
+        body
+      )
+    )
   );
 }
 
