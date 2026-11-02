@@ -2271,13 +2271,12 @@ module.exports = function defineGrammar(dialect) {
 
       template_type: ($) => seq('${', $.type, '}'),
 
-      string: ($) => choice(seq($._double_string_head, '"'), seq($._single_string_head, "'")),
+      string: ($, previous) =>
+        choice(...previous.members.map((member, index) => seq($[STRING_HEADS[index]], member.members.at(-1)))),
 
-      _double_string_head: ($) =>
-        seq('"', repeat(choice(alias($.unescaped_double_string_fragment, $.string_fragment), $.escape_sequence))),
+      _double_string_head: () => stringHead(0),
 
-      _single_string_head: ($) =>
-        seq("'", repeat(choice(alias($.unescaped_single_string_fragment, $.string_fragment), $.escape_sequence))),
+      _single_string_head: () => stringHead(1),
 
       template_literal_type: ($) =>
         seq('`', repeat(choice(alias($._template_chars, $.string_fragment), $.template_type)), '`'),
@@ -2529,29 +2528,21 @@ module.exports = function defineGrammar(dialect) {
           choice(optional($._line_break_after_field), field('type', $.type_annotation))
         ),
 
-      // The body is followed only by `_arrow_context_end` or `_function_context_end`, so the heads, which end with it,
-      // are shared by every context of an arrow function.
-      arrow_function: ($) =>
-        prec.right(
+      // The body is followed only by `_arrow_context_end` or `_function_context_end`, so the heads, which end with the
+      // body, are shared by every context of an arrow function.
+      arrow_function: ($, previous) => {
+        const { bodies, end } = arrowFunctionTail(previous);
+        return prec.right(
           seq(
-            choice(
-              seq($._arrow_function_expression_head, $._arrow_context_end),
-              seq($._arrow_function_block_head, $._function_context_end)
-            ),
-            optional($._completed_arrow_function)
+            choice(...bodies.members.map((body, index) => seq($[ARROW_FUNCTION_HEADS[index]], body.members.at(-1)))),
+            end
           )
-        ),
+        );
+      },
 
-      _arrow_function_expression_head: ($) => arrowFunctionHead($, field('body', $.expression)),
+      _arrow_function_expression_head: ($) => arrowFunctionHead($, 0),
 
-      _arrow_function_block_head: ($) =>
-        arrowFunctionHead(
-          $,
-          seq(
-            field('body', $.statement_block),
-            optional(seq($._arrow_function_block_end, optional($._arrow_function_block_continuation)))
-          )
-        ),
+      _arrow_function_block_head: ($) => arrowFunctionHead($, 1),
 
       _arrow_call_signature: ($) =>
         seq(
@@ -3757,30 +3748,49 @@ function isSplittable(rule) {
   );
 }
 
-function arrowFunctionHead($, body) {
-  return prec.right(
-    functionContext((async) =>
-      seq(
-        ...(async ? [alias($._async_keyword, 'async')] : []),
-        choice(
-          field(
-            'parameter',
-            choice(
-              alias($._reserved_identifier, $.identifier),
-              alias($._async_keyword, $.identifier),
-              alias($.undefined, $.identifier),
-              $.identifier
-            )
-          ),
-          $._call_signature,
-          $._arrow_call_signature
-        ),
-        '=>',
-        async ? $._async_function_start : $._sync_function_start,
-        body
-      )
-    )
+const ARROW_FUNCTION_HEADS = ['_arrow_function_expression_head', '_arrow_function_block_head'];
+
+const STRING_HEADS = ['_double_string_head', '_single_string_head'];
+
+// JavaScript's arrow function ends in a choice of bodies, each ending with the token that closes its function context,
+// and in an optional `_completed_arrow_function`.
+function arrowFunctionTail(rule) {
+  const tails = sequences(rule).map((sequence) => ({ bodies: sequence.members.at(-2), end: sequence.members.at(-1) }));
+  const [tail] = tails;
+  if (tails.some((other) => JSON.stringify(other) !== JSON.stringify(tail)) || tail.bodies.members.length !== 2) {
+    throw new Error('Every JavaScript arrow function must end in the same expression and block bodies');
+  }
+  return tail;
+}
+
+function arrowFunctionHead($, index) {
+  const rule = JavaScript.grammar.rules.arrow_function;
+  arrowFunctionTail(rule);
+  const head = (sequence) =>
+    seq(...sequence.members.slice(0, -2), ...sequence.members.at(-2).members[index].members.slice(0, -1));
+  return choice(
+    mapSequences(rule, head),
+    mapSequences(replaceSymbol(rule, '_call_signature', $._arrow_call_signature), head)
   );
+}
+
+// The sequences that are alternatives of `rule`, below its precedences and choices.
+function sequences(rule) {
+  if (rule.content) return sequences(rule.content);
+  return rule.type === 'CHOICE' ? rule.members.flatMap((member) => sequences(member)) : [rule];
+}
+
+function mapSequences(rule, transform) {
+  if (rule.content) return { ...rule, content: mapSequences(rule.content, transform) };
+  return rule.type === 'CHOICE'
+    ? { ...rule, members: rule.members.map((member) => mapSequences(member, transform)) }
+    : transform(rule);
+}
+
+function stringHead(index) {
+  const { members } = JavaScript.grammar.rules.string;
+  if (members.length !== STRING_HEADS.length) throw new Error('JavaScript strings must have two quote styles');
+  return seq(...members[index].members.slice(0, -1));
 }
 
 function replaceSymbol(rule, name, replacement) {
