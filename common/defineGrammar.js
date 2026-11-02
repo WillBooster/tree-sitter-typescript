@@ -353,7 +353,9 @@ module.exports = function defineGrammar(dialect) {
         $._constructor_instantiation_expression,
       ],
       [$._field_name, $._property_name],
-      [$._property_name, $.public_field_definition],
+      [$._property_name, $._leading_static_named_field_tail],
+      [$._property_name, $._static_named_field_tail],
+      [$._property_name, $._accessor_named_field_tail],
 
       [$.class],
       [$.class, $._parameter_name],
@@ -499,34 +501,9 @@ module.exports = function defineGrammar(dialect) {
                 seq(optional('static'), optional($.override_modifier), 'accessor'),
                 seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
-              choice(
-                seq(
-                  field('name', $._field_name),
-                  choice(
-                    optional(choice($._field_initializer, $._line_break_after_field)),
-                    seq($._field_annotations, optional($._field_initializer))
-                  )
-                ),
-                // A line break after `get` or `set` continues a getter or setter. Allowing both sentinels here tells
-                // the scanner that a `*` on the next line cannot continue the member, unlike after `static`.
-                seq(
-                  field('name', alias(choice('get', 'set'), $.property_identifier)),
-                  choice(
-                    optional(choice($._field_initializer, $._line_break_after_modifier, $._line_break_after_field)),
-                    seq($._field_annotations, optional($._field_initializer))
-                  )
-                )
-              )
+              choice($._field_tail, $._accessor_named_field_tail)
             ),
-            // A line break after a leading `static` continues a static member.
-            seq(
-              field('name', alias('static', $.property_identifier)),
-              choice(
-                optional(choice($._field_initializer, $._line_break_after_modifier)),
-                seq($._field_annotations, optional($._field_initializer))
-              )
-            ),
-            // After a modifier, `static` is a field name, which a line break ends.
+            $._leading_static_named_field_tail,
             seq(
               choice(
                 seq('static', optional($.override_modifier), optional('readonly')),
@@ -536,12 +513,48 @@ module.exports = function defineGrammar(dialect) {
                 seq(optional('static'), optional($.override_modifier), 'accessor'),
                 seq('abstract', optional($.override_modifier), optional('accessor'))
               ),
-              field('name', alias('static', $.property_identifier)),
-              choice(
-                optional(choice($._field_initializer, $._line_break_after_field)),
-                seq($._field_annotations, optional($._field_initializer))
-              )
+              $._static_named_field_tail
             )
+          )
+        ),
+
+      _field_tail: ($) =>
+        seq(
+          field('name', $._field_name),
+          choice(
+            optional(choice($._field_initializer, $._line_break_after_field)),
+            seq($._field_annotations, optional($._field_initializer))
+          )
+        ),
+
+      // A line break after `get` or `set` continues a getter or setter. Allowing both sentinels here tells the scanner
+      // that a `*` on the next line cannot continue the member, unlike after `static`.
+      _accessor_named_field_tail: ($) =>
+        seq(
+          field('name', alias(choice('get', 'set'), $.property_identifier)),
+          choice(
+            optional(choice($._field_initializer, $._line_break_after_modifier, $._line_break_after_field)),
+            seq($._field_annotations, optional($._field_initializer))
+          )
+        ),
+
+      // A line break after a leading `static` continues a static member.
+      _leading_static_named_field_tail: ($) =>
+        seq(
+          field('name', alias('static', $.property_identifier)),
+          choice(
+            optional(choice($._field_initializer, $._line_break_after_modifier)),
+            seq($._field_annotations, optional($._field_initializer))
+          )
+        ),
+
+      // After a modifier, `static` is a field name, which a line break ends.
+      _static_named_field_tail: ($) =>
+        seq(
+          field('name', alias('static', $.property_identifier)),
+          choice(
+            optional(choice($._field_initializer, $._line_break_after_field)),
+            seq($._field_annotations, optional($._field_initializer))
           )
         ),
 
@@ -1068,17 +1081,15 @@ module.exports = function defineGrammar(dialect) {
 
       method_signature: ($) => methodSignature($),
 
+      ...methodTails(),
+
       abstract_method_signature: ($) =>
         seq(
           optional($.accessibility_modifier),
           'abstract',
           optional($.override_modifier),
           optional(choice('get', 'set', '*')),
-          field('name', $._property_name),
-          optional('?'),
-          $._function_signature_start,
-          $._call_signature,
-          $._method_signature_end
+          $._method_signature_tail
         ),
 
       parenthesized_expression: ($) =>
@@ -3606,16 +3617,7 @@ function methodSignature($) {
   return functionContext((async) =>
     choice(
       ...[false, true].map((generator) =>
-        seq(
-          ...methodHeader($, async, generator),
-          functionScope(
-            $,
-            async,
-            $._call_signature,
-            generator ? 'generator_function' : 'function_signature',
-            $._method_signature_end
-          )
-        )
+        seq(...methodModifiers($, async, generator), $[methodTailName('signature', async, generator)])
       )
     )
   );
@@ -3626,8 +3628,36 @@ function methodDefinition($, decorators) {
     functionContext((async) =>
       choice(
         ...[false, true].map((generator) =>
+          seq(...methodModifiers($, async, generator, decorators), $[methodTailName('definition', async, generator)])
+        )
+      )
+    )
+  );
+}
+
+function methodTailName(kind, async, generator) {
+  return `_${async ? 'async_' : ''}${generator ? 'generator_' : ''}method_${kind}_tail`;
+}
+
+function methodTails() {
+  const rules = {};
+  for (const async of [false, true]) {
+    for (const generator of [false, true]) {
+      rules[methodTailName('signature', async, generator)] = ($) =>
+        seq(
+          ...methodName($),
+          functionScope(
+            $,
+            async,
+            $._call_signature,
+            generator ? 'generator_function' : 'function_signature',
+            $._method_signature_end
+          )
+        );
+      rules[methodTailName('definition', async, generator)] = ($) =>
+        prec.left(
           seq(
-            ...methodHeader($, async, generator, decorators),
+            ...methodName($),
             choice(
               functionScope(
                 $,
@@ -3645,13 +3675,13 @@ function methodDefinition($, decorators) {
                   ])
             )
           )
-        )
-      )
-    )
-  );
+        );
+    }
+  }
+  return rules;
 }
 
-function methodHeader($, async, generator, decorators) {
+function methodModifiers($, async, generator, decorators) {
   return [
     ...(decorators ? [decorators] : []),
     optional($.accessibility_modifier),
@@ -3660,9 +3690,11 @@ function methodHeader($, async, generator, decorators) {
     optional('readonly'),
     ...(async ? [alias($._async_keyword, 'async')] : []),
     ...(generator ? ['*'] : [optional(choice('get', 'set'))]),
-    field('name', $._property_name),
-    optional('?'),
   ];
+}
+
+function methodName($) {
+  return [field('name', $._property_name), optional('?')];
 }
 
 function functionContext(makeRule) {
