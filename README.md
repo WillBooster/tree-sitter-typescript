@@ -44,7 +44,7 @@ the trees that error recovery produces may change; such changes are released as 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 15.0.0 or later within 15.x. Its CLI
+for `.tsx` files. The supported runtime is WillBooster version 15.0.0 or later within majors 15 and 16. Its CLI
 generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
@@ -90,10 +90,10 @@ The package also ships the node types in `typescript/src/node-types.json` and `t
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
 [willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 15.0.0 or later within 15.x:
+fuzzed with. Use version 15.0.0 or later within majors 15 and 16; the tested version is 16.0.2:
 
 ```sh
-cargo add willbooster-tree-sitter@15.0.0 --rename tree-sitter
+cargo add willbooster-tree-sitter@16.0.2 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 
