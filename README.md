@@ -127,7 +127,7 @@ pinned `typescript-reference` API and the generated TypeScript and TSX grammars.
 both generated grammars to be current and their token-start tables to match. `bun run check-keywords` verifies the
 committed header. The native TypeScript package remains the type checker.
 
-`script/copy-javascript-grammar` refreshes the bundled JavaScript grammar and its license from the pinned development dependency. Parser generation runs it automatically.
+`script/copy-javascript-grammar` refreshes the bundled JavaScript grammar, its license, and `javascript/literal.h`, the template and JSX text scanning that `common/scanner.h` includes, from the pinned development dependency. Parser generation runs it automatically.
 
 `bun run generate` records a fresh generation profile from the applicable `test/corpus` cases and Git-tracked
 files in `examples/`, then generates compact parser tables. The parser also embeds metadata from `tree-sitter.json`. After changing a grammar,
@@ -149,7 +149,7 @@ and the release build regenerate the parsers before compiling them.
   linear time with each grammar, measured in the parsing thread's CPU time, since consumers parse files while they are
   being edited. It loads the Wasm builds through @willbooster/web-tree-sitter, which `bun run build/ci` rebuilds after
   regenerating the parsers;
-- a check (`test/unit/packageFiles.test.ts`) that `javascript/grammar.js` and `javascript/LICENSE` match those of the
+- a check (`test/unit/packageFiles.test.ts`) that `javascript/grammar.js`, `javascript/LICENSE`, and `javascript/literal.h` match those of the
   installed @willbooster/tree-sitter-javascript;
 - checks that both Wasm builds load and parse through @willbooster/web-tree-sitter in Chromium
   (`test/unit/browser/`) and in Cloudflare Workers with and without Node.js compatibility

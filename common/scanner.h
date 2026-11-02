@@ -1,4 +1,5 @@
 #include "functionContext.h"
+#include "../javascript/literal.h"
 #include "tree_sitter/alloc.h"
 #include "tree_sitter/parser.h"
 
@@ -55,6 +56,11 @@ enum TokenType {
     ASYNC_FUNCTION_SIGNATURE_START,
     CALL_ARGUMENTS_CONTEXT,
     ASYNC_KEYWORD,
+    LINE_BREAK_BEFORE_FROM,
+    CLASS_HERITAGE_END,
+    CLASS_HERITAGE_YIELD_IDENTIFIER,
+    CLASS_HERITAGE_AWAIT_IDENTIFIER,
+    TEMPLATE_ESCAPE_SEQUENCE,
     FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON,
     TYPE_ARGUMENTS_END,
     TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
@@ -215,10 +221,6 @@ static inline bool is_whitespace(int32_t c) {
     }
 }
 
-static inline bool is_ascii_letter(int32_t c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); }
-
-static inline bool is_ascii_digit(int32_t c) { return c >= '0' && c <= '9'; }
-
 // Counts the characters the grammar's identifiers may continue with (a backslash starts a `\u` escape), with every
 // character from U+007F on other than whitespace, which suffices to tell `in` and `instanceof` from the identifiers they
 // start.
@@ -236,30 +238,6 @@ static bool scan_word(TSLexer *lexer, const char *word, bool skip_contents) {
         lexer->advance(lexer, skip_contents);
     }
     return !is_identifier_part(lexer->lookahead);
-}
-
-static bool scan_template_chars(TSLexer *lexer) {
-    lexer->result_symbol = TEMPLATE_CHARS;
-    for (bool has_content = false;; has_content = true) {
-        lexer->mark_end(lexer);
-        if (lexer->eof(lexer)) {
-            return false;
-        }
-        switch (lexer->lookahead) {
-            case '`':
-                return has_content;
-            case '$':
-                advance(lexer);
-                if (lexer->lookahead == '{') {
-                    return has_content;
-                }
-                break;
-            case '\\':
-                return has_content;
-            default:
-                advance(lexer);
-        }
-    }
 }
 
 typedef enum {
@@ -401,6 +379,8 @@ typedef enum {
     LINE_BREAK_AFTER_ACCESSOR_WORD,
     // After the source of an import or re-export: only the `with` of its attributes continues it.
     LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES,
+    // After a local export clause: only the `from` of a re-export continues it.
+    LINE_BREAK_BEFORE_FROM_CLAUSE,
     LINE_BREAK_AFTER_AWAIT_KEYWORD,
     LINE_BREAK_AWAIT_OPERAND,
 } LineBreakRule;
@@ -634,6 +614,8 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
             }
         case LINE_BREAK_AFTER_MODIFIER_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
+        case LINE_BREAK_BEFORE_FROM_CLAUSE:
+            return before_slash || !scan_word(lexer, "from", true);
         case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
             if (before_slash || !scan_word(lexer, "with", true)) return true;
             return scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT || lexer->lookahead != '{';
@@ -909,95 +891,6 @@ static bool scan_type_parameter_prefix(TSLexer *lexer) {
     return lexer->lookahead == '>' || lexer->lookahead == ',' || lexer->lookahead == '=' || lexer->lookahead == ':';
 }
 
-static inline bool is_hex_digit(int32_t c) { return is_ascii_digit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'); }
-
-// Consumes the `&` at the lookahead and the characters after it that could continue an html_character_reference, and
-// returns whether they form a complete one, i.e. whether the grammar's html_character_reference matches here.
-static bool scan_character_reference(TSLexer *lexer) {
-    advance(lexer);
-    unsigned length = 0;
-    if (lexer->lookahead == '#') {
-        advance(lexer);
-        bool hex = lexer->lookahead == 'x' || lexer->lookahead == 'X';
-        if (hex) {
-            advance(lexer);
-        }
-        unsigned max_length = hex ? 6 : 5;
-        while (length < max_length && (hex ? is_hex_digit(lexer->lookahead) : is_ascii_digit(lexer->lookahead))) {
-            advance(lexer);
-            length++;
-        }
-    } else {
-        while (length < 30 && is_ascii_letter(lexer->lookahead)) {
-            advance(lexer);
-            length++;
-        }
-    }
-    return length > 0 && lexer->lookahead == ';';
-}
-
-static bool scan_jsx_text(TSLexer *lexer) {
-    // saw_text will be true if we see any non-whitespace content, or any whitespace content that is not a newline and
-    // does not immediately follow a newline.
-    bool saw_text = false;
-    // at_newline will be true if we are currently at a newline, or if we are at whitespace that is not a newline but
-    // immediately follows a newline.
-    bool at_newline = false;
-
-    lexer->result_symbol = JSX_TEXT;
-    for (;;) {
-        lexer->mark_end(lexer);
-        if (lexer->eof(lexer)) {
-            return saw_text;
-        }
-        switch (lexer->lookahead) {
-            case '<':
-            case '>':
-            case '{':
-            case '}':
-                return saw_text;
-            case '&':
-                // A complete character reference ends the text; any other `&` is a literal character, as in HTML.
-                if (scan_character_reference(lexer)) {
-                    return saw_text;
-                }
-                saw_text = true;
-                at_newline = false;
-                continue;
-            default:
-                break;
-        }
-
-        // Only ASCII whitespace counts, as in Babel's JSX whitespace trimming; other spaces, such as U+00A0, are text.
-        bool is_wspace = (lexer->lookahead >= '\t' && lexer->lookahead <= '\r') || lexer->lookahead == ' ';
-        // Babel splits JSX text into lines at CR and LF only, and keeps U+2028 and U+2029 as text.
-        if (lexer->lookahead == '\n' || lexer->lookahead == '\r') {
-            at_newline = true;
-        } else {
-            // If at_newline is already true, and we see some whitespace, then it must stay true.
-            // Otherwise, it should be false.
-            //
-            // See the table below to determine the logic for computing `saw_text`.
-            //
-            // |------------------------------------|
-            // | at_newline | is_wspace | saw_text  |
-            // |------------|-----------|-----------|
-            // | false (0)  | false (0) | true  (1) |
-            // | false (0)  | true  (1) | true  (1) |
-            // | true  (1)  | false (0) | true  (1) |
-            // | true  (1)  | true  (1) | false (0) |
-            // |------------------------------------|
-
-            at_newline &= is_wspace;
-            if (!at_newline) {
-                saw_text = true;
-            }
-        }
-
-        advance(lexer);
-    }
-}
-
 // The reserved words that TypeScript does not read as the start of an expression: after type arguments, they end the
 // type arguments like a token that cannot start an expression, while `in`, `instanceof`, `as`, and `satisfies` end them
 // as binary operators.
@@ -1147,13 +1040,6 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
         }
     }
     return before_expression;
-}
-
-static int32_t hex_digit_value(int32_t character) {
-    if (character >= '0' && character <= '9') return character - '0';
-    if (character >= 'a' && character <= 'f') return character - 'a' + 10;
-    if (character >= 'A' && character <= 'F') return character - 'A' + 10;
-    return -1;
 }
 
 static int32_t scan_identifier_character(TSLexer *lexer) {
@@ -1355,10 +1241,9 @@ static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_
             if (braced) advance(lexer);
             character = 0;
             unsigned digits = 0;
-            while (is_hex_digit(lexer->lookahead) && (braced || digits < 4)) {
-                unsigned digit = is_ascii_digit(lexer->lookahead) ? lexer->lookahead - '0' :
-                    (lexer->lookahead >= 'a' ? lexer->lookahead - 'a' : lexer->lookahead - 'A') + 10;
-                character = character > 0x7F ? 0x80 : character * 16 + digit;
+            int digit;
+            while ((digit = hex_digit_value(lexer->lookahead)) >= 0 && (braced || digits < 4)) {
+                character = character > 0x7F ? 0x80 : character * 16 + (unsigned)digit;
                 advance(lexer);
                 digits++;
             }
@@ -2125,13 +2010,13 @@ static bool scan_type_identifier_escape(TSLexer *lexer) {
     advance(lexer);
     if (lexer->lookahead == '{') {
         advance(lexer);
-        if (!is_hex_digit(lexer->lookahead)) return false;
-        do advance(lexer); while (is_hex_digit(lexer->lookahead));
+        if (hex_digit_value(lexer->lookahead) < 0) return false;
+        do advance(lexer); while (hex_digit_value(lexer->lookahead) >= 0);
         if (lexer->lookahead != '}') return false;
         advance(lexer);
     } else {
         for (unsigned digits = 0; digits < 4; digits++) {
-            if (!is_hex_digit(lexer->lookahead)) return false;
+            if (hex_digit_value(lexer->lookahead) < 0) return false;
             advance(lexer);
         }
     }
@@ -3374,7 +3259,7 @@ static bool scan_type_numeric_operand(TSLexer *lexer) {
                         lexer->lookahead == 'o' || lexer->lookahead == 'O')) {
         int32_t radix = lexer->lookahead;
         advance(lexer);
-        if ((radix == 'x' || radix == 'X') ? !is_hex_digit(lexer->lookahead) :
+        if ((radix == 'x' || radix == 'X') ? hex_digit_value(lexer->lookahead) < 0 :
             !(lexer->lookahead >= '0' && lexer->lookahead <= (radix == 'b' || radix == 'B' ? '1' : '7'))) return false;
         while (is_identifier_part(lexer->lookahead)) advance(lexer);
         return true;
@@ -4312,7 +4197,10 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (valid_symbols[AUTOMATIC_SEMICOLON]) {
             return false;
         }
-        return scan_template_chars(lexer);
+        if (valid_symbols[TEMPLATE_ESCAPE_SEQUENCE] && lexer->lookahead == '\\') {
+            return scan_template_escape(lexer, TEMPLATE_ESCAPE_SEQUENCE);
+        }
+        return scan_template_chars(lexer, TEMPLATE_CHARS);
     }
 
     if (valid_symbols[EXPORT_DEFAULT] ||
@@ -4358,7 +4246,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_type_arguments_end(lexer, valid_symbols);
     }
 
-    if (valid_symbols[JSX_TEXT] && scan_jsx_text(lexer)) {
+    if (valid_symbols[JSX_TEXT] && scan_jsx_text(lexer, JSX_TEXT)) {
         return true;
     }
 
@@ -4425,6 +4313,8 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             rule = LINE_BREAK_AFTER_FIELD_NAME;
         } else if (valid_symbols[LINE_BREAK_BEFORE_ATTRIBUTES]) {
             rule = LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES;
+        } else if (valid_symbols[LINE_BREAK_BEFORE_FROM]) {
+            rule = LINE_BREAK_BEFORE_FROM_CLAUSE;
         }
         bool before_line_break = false;
         bool ret = scan_automatic_semicolon(lexer, valid_symbols, !valid_symbols[LOGICAL_OR], false, rule, &scanned_content, &before_line_break, false);

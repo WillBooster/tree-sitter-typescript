@@ -2,9 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-for file in grammar.js LICENSE; do
+for file in grammar.js LICENSE src/literal.h; do
   source="node_modules/@willbooster/tree-sitter-javascript/$file"
-  target="javascript/$file"
+  target="javascript/${file##*/}"
   if [[ ${1:-} == --check ]]; then
     cmp "$source" "$target"
   elif ! cmp -s "$source" "$target"; then

@@ -15,6 +15,7 @@ export async function loadCurrentWasmBuild(grammar: string): Promise<Language> {
     'common/scanner.h',
     'common/functionContext.h',
     'common/typeScriptKeywords.h',
+    'javascript/literal.h',
     `${grammar}/grammar.js`,
     `${grammar}/src/parser.c`,
     `${grammar}/src/scanner.c`,
