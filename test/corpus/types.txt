@@ -3714,3 +3714,33 @@ const following = 1;
           name: (type_identifier))))
     body: (class_body))
   (lexical_declaration (variable_declarator name: (identifier) value: (number))))
+
+==================================
+Export as a property name in object types
+==================================
+
+type A = { export: boolean; import?: B };
+interface C { export(): void }
+
+---
+
+(program
+  (type_alias_declaration
+    (type_identifier)
+    (object_type
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (predefined_type)))
+      (property_signature
+        (property_identifier)
+        (type_annotation
+          (type_identifier)))))
+  (interface_declaration
+    (type_identifier)
+    (interface_body
+      (method_signature
+        (property_identifier)
+        (formal_parameters)
+        (type_annotation
+          (predefined_type))))))

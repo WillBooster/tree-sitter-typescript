@@ -3207,10 +3207,6 @@
           "named": true
         },
         {
-          "type": "export_statement",
-          "named": true
-        },
-        {
           "type": "index_signature",
           "named": true
         },
@@ -4019,10 +4015,6 @@
         },
         {
           "type": "construct_signature",
-          "named": true
-        },
-        {
-          "type": "export_statement",
           "named": true
         },
         {

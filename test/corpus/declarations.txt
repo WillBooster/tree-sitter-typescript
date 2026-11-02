@@ -614,47 +614,6 @@ bar satisfies number[]
         (string_fragment)))))
 
 =================================
-Ambient export function declarations
-=================================
-
-export interface Foo {
-  export function OrderedMap<K, V>(iter: Iterable.Keyed<K, V>): OrderedMap<K, V>;
-}
-
----
-
-(program
-  (export_statement
-    (interface_declaration
-      (type_identifier)
-      (interface_body
-        (export_statement
-          (function_signature
-            (identifier)
-            (type_parameters
-              (type_parameter
-                (type_identifier))
-              (type_parameter
-                (type_identifier)))
-            (formal_parameters
-              (required_parameter
-                (identifier)
-                (type_annotation
-                  (generic_type
-                    (nested_type_identifier
-                      (identifier)
-                      (type_identifier))
-                    (type_arguments
-                      (type_identifier)
-                      (type_identifier))))))
-            (type_annotation
-              (generic_type
-                (type_identifier)
-                (type_arguments
-                  (type_identifier)
-                  (type_identifier))))))))))
-
-=================================
 Ambient type alias declarations in namespaces
 =================================
 
