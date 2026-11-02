@@ -14,7 +14,7 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The supported [willbooster-tree-sitter] runtime is version 15.0.0 or later within majors 15 and 16.
+//! The supported [willbooster-tree-sitter] runtime is version 16.0.2 or later within 16.x.
 //!
 //! [`Parser`]: https://docs.rs/willbooster-tree-sitter/16.0.2/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/

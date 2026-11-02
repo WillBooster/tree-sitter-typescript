@@ -72,7 +72,7 @@
     "wrangler": "4.152.0"
   },
   "peerDependencies": {
-    "@willbooster/web-tree-sitter": "^15.0.0 || ^16.0.0"
+    "@willbooster/web-tree-sitter": "^16.0.2"
   },
   "peerDependenciesMeta": {
     "@willbooster/web-tree-sitter": {
