@@ -44,8 +44,9 @@ the trees that error recovery produces may change; such changes are released as 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 16.0.2 or later within 16.x; earlier versions can grow Wasm memory quadratically on ambiguous input. Its CLI
-generates them with its own language ABI number, which the upstream tree-sitter runtime rejects.
+for `.tsx` files. The supported runtime is WillBooster version 16.0.2 or later within 16.x; earlier versions can grow
+Wasm memory quadratically on ambiguous input. The runtime's CLI generates the Wasm files with its own language ABI
+number, which the upstream tree-sitter runtime rejects.
 
 In Node.js and Bun:
 
