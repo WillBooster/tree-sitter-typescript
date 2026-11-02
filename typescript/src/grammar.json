@@ -34665,10 +34665,6 @@
                       "members": [
                         {
                           "type": "SYMBOL",
-                          "name": "export_statement"
-                        },
-                        {
-                          "type": "SYMBOL",
                           "name": "property_signature"
                         },
                         {
@@ -34714,10 +34710,6 @@
                           {
                             "type": "CHOICE",
                             "members": [
-                              {
-                                "type": "SYMBOL",
-                                "name": "export_statement"
-                              },
                               {
                                 "type": "SYMBOL",
                                 "name": "property_signature"

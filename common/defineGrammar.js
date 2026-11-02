@@ -2571,7 +2571,6 @@ module.exports = function defineGrammar(dialect) {
               sepBy1(
                 choice(',', ';', $._type_member_semicolon),
                 choice(
-                  $.export_statement,
                   $.property_signature,
                   $.call_signature,
                   $.construct_signature,
