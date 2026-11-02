@@ -507,10 +507,10 @@ for (const dialect of ['typescript', 'tsx']) {
         language,
         '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
           '(required_parameter pattern: (array_pattern) @arrayBinding) (jsdoc_unknown_type) @unknownType ((type_identifier) @constType (#eq? @constType "const")) (as_expression "const" @wholeConst) ' +
-          '(flow_maybe_type) @flowMaybe (flow_maybe_type (type) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (type) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-          '(unique_type) @uniqueOperator (unique_type "unique" @uniqueKeyword type: (type) @uniqueOperand) (predefined_type "unique symbol") @uniqueSymbol (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (primary_type) @nullableOperand)' +
-          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (unique_type (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression (type) @assertedType) (array_type (primary_type) @arrayOperand)' +
-          ' (lookup_type (primary_type) @lookupOperand "[") (conditional_type left: (type) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
+          '(flow_maybe_type) @flowMaybe (flow_maybe_type (_) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (_) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
+          '(unique_type) @uniqueOperator (unique_type "unique" @uniqueKeyword type: (_) @uniqueOperand) (predefined_type "unique symbol") @uniqueSymbol (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (_) @nullableOperand)' +
+          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (unique_type (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression "as" . (_) @assertedType) (as_expression "const" @assertedType) (array_type (_) @arrayOperand)' +
+          ' (lookup_type (_) @lookupOperand "[") (conditional_type left: (_) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
           (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
       );
       const sources = [
@@ -776,6 +776,7 @@ function checkRanges(
   const actual: Record<string, Ranges> = Object.fromEntries(Object.keys(expected).map((name) => [name, []]));
   for (const { name, node } of query.captures(tree.rootNode)) {
     if (
+      (name !== 'comment' && node.type === 'comment') ||
       (name === 'union' && node.parent?.type === 'union_type') ||
       (name === 'intersection' && node.parent?.type === 'intersection_type')
     )
