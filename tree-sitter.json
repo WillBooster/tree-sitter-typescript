@@ -6,7 +6,12 @@
       "camelcase": "TypeScript",
       "scope": "source.ts",
       "path": "typescript",
-      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
+      "external-files": [
+        "common/scanner.h",
+        "common/typeScriptKeywords.h",
+        "common/functionContext.h",
+        "javascript/literal.h"
+      ],
       "file-types": ["ts"],
       "injection-regex": "^(ts|typescript)$"
     },
@@ -15,7 +20,12 @@
       "camelcase": "TSX",
       "scope": "source.tsx",
       "path": "tsx",
-      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
+      "external-files": [
+        "common/scanner.h",
+        "common/typeScriptKeywords.h",
+        "common/functionContext.h",
+        "javascript/literal.h"
+      ],
       "file-types": ["tsx"],
       "injection-regex": "^(ts|typescript)$"
     },
@@ -24,7 +34,12 @@
       "camelcase": "Flow",
       "scope": "source.js.flow",
       "path": "tsx",
-      "external-files": ["common/scanner.h", "common/typeScriptKeywords.h", "common/functionContext.h"],
+      "external-files": [
+        "common/scanner.h",
+        "common/typeScriptKeywords.h",
+        "common/functionContext.h",
+        "javascript/literal.h"
+      ],
       "file-types": ["js"],
       "content-regex": "@flow"
     }

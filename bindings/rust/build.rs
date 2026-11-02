@@ -30,6 +30,7 @@ fn main() {
     for header in ["scanner.h", "typeScriptKeywords.h", "functionContext.h"] {
         println!("cargo:rerun-if-changed=common/{header}");
     }
+    println!("cargo:rerun-if-changed=javascript/literal.h");
 
     c_config.compile("tree-sitter-typescript");
 }

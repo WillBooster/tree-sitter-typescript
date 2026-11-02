@@ -22,6 +22,7 @@ include = [
   "/tree-sitter.json",
   "/javascript/grammar.js",
   "/javascript/LICENSE",
+  "/javascript/literal.h",
   "/LICENSE",
 ]
 

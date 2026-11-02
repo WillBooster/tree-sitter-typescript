@@ -1778,7 +1778,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       parser.delete();
     }
   });
-  test.each(['unknown', 'never', 'unique'])('retains %s nested type-query recovery across operand variants', (name) => {
+  test.each(['unknown', 'never', 'unique'])('rejects %s nested type queries without operands', (name) => {
     const parser = new Parser().setLanguage(language);
     try {
       for (const optional of ['', '?']) {
@@ -1799,6 +1799,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             }
             function check(current: Tree, text: string, missing: boolean): void {
               expect(current.rootNode.hasError).toBe(missing);
+              // A parenthesized parameter must be an assignment target, so an unfinished type query is no parameter.
+              if (missing) return;
               const alias = current.rootNode.descendantsOfType('type_alias_declaration')[0]!;
               expect(alias.childForFieldName('name')!.text).toBe('F');
               const value = alias.childForFieldName('value')!;
@@ -1808,12 +1810,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               expect(value.endIndex).toBe(text.length - 1);
               const parameters = value.childForFieldName('parameters')!;
               const parameter = parameters.descendantsOfType(
-                missing ? 'required_parameter' : optional ? 'optional_parameter' : 'required_parameter'
+                optional ? 'optional_parameter' : 'required_parameter'
               )[0]!;
               const pattern = parameter.childForFieldName('pattern')!;
-              const start = missing ? text.indexOf(wrapper + 'typeof') : text.indexOf(name);
-              const end = missing ? text.indexOf(') =>') : start + name.length;
-              expect(pattern.type).toBe(missing ? 'parenthesized_expression' : 'identifier');
+              const start = text.indexOf(name);
+              const end = start + name.length;
+              expect(pattern.type).toBe('identifier');
               expect(pattern.text).toBe(text.slice(start, end));
               expect(pattern.startIndex).toBe(start);
               expect(pattern.endIndex).toBe(end);
@@ -2076,7 +2078,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     }
   });
   test.each(['unknown', 'never', 'unique'])(
-    'retains %s initializer ownership across nested-type arrow variants',
+    'keeps %s initializer ownership across nested-type arrow variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
       const valueQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
@@ -2105,6 +2107,8 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
         function check(current: Tree, text: string, error: boolean): void {
           expect(current.rootNode.hasError).toBe(error);
+          // A parenthesized parameter must be an assignment target, so `((x: number))` is no recovered parameter.
+          if (text.includes('((x: number))')) return;
           const start = text.indexOf('(');
           expect(
             valueQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])

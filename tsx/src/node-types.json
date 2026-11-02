@@ -178,6 +178,10 @@
         "named": true
       },
       {
+        "type": "as_expression",
+        "named": true
+      },
+      {
         "type": "call_expression",
         "named": true
       },
@@ -243,6 +247,10 @@
       },
       {
         "type": "regex",
+        "named": true
+      },
+      {
+        "type": "satisfies_expression",
         "named": true
       },
       {
@@ -5129,6 +5137,10 @@
       "multiple": true,
       "required": false,
       "types": [
+        {
+          "type": "escape_sequence",
+          "named": true
+        },
         {
           "type": "string_fragment",
           "named": true

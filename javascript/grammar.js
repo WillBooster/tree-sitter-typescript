@@ -7,6 +7,8 @@
 
 // @ts-check
 
+/** @import {GrammarSymbols, RuleOrLiteral} from '@willbooster/web-tree-sitter/dsl' */
+
 // The CLI injects the DSL before loading this CommonJS grammar.
 const { grammar, alias, choice, field, optional, prec, repeat, repeat1, seq, sym, token, reserved } =
   /** @type {typeof globalThis & import('@willbooster/web-tree-sitter/dsl').DSL} */ (globalThis);
@@ -51,9 +53,9 @@ const RESERVED_WORDS = [
 ];
 const NAMED_RESERVED_WORDS = new Set(['this', 'super', 'true', 'false', 'null']);
 
-// Words that are keywords only in some positions and identifiers elsewhere.
 const MEMBER_MODIFIERS = ['get', 'set', 'static'];
 const CONTEXTUAL_KEYWORDS = ['async', 'await', 'let', 'of', 'using'];
+const CLASSIC_ASSIGNMENT_OPERATORS = ['+=', '-=', '*=', '/=', '%=', '^=', '&=', '|=', '>>=', '>>>=', '<<=', '**='];
 
 // oxlint-disable-next-line unicorn/prefer-module -- This package is CommonJS, so tree-sitter loads grammar.js as CommonJS.
 module.exports = grammar({
@@ -76,8 +78,9 @@ module.exports = grammar({
     // _arrow_function_block_continuation, since the arrow function may be, e.g., an argument.
     sym('_arrow_function_block_end'),
     sym('_arrow_function_block_continuation'),
-    // These never-emitted flags select LineBreakRule in src/scanner.c. Keep them alternatives to what follows:
-    // leading optional flags duplicate parse states.
+    // Bindings emit a boundary where the scanner decides from what follows whether a line break ends the declaration;
+    // the other flags only select a scanner line-break rule.
+    // Keep those flags alternatives to what follows: leading optional flags duplicate parse states.
     sym('_line_break_ends_statement'),
     sym('_line_break_after_binding'),
     sym('_line_break_after_field'),
@@ -99,7 +102,8 @@ module.exports = grammar({
     // Emitted zero-width decision preserves direct operands and identifier statements before yield.
     sym('_await_yield_identifier_start'),
     sym('_await_yield_identifier_context'),
-    // Emitted zero-width after a postfix update; carries the pending statement boundary across reuse.
+    // Emitted zero-width after a postfix update; records whether a line break before `(`, `[`, or a template ends the
+    // statement, for the automatic semicolon that follows.
     sym('_postfix_update_end'),
     sym('_await_keyword'),
     sym('_let'),
@@ -126,6 +130,11 @@ module.exports = grammar({
     sym('_async_function_signature_start'),
     sym('_call_arguments_context'),
     sym('_async_keyword'),
+    sym('_line_break_before_from'),
+    sym('_class_heritage_end'),
+    sym('_class_heritage_yield_identifier'),
+    sym('_class_heritage_await_identifier'),
+    sym('_template_escape_sequence'),
   ],
 
   extras: ($) => [$.comment, sym('html_comment'), /[\s\p{Zs}\uFEFF\u2028\u2029\u2060\u200B]/u],
@@ -141,10 +150,23 @@ module.exports = grammar({
     $.declaration,
     $._decorated_export_declaration,
     $.expression,
+    $._binary_operand,
+    $._unary_operand,
     $.primary_expression,
+    $._class_heritage_expression,
+    $._class_heritage_primary,
     $.pattern,
+    $._non_rest_pattern,
+    $._rest_pattern,
     $._constructor,
     $._constructor_chain_base,
+    $._assignment_call_callee,
+    $._call_callee,
+    $._assignment_call_primary,
+    $._simple_target_expression,
+    $._simple_target_primary,
+    $._call_target_expression,
+    $._call_target_primary,
   ],
 
   inline: ($) => [
@@ -154,6 +176,7 @@ module.exports = grammar({
     $._semicolon,
     $._identifier,
     $._reserved_identifier,
+    $._expression_identifier,
     $._jsx_attribute,
     $._jsx_element_name,
     $._jsx_child,
@@ -162,6 +185,7 @@ module.exports = grammar({
     $._jsx_attribute_value,
     $._jsx_identifier,
     $._lhs_expression,
+    $._object_rest_target,
   ],
 
   precedences: ($) => [
@@ -188,7 +212,7 @@ module.exports = grammar({
       $.arrow_function,
     ],
     ['assign', $.primary_expression],
-    ['member', 'template_call', 'new', 'call', $.expression],
+    ['member', 'template_call', 'new', 'call', $.expression, $._binary_operand, $._unary_operand],
     ['declaration', 'literal'],
     [$.primary_expression, $.statement_block, 'object'],
     // A `{` that may begin both a block and an object starts a statement or an arrow function's body, where ECMAScript
@@ -197,27 +221,32 @@ module.exports = grammar({
     [$.meta_property, $.import],
     [$.import_statement, $.import],
     [$.export_statement, $.primary_expression],
-    [$.lexical_declaration, $.primary_expression],
-    [$.for_lexical_declaration, $.primary_expression],
+    [$.lexical_declaration, $._primary_atom],
+    [$.for_lexical_declaration, $._primary_atom],
   ],
 
   conflicts: ($) => [
+    [$._primary_atom, $._simple_target_primary],
+    [$._simple_target_primary, $._non_rest_pattern],
+    [$._primary_atom, $._simple_target_primary, $._non_rest_pattern],
+    [$._call_callee, $.call_expression],
+    [$._class_heritage_expression, $._class_heritage_call],
+    [$.for_in_clause, $._primary_atom],
+    [$._primary_atom, $.rest_pattern],
+    [$._primary_atom, $._object_rest_pattern],
+    [$._primary_atom, $._non_rest_pattern],
+    [$.arrow_function, $._primary_atom],
+    [$._primary_atom, $.await_expression],
+    [$.call_expression, $._constructor_import],
+    [$.primary_expression, $._assignment_call_primary],
     [$._local_export_specifier, $._module_export_name],
-    [$.primary_expression, $._property_name],
-    [$.primary_expression, $.await_expression],
-    [$.primary_expression, $.await_expression, $._property_name],
-    [$.primary_expression, $.arrow_function],
-    [$.primary_expression, $.arrow_function, $._property_name],
-    [$.primary_expression, $.method_definition],
     [$.primary_expression, $.rest_pattern],
-    [$.primary_expression, $.pattern],
+    [$.primary_expression, $._object_rest_pattern],
+    [$.primary_expression, $._non_rest_pattern],
     [$.primary_expression, $.for_in_clause],
     [$.array, $.array_pattern],
     [$.object, $.object_pattern],
-    [$.assignment_expression, $.pattern],
-    [$.assignment_expression, $.object_assignment_pattern],
-    [$.computed_property_name, $.array],
-    [$.binary_expression, $._initializer],
+    [$.assignment_expression, $._non_rest_pattern],
   ],
 
   word: ($) => $.identifier,
@@ -231,24 +260,15 @@ module.exports = grammar({
 
     hash_bang_line: () => /#![^\n\r\u2028\u2029]*/,
 
-    //
-    // Export declarations
-    //
-
     export_statement: ($) =>
       choice(
         field('declaration', alias($._decorated_export_declaration, $.declaration)),
         seq(
           'export',
           choice(
-            seq(
-              choice('*', $.namespace_export, $.export_clause),
-              $._from_clause,
-              optional(choice($.import_attribute, sym('_line_break_before_attributes')))
-            ),
-            alias($._local_export_clause, $.export_clause)
-          ),
-          $._semicolon
+            seq(choice('*', $.namespace_export, $.export_clause), $._from_clause, $._module_statement_end),
+            seq(alias($._local_export_clause, $.export_clause), optional(sym('_line_break_before_from')), $._semicolon)
+          )
         ),
         seq(
           'export',
@@ -314,19 +334,10 @@ module.exports = grammar({
         $.using_declaration
       ),
 
-    //
-    // Import declarations
-    //
-
     import: () => token('import'),
 
     import_statement: ($) =>
-      seq(
-        'import',
-        choice(seq($.import_clause, $._from_clause), field('source', $.string)),
-        optional(choice($.import_attribute, sym('_line_break_before_attributes'))),
-        $._semicolon
-      ),
+      seq('import', choice(seq($.import_clause, $._from_clause), field('source', $.string)), $._module_statement_end),
 
     import_clause: ($) =>
       choice(
@@ -347,11 +358,13 @@ module.exports = grammar({
         seq(field('name', $._module_export_name), 'as', field('alias', $.identifier))
       ),
 
-    import_attribute: ($) => seq('with', $.object),
+    _module_statement_end: ($) =>
+      choice(
+        seq($.import_attribute, choice($._semicolon, sym('_line_break_ends_statement'))),
+        seq(optional(sym('_line_break_before_attributes')), $._semicolon)
+      ),
 
-    //
-    // Statements
-    //
+    import_attribute: ($) => seq('with', $.object),
 
     statement: ($) =>
       choice(
@@ -412,16 +425,28 @@ module.exports = grammar({
     variable_declarator: ($) =>
       seq(
         field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
-        optional(choice($._initializer, sym('_line_break_after_binding')))
+        choice($._initializer, sym('_line_break_after_binding'))
       ),
 
     _lexical_variable_declarator: ($) =>
       seq(
         field('name', choice(reserved('lexical', $.identifier), alias('of', $.identifier), $._destructuring_pattern)),
-        optional(choice($._initializer, sym('_line_break_after_binding')))
+        choice($._initializer, sym('_line_break_after_binding'))
       ),
 
-    statement_block: ($) => prec.right(seq('{', repeat($._statement), '}')),
+    _for_variable_declarator: ($) =>
+      seq(
+        field('name', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
+        optional($._initializer)
+      ),
+
+    _for_lexical_variable_declarator: ($) =>
+      seq(
+        field('name', choice(reserved('lexical', $.identifier), alias('of', $.identifier), $._destructuring_pattern)),
+        optional($._initializer)
+      ),
+
+    statement_block: ($) => prec.right(seq(token(prec(1, '{')), repeat($._statement), '}')),
 
     else_clause: ($) => seq('else', $._single_statement),
 
@@ -460,16 +485,16 @@ module.exports = grammar({
     _for_condition: ($) => field('condition', choice(seq($._expressions, ';'), $.empty_statement)),
 
     // ECMAScript inserts no semicolon inside a for header, so these declarations end only with `;`. Accepting an
-    // automatic semicolon there made `for (let x\n of y)` ambiguous until `of`, and an incremental reparse could
-    // reuse a declaration built when that ambiguity was resolved differently.
+    // automatic semicolon there would make `for (let x\n of y)` ambiguous until `of`.
     for_lexical_declaration: ($) =>
       seq(
         field('kind', choice('let', 'const')),
-        commaSep1(alias($._lexical_variable_declarator, $.variable_declarator)),
+        commaSep1(alias($._for_lexical_variable_declarator, $.variable_declarator)),
         ';'
       ),
 
-    for_variable_declaration: ($) => seq('var', commaSep1($.variable_declarator), ';'),
+    for_variable_declaration: ($) =>
+      seq('var', commaSep1(alias($._for_variable_declarator, $.variable_declarator)), ';'),
 
     _for_using_declaration: ($) =>
       seq(
@@ -494,7 +519,14 @@ module.exports = grammar({
         choice(
           seq(
             choice(
-              field('left', choice($._lhs_expression, $.parenthesized_expression)),
+              field(
+                'left',
+                choice(
+                  $._lhs_expression,
+                  alias($._parenthesized_simple_target, $.parenthesized_expression),
+                  alias($._parenthesized_call_target, $.parenthesized_expression)
+                )
+              ),
               seq(
                 field('kind', 'var'),
                 field('left', choice($.identifier, alias('of', $.identifier), $._destructuring_pattern)),
@@ -586,10 +618,6 @@ module.exports = grammar({
         field('body', $._single_statement)
       ),
 
-    //
-    // Statement components
-    //
-
     switch_body: ($) => seq('{', repeat(choice($.switch_case, $.switch_default)), '}'),
 
     switch_case: ($) => seq('case', field('value', $._expressions), ':', field('body', repeat($._statement))),
@@ -607,9 +635,6 @@ module.exports = grammar({
 
     parenthesized_expression: ($) => seq('(', $._expressions, ')'),
 
-    //
-    // Expressions
-    //
     _expressions: ($) => choice($.expression, $.sequence_expression),
 
     expression: ($) =>
@@ -625,35 +650,12 @@ module.exports = grammar({
         $.yield_expression
       ),
 
-    primary_expression: ($) =>
-      choice(
-        $._jsx_element,
-        $.parenthesized_expression,
-        $._identifier,
-        alias(sym('_await_yield_identifier'), $.identifier),
-        aliasWithAsyncKeyword($._reserved_identifier, $.identifier),
-        $.this,
-        $.super,
-        $.number,
-        $.string,
-        $.template_string,
-        $.regex,
-        $.true,
-        $.false,
-        $.null,
-        $.object,
-        $.array,
-        $.function_expression,
-        $.generator_function,
-        $.class,
-        $.meta_property,
-        $.subscript_expression,
-        $.member_expression,
-        $.call_expression,
-        $.new_expression,
-        alias($._argumentless_new_expression, $.new_expression),
-        $.arrow_function
-      ),
+    _binary_operand: ($) =>
+      choice($.primary_expression, $.await_expression, $.unary_expression, $.update_expression, $.binary_expression),
+
+    _unary_operand: ($) => choice($.primary_expression, $.await_expression, $.unary_expression, $.update_expression),
+
+    primary_expression: ($) => choice(leftHandSideExpression($), $.arrow_function),
 
     yield_expression: ($) =>
       prec.right(
@@ -685,29 +687,28 @@ module.exports = grammar({
         )
       ),
 
-    object_pattern: ($) =>
-      prec(
+    object_pattern: ($) => {
+      const property = choice(
+        $.pair_pattern,
+        $.object_assignment_pattern,
+        aliasWithAsyncKeyword(
+          choice($.identifier, $._reserved_identifier),
+          sym('shorthand_property_identifier_pattern')
+        )
+      );
+      return prec(
         'object',
         seq(
           '{',
-          commaSep(
-            optional(
-              choice(
-                $.pair_pattern,
-                $.rest_pattern,
-                $.object_assignment_pattern,
-                aliasWithAsyncKeyword(
-                  choice($.identifier, $._reserved_identifier),
-                  sym('shorthand_property_identifier_pattern')
-                )
-              )
-            )
-          ),
+          repeat(seq(optional(property), ',')),
+          optional(choice(property, alias($._object_rest_pattern, $.rest_pattern))),
           '}'
         )
-      ),
+      );
+    },
 
-    assignment_pattern: ($) => seq(field('left', $.pattern), '=', field('right', $.expression)),
+    assignment_pattern: ($) =>
+      seq(field('left', alias($._non_rest_pattern, $.pattern)), '=', field('right', $.expression)),
 
     object_assignment_pattern: ($) =>
       seq(
@@ -727,16 +728,19 @@ module.exports = grammar({
 
     array: ($) => seq('[', commaSep(optional(choice($.expression, $.spread_element))), ']'),
 
-    array_pattern: ($) => seq('[', commaSep(optional(choice($.pattern, $.assignment_pattern))), ']'),
+    array_pattern: ($) =>
+      seq(
+        '[',
+        repeat(seq(optional(choice(alias($._non_rest_pattern, $.pattern), $.assignment_pattern)), ',')),
+        optional(choice($.pattern, $.assignment_pattern)),
+        ']'
+      ),
 
     _jsx_element: ($) => choice($.jsx_element, $.jsx_self_closing_element),
 
     jsx_element: ($) =>
       seq(field('open_tag', $.jsx_opening_element), repeat($._jsx_child), field('close_tag', $.jsx_closing_element)),
 
-    // An entity can be named, numeric (decimal), or numeric (hexadecimal). The
-    // longest entity name is 29 characters long, and the HTML spec says that
-    // no more will ever be added.
     html_character_reference: () => /&(#([xX][0-9a-fA-F]{1,6}|[0-9]{1,5})|[A-Za-z]{1,30});/,
 
     jsx_expression: ($) => seq('{', optional(choice($.expression, $.sequence_expression, $.spread_element)), '}'),
@@ -808,13 +812,8 @@ module.exports = grammar({
         )
       ),
 
-    // Workaround to https://github.com/tree-sitter/tree-sitter/issues/1156
-    // We give names to the token() constructs containing a regexp
-    // so as to obtain a node in the CST.
-    //
     unescaped_double_jsx_string_fragment: () => token.immediate(prec(1, /([^"&]|&[^#A-Za-z"&])+/)),
 
-    // same here
     unescaped_single_jsx_string_fragment: () => token.immediate(prec(1, /([^'&]|&[^#A-Za-z'&])+/)),
 
     // An `&` that does not start a complete html_character_reference is a literal character, as in HTML. The lexer
@@ -853,7 +852,31 @@ module.exports = grammar({
         )
       ),
 
-    class_heritage: ($) => seq('extends', $.expression),
+    class_heritage: ($) =>
+      seq('extends', alias($._class_heritage_expression, $.expression), sym('_class_heritage_end')),
+
+    _class_heritage_expression: ($) => alias($._class_heritage_primary, $.primary_expression),
+
+    _class_heritage_primary: ($) =>
+      leftHandSideExpression($, {
+        atom: $._class_heritage_atom,
+        call: alias($._class_heritage_call, $.call_expression),
+        member: alias($._class_heritage_member, $.member_expression),
+        subscript: alias($._class_heritage_subscript, $.subscript_expression),
+      }),
+
+    _class_heritage_atom: ($) => primaryAtom($, $._expression_identifier),
+
+    _class_heritage_call: ($) =>
+      callExpression(
+        $,
+        alias($._class_heritage_expression, $.expression),
+        alias($._class_heritage_primary, $.primary_expression)
+      ),
+
+    _class_heritage_member: ($) => memberExpression($, alias($._class_heritage_expression, $.expression)),
+
+    _class_heritage_subscript: ($) => subscriptExpression($, alias($._class_heritage_expression, $.expression)),
 
     function_expression: ($) =>
       prec(
@@ -957,23 +980,67 @@ module.exports = grammar({
         )
       ),
 
-    // Override
     _call_signature: ($) => field('parameters', $.formal_parameters),
-    _formal_parameter: ($) => choice($.pattern, $.assignment_pattern),
+
+    /** Ordinary, comma-permitted parameters. Overrides must exclude rest forms. */
+    _formal_parameter: ($) => choice(alias($._non_rest_pattern, $.pattern), $.assignment_pattern),
+
+    _call_callee: ($) => $.primary_expression,
 
     optional_chain: () => '?.',
 
-    call_expression: ($) =>
+    call_expression: ($) => callExpression($, alias($._call_callee, $.expression), $.primary_expression),
+
+    _primary_atom: ($) => primaryAtom($, $._reserved_identifier),
+
+    _assignment_call: ($) =>
+      prec(
+        'call',
+        seq(field('function', alias($._assignment_call_callee, $.expression)), field('arguments', $.arguments))
+      ),
+
+    _assignment_call_callee: ($) => alias($._assignment_call_primary, $.primary_expression),
+
+    _assignment_call_primary: ($) =>
       choice(
-        prec('call', seq(field('function', choice($.expression, $.import)), field('arguments', $.arguments))),
-        prec('template_call', seq(field('function', $.primary_expression), field('arguments', $.template_string))),
-        prec(
-          'member',
-          seq(
-            field('function', $.primary_expression),
-            field('optional_chain', $.optional_chain),
-            field('arguments', $.arguments)
+        $._primary_atom,
+        $.new_expression,
+        alias($._argumentless_new_expression, $.new_expression),
+        alias($._assignment_call, $.call_expression),
+        alias($._assignment_member, $.member_expression),
+        alias($._assignment_subscript, $.subscript_expression),
+        alias($._assignment_tag, $.call_expression),
+        alias($._constructor_import, $.call_expression)
+      ),
+
+    _assignment_member: ($) =>
+      prec(
+        'member',
+        seq(
+          field('object', alias($._assignment_call_callee, $.expression)),
+          '.',
+          field(
+            'property',
+            choice(
+              $.private_property_identifier,
+              reserved('properties', alias($.identifier, sym('property_identifier')))
+            )
           )
+        )
+      ),
+
+    _assignment_subscript: ($) =>
+      prec.right(
+        'member',
+        seq(field('object', alias($._assignment_call_callee, $.expression)), '[', field('index', $._expressions), ']')
+      ),
+
+    _assignment_tag: ($) =>
+      prec(
+        'template_call',
+        seq(
+          field('function', alias($._assignment_call_primary, $.primary_expression)),
+          field('arguments', alias($._tagged_template_string, $.template_string))
         )
       ),
 
@@ -1083,7 +1150,7 @@ module.exports = grammar({
         'template_call',
         seq(
           field('function', alias($._constructor_chain_base, $.primary_expression)),
-          field('arguments', $.template_string)
+          field('arguments', alias($._tagged_template_string, $.template_string))
         )
       ),
 
@@ -1108,39 +1175,15 @@ module.exports = grammar({
                 sym('_line_break_after_await')
               )
             ),
-            $.expression,
+            alias($._unary_operand, $.expression),
             sym('_await_operand_end')
           )
         )
       ),
 
-    member_expression: ($) =>
-      prec(
-        'member',
-        seq(
-          field('object', choice($.expression, $.primary_expression, $.import)),
-          choice('.', field('optional_chain', $.optional_chain)),
-          field(
-            'property',
-            choice(
-              $.private_property_identifier,
-              reserved('properties', alias($.identifier, sym('property_identifier')))
-            )
-          )
-        )
-      ),
+    member_expression: ($) => memberExpression($, alias($._call_callee, $.expression)),
 
-    subscript_expression: ($) =>
-      prec.right(
-        'member',
-        seq(
-          field('object', choice($.expression, $.primary_expression)),
-          optional(field('optional_chain', $.optional_chain)),
-          '[',
-          field('index', $._expressions),
-          ']'
-        )
-      ),
+    subscript_expression: ($) => subscriptExpression($, alias($._call_callee, $.expression)),
 
     _lhs_expression: ($) =>
       choice(
@@ -1151,10 +1194,47 @@ module.exports = grammar({
         $._destructuring_pattern
       ),
 
+    _simple_target_expression: ($) => alias($._simple_target_primary, $.primary_expression),
+
+    _simple_target_primary: ($) =>
+      choice(
+        $._identifier,
+        alias(sym('_await_yield_identifier'), $.identifier),
+        aliasWithAsyncKeyword($._reserved_identifier, $.identifier),
+        alias($._assignment_member, $.member_expression),
+        alias($._assignment_subscript, $.subscript_expression),
+        alias($._parenthesized_simple_target, $.parenthesized_expression)
+      ),
+
+    _parenthesized_simple_target: ($) => seq('(', alias($._simple_target_expression, $.expression), ')'),
+
+    _call_target_expression: ($) => alias($._call_target_primary, $.primary_expression),
+
+    _call_target_primary: ($) => $._classic_call_target,
+
+    _parenthesized_call_target: ($) => seq('(', alias($._call_target_expression, $.expression), ')'),
+
+    _classic_call_target: ($) =>
+      choice(
+        alias($._assignment_call, $.call_expression),
+        alias($._parenthesized_call_target, $.parenthesized_expression)
+      ),
+
     assignment_expression: ($) =>
       prec.right(
         'assign',
-        seq(field('left', choice($.parenthesized_expression, $._lhs_expression)), '=', field('right', $.expression))
+        seq(
+          field(
+            'left',
+            choice(
+              alias($._parenthesized_simple_target, $.parenthesized_expression),
+              $._lhs_expression,
+              $._classic_call_target
+            )
+          ),
+          '=',
+          field('right', $.expression)
+        )
       ),
 
     _augmented_assignment_lhs: ($) =>
@@ -1163,17 +1243,19 @@ module.exports = grammar({
         $.subscript_expression,
         aliasWithAsyncKeyword($._reserved_identifier, $.identifier),
         $._identifier,
-        $.parenthesized_expression
+        alias($._parenthesized_simple_target, $.parenthesized_expression)
       ),
 
     augmented_assignment_expression: ($) =>
       prec.right(
         'assign',
         seq(
-          field('left', $._augmented_assignment_lhs),
-          field(
-            'operator',
-            choice('+=', '-=', '*=', '/=', '%=', '^=', '&=', '|=', '>>=', '>>>=', '<<=', '**=', '&&=', '||=', '??=')
+          choice(
+            seq(
+              field('left', $._augmented_assignment_lhs),
+              field('operator', choice(...CLASSIC_ASSIGNMENT_OPERATORS, '&&=', '||=', '??='))
+            ),
+            seq(field('left', $._classic_call_target), field('operator', choice(...CLASSIC_ASSIGNMENT_OPERATORS)))
           ),
           field('right', $.expression)
         )
@@ -1189,7 +1271,7 @@ module.exports = grammar({
       prec.right(
         'ternary',
         seq(
-          field('condition', $.expression),
+          field('condition', alias($._binary_operand, $.expression)),
           alias(sym('_ternary_qmark'), '?'),
           field('consequence', $.expression),
           ':',
@@ -1230,9 +1312,14 @@ module.exports = grammar({
           (associativity === 'right' ? prec.right : prec.left)(
             precedence,
             seq(
-              field('left', operator === 'in' ? choice($.expression, $.private_property_identifier) : $.expression),
+              field(
+                'left',
+                operator === 'in'
+                  ? choice(alias($._binary_operand, $.expression), $.private_property_identifier)
+                  : alias($._binary_operand, $.expression)
+              ),
               field('operator', operator),
-              field('right', $.expression)
+              field('right', alias($._binary_operand, $.expression))
             )
           )
         )
@@ -1241,22 +1328,25 @@ module.exports = grammar({
     unary_expression: ($) =>
       prec.left(
         'unary_void',
-        seq(field('operator', choice('!', '~', '-', '+', 'typeof', 'void', 'delete')), field('argument', $.expression))
+        seq(
+          field('operator', choice('!', '~', '-', '+', 'typeof', 'void', 'delete')),
+          field('argument', alias($._unary_operand, $.expression))
+        )
       ),
 
     update_expression: ($) =>
       prec.left(
         choice(
-          seq(field('argument', $.expression), field('operator', choice('++', '--')), sym('_postfix_update_end')),
-          seq(field('operator', choice('++', '--')), field('argument', $.expression))
+          seq(
+            field('argument', alias($._unary_operand, $.expression)),
+            field('operator', choice('++', '--')),
+            sym('_postfix_update_end')
+          ),
+          seq(field('operator', choice('++', '--')), field('argument', alias($._unary_operand, $.expression)))
         )
       ),
 
     sequence_expression: ($) => prec.right(commaSep1($.expression)),
-
-    //
-    // Primitives
-    //
 
     string: ($) =>
       choice(
@@ -1272,13 +1362,8 @@ module.exports = grammar({
         )
       ),
 
-    // Workaround to https://github.com/tree-sitter/tree-sitter/issues/1156
-    // We give names to the token() constructs containing a regexp
-    // so as to obtain a node in the CST.
-    //
     unescaped_double_string_fragment: () => token.immediate(prec(1, /[^"\\\r\n]+/)),
 
-    // same here
     unescaped_single_string_fragment: () => token.immediate(prec(1, /[^'\\\r\n]+/)),
 
     escape_sequence: () =>
@@ -1289,23 +1374,10 @@ module.exports = grammar({
     // http://stackoverflow.com/questions/13014947/regex-to-match-a-c-style-multiline-comment/36328890#36328890
     comment: () => token(choice(seq('//', /[^\r\n\u2028\u2029]*/), seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/'))),
 
-    template_string: ($) =>
-      seq(
-        '`',
-        repeat(
-          choice(
-            alias(sym('_template_chars'), sym('string_fragment')),
-            $.escape_sequence,
-            alias($._invalid_template_escape, $.escape_sequence),
-            $.template_substitution
-          )
-        ),
-        '`'
-      ),
+    template_string: ($) => templateString($, false),
 
-    // Tagged templates allow `\x` and `\u` without the hex digits an escape_sequence needs (the cooked string is
-    // undefined). The lexer prefers the longer escape_sequence when the digits follow. Untagged templates reject these
-    // escapes, but the lexer cannot tell the two apart.
+    _tagged_template_string: ($) => templateString($, true),
+
     _invalid_template_escape: () => token.immediate(seq('\\', /[xu]/)),
 
     template_substitution: ($) => seq('${', $._expressions, '}'),
@@ -1326,19 +1398,10 @@ module.exports = grammar({
           -1,
           repeat1(
             choice(
-              seq(
-                '[',
-                repeat(
-                  choice(
-                    seq('\\', /[^\n\r\u2028\u2029]/), // escaped character
-                    /[^\]\\\n\r\u2028\u2029]/ // any character besides ']', '\', or a line terminator
-                  )
-                ),
-                ']'
-              ), // square-bracket-delimited character class
-              seq('\\', /[^\n\r\u2028\u2029]/), // escaped character
+              seq('[', repeat(choice(seq('\\', /[^\n\r\u2028\u2029]/), /[^\]\\\n\r\u2028\u2029]/)), ']'),
+              seq('\\', /[^\n\r\u2028\u2029]/),
               // oxlint-disable-next-line no-useless-escape -- tree-sitter's regex parser rejects an unescaped `[` in a character class.
-              /[^/\\\[\n\r\u2028\u2029]/ // any character besides '[', '\', '/', or a line terminator
+              /[^/\\\[\n\r\u2028\u2029]/
             )
           )
         )
@@ -1411,10 +1474,6 @@ module.exports = grammar({
     false: () => 'false',
     null: () => 'null',
     undefined: () => 'undefined',
-
-    //
-    // Expression components
-    //
 
     arguments: ($) =>
       seq(choice('(', sym('_call_arguments_context')), commaSep(optional(choice($.expression, $.spread_element))), ')'),
@@ -1509,16 +1568,49 @@ module.exports = grammar({
     _field_initializer: ($) =>
       seq('=', sym('_sync_function_start'), field('value', $.expression), sym('_arrow_context_end')),
 
-    formal_parameters: ($) => seq('(', optional(seq(commaSep1($._formal_parameter), optional(','))), ')'),
+    formal_parameters: ($) =>
+      seq(
+        '(',
+        repeat(seq($._formal_parameter, ',')),
+        optional(choice($._formal_parameter, alias($._rest_pattern, $.pattern))),
+        ')'
+      ),
 
     class_static_block: ($) => seq('static', field('body', alias($._class_member_body, $.statement_block))),
 
-    // This negative dynamic precedence ensures that during error recovery,
-    // unfinished constructs are generally treated as literal expressions,
-    // not patterns.
-    pattern: ($) => prec.dynamic(-1, choice($._lhs_expression, $.parenthesized_expression, $.rest_pattern)),
+    /**
+     * Canonical pattern supertype. Extend `_non_rest_pattern` for non-rest forms;
+     * overriding only `pattern` does not extend ordinary slots.
+     */
+    pattern: ($) => choice(alias($._non_rest_pattern, $.pattern), alias($._rest_pattern, $.pattern)),
 
-    rest_pattern: ($) => prec.right(seq('...', choice($._lhs_expression, $.parenthesized_expression))),
+    // Prefer expression forms over both pattern routes during ambiguous error recovery.
+    _non_rest_pattern: ($) =>
+      prec.dynamic(-1, choice($._lhs_expression, alias($._parenthesized_simple_target, $.parenthesized_expression))),
+
+    _rest_pattern: ($) => prec.dynamic(-1, $.rest_pattern),
+
+    /** Array-pattern and formal-parameter rest syntax; object rest uses `_object_rest_pattern`. */
+    rest_pattern: ($) =>
+      prec.right(
+        seq('...', choice($._lhs_expression, alias($._parenthesized_simple_target, $.parenthesized_expression)))
+      ),
+
+    /**
+     * Object-rest syntax, aliased to public `rest_pattern`. Extend `_object_rest_target`
+     * for target forms; `rest_pattern` and `_lhs_expression` overrides do not extend object rest.
+     */
+    _object_rest_pattern: ($) => prec.right(seq('...', $._object_rest_target)),
+
+    /** Object-rest reference targets, excluding nested destructuring patterns. */
+    _object_rest_target: ($) =>
+      choice(
+        $.member_expression,
+        $.subscript_expression,
+        $._identifier,
+        aliasWithAsyncKeyword($._reserved_identifier, $.identifier),
+        alias($._parenthesized_simple_target, $.parenthesized_expression)
+      ),
 
     method_definition: ($) =>
       functionContext((async) =>
@@ -1561,7 +1653,11 @@ module.exports = grammar({
     pair: ($) => seq(field('key', $._property_name), ':', field('value', $.expression)),
 
     pair_pattern: ($) =>
-      seq(field('key', $._property_name), ':', field('value', choice($.pattern, $.assignment_pattern))),
+      seq(
+        field('key', $._property_name),
+        ':',
+        field('value', choice(alias($._non_rest_pattern, $.pattern), $.assignment_pattern))
+      ),
 
     _field_name: ($) =>
       reserved(
@@ -1599,15 +1695,9 @@ module.exports = grammar({
 
     computed_property_name: ($) => seq('[', $.expression, ']'),
 
-    _reserved_identifier: ($) =>
-      choice(
-        sym('_yield_identifier'),
-        ...MEMBER_MODIFIERS,
-        $._escaped_let,
-        ...CONTEXTUAL_KEYWORDS.map((word) =>
-          word === 'await' ? choice(sym('_await_keyword'), sym('_await_identifier')) : word
-        )
-      ),
+    _reserved_identifier: ($) => contextualIdentifier($, false),
+
+    _expression_identifier: ($) => contextualIdentifier($, true),
 
     _semicolon: () =>
       choice(
@@ -1620,6 +1710,121 @@ module.exports = grammar({
 });
 
 /**
+ * @param {GrammarSymbols<'_primary_atom' | 'subscript_expression' | 'member_expression' | 'call_expression' | 'new_expression' | '_argumentless_new_expression'>} $
+ * @param {{atom?: RuleOrLiteral, subscript?: RuleOrLiteral, member?: RuleOrLiteral, call?: RuleOrLiteral}} [forms]
+ */
+function leftHandSideExpression($, forms = {}) {
+  return choice(
+    forms.atom ?? $._primary_atom,
+    forms.subscript ?? $.subscript_expression,
+    forms.member ?? $.member_expression,
+    forms.call ?? $.call_expression,
+    $.new_expression,
+    alias($._argumentless_new_expression, $.new_expression)
+  );
+}
+
+/**
+ * @param {import('@willbooster/web-tree-sitter/dsl').GrammarSymbols<'_escaped_let'>} $
+ * @param {boolean} heritage
+ */
+function contextualIdentifier($, heritage) {
+  const yieldWord = heritage ? sym('_class_heritage_yield_identifier') : sym('_yield_identifier');
+  const awaitWord = heritage
+    ? sym('_class_heritage_await_identifier')
+    : choice(sym('_await_keyword'), sym('_await_identifier'));
+  return choice(
+    yieldWord,
+    ...MEMBER_MODIFIERS,
+    $._escaped_let,
+    ...CONTEXTUAL_KEYWORDS.map((word) => (word === 'await' ? awaitWord : word))
+  );
+}
+
+/**
+ * @param {GrammarSymbols<'import' | 'arguments' | '_tagged_template_string' | 'template_string' | 'optional_chain'>} $
+ * @param {RuleOrLiteral} callee
+ * @param {RuleOrLiteral} primary
+ */
+function callExpression($, callee, primary) {
+  return choice(
+    prec('call', seq(field('function', choice(callee, $.import)), field('arguments', $.arguments))),
+    prec(
+      'template_call',
+      seq(field('function', primary), field('arguments', alias($._tagged_template_string, $.template_string)))
+    ),
+    prec(
+      'member',
+      seq(field('function', primary), field('optional_chain', $.optional_chain), field('arguments', $.arguments))
+    )
+  );
+}
+
+/**
+ * @param {GrammarSymbols<'_jsx_element' | 'parenthesized_expression' | '_identifier' | 'identifier' | 'this' | 'super' | 'number' | 'string' | 'template_string' | 'regex' | 'true' | 'false' | 'null' | 'object' | 'array' | 'function_expression' | 'generator_function' | 'class' | 'meta_property'>} $
+ * @param {RuleOrLiteral} identifier
+ */
+function primaryAtom($, identifier) {
+  return choice(
+    $._jsx_element,
+    $.parenthesized_expression,
+    $._identifier,
+    alias(sym('_await_yield_identifier'), $.identifier),
+    aliasWithAsyncKeyword(identifier, $.identifier),
+    $.this,
+    $.super,
+    $.number,
+    $.string,
+    $.template_string,
+    $.regex,
+    $.true,
+    $.false,
+    $.null,
+    $.object,
+    $.array,
+    $.function_expression,
+    $.generator_function,
+    $.class,
+    $.meta_property
+  );
+}
+
+/**
+ * @param {GrammarSymbols<'import' | 'optional_chain' | 'private_property_identifier' | 'identifier'>} $
+ * @param {RuleOrLiteral} object
+ */
+function memberExpression($, object) {
+  return prec(
+    'member',
+    seq(
+      field('object', choice(object, $.import)),
+      choice('.', field('optional_chain', $.optional_chain)),
+      field(
+        'property',
+        choice($.private_property_identifier, reserved('properties', alias($.identifier, sym('property_identifier'))))
+      )
+    )
+  );
+}
+
+/**
+ * @param {GrammarSymbols<'optional_chain' | '_expressions'>} $
+ * @param {RuleOrLiteral} object
+ */
+function subscriptExpression($, object) {
+  return prec.right(
+    'member',
+    seq(
+      field('object', object),
+      optional(field('optional_chain', $.optional_chain)),
+      '[',
+      field('index', $._expressions),
+      ']'
+    )
+  );
+}
+
+/**
  * @param {import('@willbooster/web-tree-sitter/dsl').RuleOrLiteral} rule
  * @param {import('@willbooster/web-tree-sitter/dsl').SymbolRule<string>} symbol
  */
@@ -1628,8 +1833,6 @@ function aliasWithAsyncKeyword(rule, symbol) {
 }
 
 /**
- * Creates a rule to match one or more of the rules separated by a comma
- *
  * @param {import('@willbooster/web-tree-sitter/dsl').RuleOrLiteral} rule
  *
  * @returns {import('@willbooster/web-tree-sitter/dsl').SeqRule}
@@ -1639,8 +1842,6 @@ function commaSep1(rule) {
 }
 
 /**
- * Creates a rule to optionally match one or more of the rules separated by a comma
- *
  * @param {import('@willbooster/web-tree-sitter/dsl').RuleOrLiteral} rule
  *
  * @returns {import('@willbooster/web-tree-sitter/dsl').ChoiceRule}
@@ -1661,4 +1862,23 @@ function functionContext(makeRule) {
 function functionScope(async, content, kind = 'function_signature') {
   const name = kind === 'function' && !async ? 'sync_function' : `${async ? 'async_' : ''}${kind}`;
   return seq(sym(`_${name}_start`), content, sym('_function_context_end'));
+}
+
+/**
+ * @param {GrammarSymbols<'escape_sequence' | '_invalid_template_escape' | 'template_substitution'>} $
+ * @param {boolean} tagged
+ */
+function templateString($, tagged) {
+  return seq(
+    '`',
+    repeat(
+      choice(
+        alias(sym('_template_chars'), sym('string_fragment')),
+        tagged ? $.escape_sequence : alias(sym('_template_escape_sequence'), $.escape_sequence),
+        ...(tagged ? [alias($._invalid_template_escape, $.escape_sequence)] : []),
+        $.template_substitution
+      )
+    ),
+    '`'
+  );
 }
