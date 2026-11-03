@@ -164,6 +164,7 @@ static bool await_is_identifier(const Scanner *scanner);
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
 static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break);
+static bool restart_after_jsx_whitespace(TSLexer *lexer);
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 static bool scan_type_parameter_prefix(TSLexer *lexer);
 static bool scan_import_type_arguments_start(TSLexer *lexer);
@@ -4246,8 +4247,9 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         return scan_type_arguments_end(lexer, valid_symbols);
     }
 
-    if (valid_symbols[JSX_TEXT] && scan_jsx_text(lexer, JSX_TEXT)) {
-        return true;
+    if (valid_symbols[JSX_TEXT]) {
+        if (scan_jsx_text(lexer, JSX_TEXT)) return true;
+        if (!restart_after_jsx_whitespace(lexer)) return false;
     }
 
     if (valid_symbols[AWAIT_YIELD_IDENTIFIER_CONTEXT] && valid_symbols[AWAIT_YIELD_IDENTIFIER]) {
@@ -4411,6 +4413,21 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     if (valid_symbols[CONST_ASSERTION_NON_NULLABLE_SUFFIX] && !valid_symbols[ERROR_RECOVERY] && !suffix_line_break &&
         (lexer->lookahead == '!' || lexer->lookahead == '/')) return scan_const_assertion_context(lexer, valid_symbols);
     return scan_contextual_keyword(scanner, lexer, valid_symbols);
+}
+
+// When no JSX text follows, scan_jsx_text has consumed the whitespace before the next child without skipping it, so a
+// token scanned next must start after it. A failure after a character reference leaves the lexer inside the reference,
+// which only the internal lexer scans.
+static bool restart_after_jsx_whitespace(TSLexer *lexer) {
+    TSLexerPosition position;
+    TSLexerPosition text_end;
+    lexer->get_position(lexer, &position);
+    lexer->get_mark_end(lexer, &text_end);
+    if (position.bytes != text_end.bytes) return false;
+    TSLexerCheckpoint start;
+    lexer->get_checkpoint(lexer, &start);
+    lexer->mark_start(lexer, &start);
+    return true;
 }
 
 static bool scan_import_type_arguments_start(TSLexer *lexer) {
