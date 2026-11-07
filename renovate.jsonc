@@ -16,5 +16,10 @@
       "matchPackageNames": ["willbooster-tree-sitter"],
       "minimumReleaseAge": "0 days",
     },
+    // 22.0.1: Version 22 introduces declaration keyword external scanner tokens that the TypeScript scanner does not implement; adopting it requires adapting the scanner and grammar integration (https://github.com/WillBooster/tree-sitter-javascript/pull/164, https://github.com/WillBooster/tree-sitter-typescript/pull/181). No newer release is available.
+    {
+      "matchPackageNames": ["@willbooster/tree-sitter-javascript"],
+      "allowedVersions": "!/^22\\.0\\.1$/",
+    },
   ],
 }
