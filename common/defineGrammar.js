@@ -47,15 +47,6 @@ function constructorObjectTarget(rule, target) {
   };
 }
 
-function isPrimaryExpression(entry) {
-  return (
-    entry.type === 'SYMBOL' &&
-    ['primary_expression', '_primary_atom', '_assignment_call_primary', '_non_assignment_call_primary'].includes(
-      entry.name
-    )
-  );
-}
-
 function withPrimaryExpressionTargets($, lists, typeArgumentsOnly = []) {
   return lists.flatMap((list) =>
     list.some(isPrimaryExpression)
@@ -2783,14 +2774,7 @@ function javaScriptPrimaryExpressions() {
   const flatten = (rule) => {
     const target = rule.type === 'ALIAS' && rule.content.name === '_assignment_call_primary' ? rule.content : rule;
     if (target.type === 'CHOICE') return target.members.flatMap(flatten);
-    if (
-      target.type === 'SYMBOL' &&
-      ['primary_expression', '_primary_atom', '_assignment_call_primary', '_non_assignment_call_primary'].includes(
-        target.name
-      )
-    ) {
-      return flatten(JavaScript.grammar.rules[target.name]);
-    }
+    if (isPrimaryExpression(target)) return flatten(JavaScript.grammar.rules[target.name]);
     if (
       target.type === 'ALIAS' &&
       target.content.type === 'SYMBOL' &&
@@ -2801,6 +2785,15 @@ function javaScriptPrimaryExpressions() {
     return [target];
   };
   return flatten(JavaScript.grammar.rules.primary_expression);
+}
+
+function isPrimaryExpression(entry) {
+  return (
+    entry.type === 'SYMBOL' &&
+    ['primary_expression', '_primary_atom', '_assignment_call_primary', '_non_assignment_call_primary'].includes(
+      entry.name
+    )
+  );
 }
 
 function expressionMembers($, dialect, members, excluded = []) {
