@@ -1,7 +1,8 @@
-import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild, walkNodes } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `type asserts<T = unknown> = T;
@@ -59,10 +60,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(_ return_type: (_) @return) (construct_signature type: (_) @return) (constructor_type type: (_) @return) (type_parameters) @parameters (tuple_type (required_parameter name: (_) @tupleLabel)) (tuple_type (optional_parameter name: (_) @tupleLabel)) (required_parameter pattern: (_) @binding) (optional_parameter pattern: (_) @binding) (computed_property_name) @computed (index_signature name: (_) @indexName) (type_query) @typeQuery (conditional_type) @conditional'
-    );
     try {
       for (const type of [
         'asserts',
@@ -81,19 +78,18 @@ for (const dialect of ['typescript', 'tsx']) {
         const source = prefix + type + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkReturns(tree, source, dialect, query);
+          checkReturns(tree, source, dialect);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
 }
 
-function checkReturns(tree: Tree, source: string, dialect: string, query: Query): void {
+function checkReturns(tree: Tree, source: string, dialect: string): void {
   const reference = ts.createSourceFile(
     `fixture.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
     source,
@@ -172,40 +168,54 @@ function checkReturns(tree: Tree, source: string, dialect: string, query: Query)
   };
   visit(reference);
 
-  const captures = query.captures(tree.rootNode);
-  const actual = captures
-    .filter(({ name }) => name === 'return')
-    .map(({ node }) => {
-      const returned = node.type.endsWith('_annotation') ? node.namedChildren[0]! : node;
-      return [returned.text, returned.startIndex, returned.endIndex, returned.type === 'asserts'];
-    });
+  const returnNodes: Node[] = [];
+  walkNodes(tree.rootNode, (node) => {
+    const returnType =
+      node.childForFieldName('return_type') ??
+      (node.type === 'construct_signature' || node.type === 'constructor_type'
+        ? node.childForFieldName('type')
+        : undefined);
+    if (returnType) returnNodes.push(returnType);
+  });
+  const actual = returnNodes.map((node) => {
+    const returned = node.type.endsWith('_annotation') ? firstNonExtraNamedChild(node)! : node;
+    return [returned.text, returned.startIndex, returned.endIndex, returned.type === 'asserts'];
+  });
   expect(actual).toEqual(expected);
-  expect(captures.filter(({ name }) => name === 'tupleLabel').map(({ node }) => parameterRange(node))).toEqual(
-    expectedLabels
+  const tupleLabels = tree.rootNode.descendantsOfType('tuple_type').flatMap((tuple) =>
+    tuple.namedChildren.flatMap((param) => {
+      const label =
+        param.type === 'required_parameter' || param.type === 'optional_parameter'
+          ? param.childForFieldName('name')
+          : undefined;
+      return label ? [parameterRange(label)] : [];
+    })
   );
-  expect(captures.filter(({ name }) => name === 'binding').map(({ node }) => parameterRange(node))).toEqual(
-    expectedBindings
-  );
+  expect(tupleLabels).toEqual(expectedLabels);
+  const bindings = tree.rootNode.descendantsOfType(['required_parameter', 'optional_parameter']).flatMap((param) => {
+    const pattern = param.childForFieldName('pattern');
+    return pattern ? [parameterRange(pattern)] : [];
+  });
+  expect(bindings).toEqual(expectedBindings);
+  expect(nodeRanges(tree.rootNode, 'type_parameters')).toEqual(expectedParameters);
+  expect(nodeRanges(tree.rootNode, 'computed_property_name')).toEqual(expectedComputed);
   expect(
-    captures.filter(({ name }) => name === 'parameters').map(({ node }) => [node.text, node.startIndex, node.endIndex])
-  ).toEqual(expectedParameters);
-  expect(
-    captures.filter(({ name }) => name === 'computed').map(({ node }) => [node.text, node.startIndex, node.endIndex])
-  ).toEqual(expectedComputed);
-  expect(
-    captures.filter(({ name }) => name === 'indexName').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+    tree.rootNode.descendantsOfType('index_signature').flatMap((node) => {
+      const name = node.childForFieldName('name');
+      return name ? [[name.text, name.startIndex, name.endIndex]] : [];
+    })
   ).toEqual(expectedIndices);
-  expect(
-    captures.filter(({ name }) => name === 'typeQuery').map(({ node }) => [node.text, node.startIndex, node.endIndex])
-  ).toEqual(expectedQueries);
-  expect(
-    captures.filter(({ name }) => name === 'conditional').map(({ node }) => [node.text, node.startIndex, node.endIndex])
-  ).toEqual(expectedConditionals);
+  expect(nodeRanges(tree.rootNode, 'type_query')).toEqual(expectedQueries);
+  expect(nodeRanges(tree.rootNode, 'conditional_type')).toEqual(expectedConditionals);
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }
 
+function nodeRanges(root: Node, type: string): [string, number, number][] {
+  return root.descendantsOfType(type).map((node) => [node.text, node.startIndex, node.endIndex]);
+}
+
 function parameterRange(node: Node): (string | number | boolean)[] {
-  const name = node.type === 'rest_pattern' ? node.namedChildren[0]! : node;
+  const name = node.type === 'rest_pattern' ? firstNonExtraNamedChild(node)! : node;
   return [
     name.text,
     name.startIndex,

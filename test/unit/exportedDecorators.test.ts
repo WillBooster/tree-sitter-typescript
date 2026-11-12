@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -9,13 +9,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      `
-      (class_declaration decorator: (decorator) @decorator)
-      (abstract_class_declaration decorator: (decorator) @decorator)
-    `
-    );
     try {
       for (const kind of ['class', 'abstract class']) {
         for (const head of [
@@ -30,7 +23,7 @@ for (const dialect of ['typescript', 'tsx']) {
           const source = `${head} { value: number; }\n(next);`;
           const tree = parser.parse(source)!;
           try {
-            check(tree, source, query);
+            check(tree, source);
             expect(tree.rootNode.lastNamedChild?.text).toBe('(next);');
           } finally {
             tree.delete();
@@ -40,7 +33,7 @@ for (const dialect of ['typescript', 'tsx']) {
           const source = `@one() ${modifiers}${kind} Named<T> { value: T; }`;
           const tree = parser.parse(source)!;
           try {
-            check(tree, source, query);
+            check(tree, source);
           } finally {
             tree.delete();
           }
@@ -65,13 +58,12 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
 }
 
-function check(tree: Tree, source: string, query: Query): void {
+function check(tree: Tree, source: string): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile('classes.ts', source, ts.ScriptTarget.Latest, true);
   expect(
@@ -91,11 +83,12 @@ function check(tree: Tree, source: string, query: Query): void {
       expected.push([statement.name?.text, decorator.getStart(reference), decorator.end]);
     }
   }
+  const classes = tree.rootNode.descendantsOfType(['class_declaration', 'abstract_class_declaration']);
   expect(
-    tree.rootNode.descendantsOfType(['class_declaration', 'abstract_class_declaration']).map((node) =>
+    classes.map((node) =>
       node
         .childForFieldName('body')!
-        .namedChildren.filter((member) => member.type === 'public_field_definition')
+        .namedChildren.filter((member) => member.type === 'field_definition')
         .map((member) => member.childForFieldName('name')!.text)
     )
   ).toEqual(members);
@@ -107,16 +100,13 @@ function check(tree: Tree, source: string, query: Query): void {
           node.namedChildren.find((child) => child.type.endsWith('class_declaration'))!.childForFieldName('name')!.text
       )
   ).toEqual(ambient);
-  const captures = query.captures(tree.rootNode);
   expect(
-    captures
-      .filter(({ name }) => name === 'decorator')
-      .map(({ node }) => {
-        const owner = node.parent!;
-        expect(['class_declaration', 'abstract_class_declaration']).toContain(owner.type);
-        expect(owner.childrenForFieldName('decorator').some((decorator) => decorator.id === node.id)).toBe(true);
+    classes.flatMap((owner) =>
+      owner.childrenForFieldName('decorator').map((node) => {
+        expect(node.parent?.id).toBe(owner.id);
         return [owner.childForFieldName('name')?.text, node.startIndex, node.endIndex];
       })
+    )
   ).toEqual(expected);
   const exported = tree.rootNode.namedChildren.filter((node) => node.type === 'export_statement');
   for (const node of exported) {

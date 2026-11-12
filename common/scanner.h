@@ -61,6 +61,8 @@ enum TokenType {
     CLASS_HERITAGE_YIELD_IDENTIFIER,
     CLASS_HERITAGE_AWAIT_IDENTIFIER,
     TEMPLATE_ESCAPE_SEQUENCE,
+    DECLARATION_FUNCTION_KEYWORD,
+    DECLARATION_CLASS_KEYWORD,
     FUNCTION_SIGNATURE_AUTOMATIC_SEMICOLON,
     TYPE_ARGUMENTS_END,
     TYPE_ARGUMENTS_END_BEFORE_EXPRESSION,
@@ -144,6 +146,7 @@ enum TokenType {
 };
 
 static bool scan_let(TSLexer *lexer);
+static bool scan_declaration_keyword(TSLexer *lexer, const bool *valid_symbols);
 static bool scan_block_comment(TSLexer *lexer, bool *saw_newline, bool skip_contents);
 static bool scan_expression_trivia(TSLexer *lexer, bool *saw_newline, bool *scanned_comment);
 static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, const bool *valid_symbols);
@@ -3360,6 +3363,12 @@ static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, c
 }
 
 static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool *valid_symbols) {
+    if ((valid_symbols[DECLARATION_FUNCTION_KEYWORD] || valid_symbols[DECLARATION_CLASS_KEYWORD]) &&
+        !valid_symbols[ERROR_RECOVERY] &&
+        !(valid_symbols[TEMPLATE_CHARS] && valid_symbols[AUTOMATIC_SEMICOLON]) &&
+        (lexer->lookahead == 'f' || lexer->lookahead == 'c')) {
+        return scan_declaration_keyword(lexer, valid_symbols);
+    }
     if ((valid_symbols[AWAIT_KEYWORD] || valid_symbols[AWAIT_IDENTIFIER] || valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] || valid_symbols[CONSTRUCTOR_ASYNC_FUNCTION_START] || valid_symbols[ASYNC_KEYWORD]) && lexer->lookahead == 'a') {
         return scan_await_or_async(scanner, lexer, valid_symbols);
     }
@@ -3371,6 +3380,16 @@ static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool
         return scan_let(lexer);
     }
     return false;
+}
+
+static bool scan_declaration_keyword(TSLexer *lexer, const bool *valid_symbols) {
+    char word[16] = {0};
+    if (!scan_identifier(lexer, word, sizeof(word), false)) return false;
+    if (strcmp(word, "function") == 0) lexer->result_symbol = DECLARATION_FUNCTION_KEYWORD;
+    else if (strcmp(word, "class") == 0) lexer->result_symbol = DECLARATION_CLASS_KEYWORD;
+    else return false;
+    lexer->mark_end(lexer);
+    return valid_symbols[lexer->result_symbol];
 }
 
 static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end, bool *scanned_content) {

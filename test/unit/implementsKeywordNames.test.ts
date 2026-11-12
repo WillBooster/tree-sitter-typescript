@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { nonExtraNamedChildren } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
@@ -10,17 +11,12 @@ const Words = ['keyof', 'readonly', 'unique', 'infer', 'get', 'set', 'accessor',
 const Gaps = [' ', '\n', '\r\n', '\u2028', '\u2029', '/* comment */', '// comment\n'];
 const Header = Words.map((word) => `interface ${word}<T = unknown> {}`).join('\n') + '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
-const RoleQuery = `
-  (implements_clause (type_identifier) @name)
-  (implements_clause (generic_type name: (type_identifier) @name))
-`;
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`parses contextual ${dialect} implements names with their compiler roles`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const roles = new Query(language, RoleQuery);
     try {
       for (const word of Words) {
         for (const gap of Gaps) {
@@ -32,14 +28,13 @@ for (const dialect of ['typescript', 'tsx']) {
             `interface Extended extends ${word} {}\nconst following = 1;`;
           const tree = parser.parse(source)!;
           try {
-            checkHeritage(tree, source, dialect, roles);
+            checkHeritage(tree, source, dialect);
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      roles.delete();
       parser.delete();
     }
   });
@@ -48,25 +43,23 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const roles = new Query(language, RoleQuery);
     try {
       for (const word of ['readonly', 'keyof', 'unique', 'infer']) {
         const source = Header + 'class C implements ' + word + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkHeritage(tree, source, dialect, roles);
+          checkHeritage(tree, source, dialect);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      roles.delete();
       parser.delete();
     }
   });
 }
 
-function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query): void {
+function checkHeritage(tree: Tree, source: string, dialect: string): void {
   const fileName = dialect === 'tsx' ? 'fixture.tsx' : 'fixture.ts';
   const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   expect(
@@ -98,10 +91,14 @@ function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query
       }
     }
   }
-  const actual = roles.captures(tree.rootNode).map(({ name, node }): CaptureRange => {
-    if (name === 'name') expect(node.childCount, source).toBe(0);
-    return [name, node.startIndex, node.endIndex];
-  });
+  const actual = tree.rootNode.descendantsOfType('implements_clause').flatMap((clause) =>
+    nonExtraNamedChildren(clause).flatMap((child): CaptureRange[] => {
+      const node = child.type === 'generic_type' ? child.childForFieldName('name') : child;
+      if (node?.type !== 'type_identifier') return [];
+      expect(node.childCount, source).toBe(0);
+      return [['name', node.startIndex, node.endIndex]];
+    })
+  );
   expect(actual.toSorted(compareCaptureRange), source).toEqual(expected.toSorted(compareCaptureRange));
   expect(tree.rootNode.lastNamedChild?.text, source).toBe('const following = 1;');
 }

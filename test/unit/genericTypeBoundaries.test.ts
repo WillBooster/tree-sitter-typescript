@@ -145,9 +145,7 @@ for (const dialect of ['typescript', 'tsx']) {
                 expect(generic.childForFieldName('name')?.childCount).toBe(0);
               }
               expect(
-                tree.rootNode
-                  .descendantsOfType('public_field_definition')
-                  .map((node) => node.childForFieldName('name')?.text)
+                tree.rootNode.descendantsOfType('field_definition').map((node) => node.childForFieldName('name')?.text)
               ).toEqual(['value']);
             } finally {
               tree.delete();

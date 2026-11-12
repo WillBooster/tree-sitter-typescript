@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { nonExtraNamedChildren } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type OperandCapture = readonly [number, string, number, number];
@@ -26,26 +27,20 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`retains ${dialect} type-operator operands across union and intersection operators`, async () => {
     await Parser.init();
     const parser = new Parser();
-    let query: Query | undefined;
-    let aliasQuery: Query | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
-      query = new Query(language, '(readonly_type (_) @operand) @operator\n(index_type_query (_) @operand) @operator');
-      aliasQuery = new Query(language, '(type_alias_declaration value: (readonly_type (_) @operand) @operator)');
       for (const source of [Source, Source.replace('|', '&')]) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError).toBe(false);
-          expect(operandCaptures(query, tree)).toEqual(referenceOperands(source, dialect));
-          expect(operandCaptures(aliasQuery, tree)).toEqual(referenceOperands(source, dialect, true));
+          expect(operandCaptures(tree)).toEqual(referenceOperands(source, dialect));
+          expect(operandCaptures(tree, true)).toEqual(referenceOperands(source, dialect, true));
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query?.delete();
-      aliasQuery?.delete();
       parser.delete();
     }
   });
@@ -78,13 +73,14 @@ function referenceOperands(source: string, dialect: string, aliasesOnly = false)
   return expected.toSorted((a, b) => a[0] - b[0]);
 }
 
-function operandCaptures(query: Query, tree: Tree): OperandCapture[] {
-  return query
-    .matches(tree.rootNode)
-    .map(({ captures }) => {
-      const operator = captures.find(({ name }) => name === 'operator')!.node;
-      const operand = captures.find(({ name }) => name === 'operand')!.node;
-      return [operator.startIndex, operand.text, operand.startIndex, operand.endIndex] as const;
-    })
+function operandCaptures(tree: Tree, aliasesOnly = false): OperandCapture[] {
+  return tree.rootNode
+    .descendantsOfType(aliasesOnly ? 'readonly_type' : ['readonly_type', 'index_type_query'])
+    .filter((operator) => !aliasesOnly || operator.parent?.childForFieldName('value')?.id === operator.id)
+    .flatMap((operator) =>
+      nonExtraNamedChildren(operator).map(
+        (operand) => [operator.startIndex, operand.text, operand.startIndex, operand.endIndex] as const
+      )
+    )
     .toSorted((a, b) => a[0] - b[0]);
 }

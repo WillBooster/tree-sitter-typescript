@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const RecoveryCases: [string, boolean, string, string, string?, string?, string?, string?][] = [];
@@ -165,20 +166,10 @@ const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/prede
 
 describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let query: Query;
-  let predicates: Query;
-  const queries: Query[] = [];
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    query = new Query(language, '(asserts . (identifier) @name)');
-    queries.push(query);
-    predicates = new Query(language, '(type_predicate name: (identifier) @name type: (_) @type)');
-    queries.push(predicates);
   }, 30_000);
-  afterAll(() => {
-    for (const resource of queries) resource.delete();
-  });
   test.each(['any', 'number', 'boolean', 'string', 'symbol', 'unknown', 'never', 'object', 'unique'])(
     'recognizes %s and a renamed parameter as assertion names',
     (word) => {
@@ -188,41 +179,10 @@ describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
         for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + word.length)]) {
           const tree = parser.parse(source)!;
           try {
-            check(tree, source);
+            checkAssertionNames(tree, source);
           } finally {
             tree.delete();
           }
-        }
-        function check(current: Tree, text: string): void {
-          const reference = ts.createSourceFile('assertions.ts', text, ts.ScriptTarget.Latest, true);
-          const names: [string, number, number][] = [];
-          const predicateRoles: [string, string, number, number][] = [];
-          const visit = (node: ts.Node): void => {
-            if (ts.isTypePredicateNode(node) && ts.isIdentifier(node.parameterName)) {
-              const name = node.parameterName;
-              if (node.type) {
-                predicateRoles.push(['name', name.getText(reference), name.getStart(reference), name.getEnd()]);
-                predicateRoles.push([
-                  'type',
-                  node.type.getText(reference),
-                  node.type.getStart(reference),
-                  node.type.getEnd(),
-                ]);
-              } else if (node.assertsModifier)
-                names.push([name.getText(reference), name.getStart(reference), name.getEnd()]);
-            }
-            ts.forEachChild(node, visit);
-          };
-          visit(reference);
-          expect(current.rootNode.hasError).toBe(false);
-          expect(
-            query.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-          ).toEqual(names);
-          expect(
-            predicates
-              .captures(current.rootNode)
-              .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-          ).toEqual(predicateRoles);
         }
       } finally {
         parser.delete();
@@ -230,6 +190,45 @@ describe.each(['typescript', 'tsx'])('%s assertion names', (dialect) => {
     }
   );
 });
+
+function checkAssertionNames(current: Tree, text: string): void {
+  const reference = ts.createSourceFile('assertions.ts', text, ts.ScriptTarget.Latest, true);
+  const names: [string, number, number][] = [];
+  const predicateRoles: [string, string, number, number][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypePredicateNode(node) && ts.isIdentifier(node.parameterName)) {
+      const name = node.parameterName;
+      if (node.type) {
+        predicateRoles.push(['name', name.getText(reference), name.getStart(reference), name.getEnd()]);
+        predicateRoles.push(['type', node.type.getText(reference), node.type.getStart(reference), node.type.getEnd()]);
+      } else if (node.assertsModifier) names.push([name.getText(reference), name.getStart(reference), name.getEnd()]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(reference);
+  expect(current.rootNode.hasError).toBe(false);
+  expect(
+    current.rootNode
+      .descendantsOfType('asserts')
+      .filter((node) => node.isNamed)
+      .flatMap((assertion) => {
+        const name = firstNonExtraNamedChild(assertion);
+        return name?.type === 'identifier' ? [[name.text, name.startIndex, name.endIndex]] : [];
+      })
+  ).toEqual(names);
+  expect(
+    current.rootNode.descendantsOfType('type_predicate').flatMap((predicate) => {
+      const name = predicate.childForFieldName('name');
+      const type = predicate.childForFieldName('type');
+      return name?.type === 'identifier' && type
+        ? [
+            ['name', name.text, name.startIndex, name.endIndex],
+            ['type', type.text, type.startIndex, type.endIndex],
+          ]
+        : [];
+    })
+  ).toEqual(predicateRoles);
+}
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`preserves ${dialect} canonical assertion prefixes with and without malformed array tails`, async () => {
@@ -261,28 +260,22 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
+const ReturnAnnotationOwners = [
+  'function_signature',
+  'function_declaration',
+  'method_signature',
+  'call_signature',
+  'abstract_method_signature',
+  'method_definition',
+  'function_type',
+];
+
 describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let annotationQuery: Query | undefined;
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    annotationQuery = new Query(
-      language,
-      `
-      (function_signature return_type: (_) @annotation)
-      (function_declaration return_type: (_) @annotation)
-      (method_signature return_type: (_) @annotation)
-      (call_signature return_type: (_) @annotation)
-      (abstract_method_signature return_type: (_) @annotation)
-      (method_definition return_type: (_) @annotation)
-      (function_type return_type: (_) @annotation)
-    `
-    );
   }, 30_000);
-  afterAll(() => {
-    annotationQuery?.delete();
-  });
   test.each(RecoverySamples)('parses $prefix with and without $tail', ({ word, tail, prefix, suffix, following }) => {
     const parser = new Parser().setLanguage(language);
     try {
@@ -295,9 +288,12 @@ describe.each(['typescript', 'tsx'])('%s ordinary-name assertion recovery', (dia
           expect(sentinel!.hasError).toBe(false);
           expect(tree.rootNode.lastNamedChild?.text).toBe(following.trim().split('\n').at(-1));
           if (inserted !== '') continue;
-          const annotations = annotationQuery!.captures(tree.rootNode);
+          const annotations = tree.rootNode.descendantsOfType(ReturnAnnotationOwners).flatMap((owner) => {
+            const returnType = owner.childForFieldName('return_type');
+            return returnType ? [returnType] : [];
+          });
           expect(annotations).toHaveLength(1);
-          const annotation = annotations[0]!.node;
+          const annotation = annotations[0]!;
           const functionType = prefix.includes('=> asserts');
           expect(annotation.type).toBe(functionType ? 'asserts' : 'asserts_annotation');
           expect(annotation.startIndex).toBe(functionType ? prefix.indexOf('asserts') : prefix.indexOf(': asserts'));

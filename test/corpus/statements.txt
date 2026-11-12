@@ -253,17 +253,17 @@ export { i, type J }
         (statement_block
           (return_statement
             (number))))
-      (public_field_definition
+      (field_definition
         (property_identifier))
       (method_definition
         (property_identifier)
         (formal_parameters)
         (statement_block))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (type_annotation
           (union_type
@@ -274,7 +274,7 @@ export { i, type J }
             (literal_type
               (string
                 (string_fragment))))))
-      (public_field_definition
+      (field_definition
         (property_identifier))))
   (ambient_declaration
     (lexical_declaration
@@ -384,24 +384,24 @@ class A {
   (class_declaration
     (type_identifier)
     (class_body
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (number))
-      (public_field_definition
+      (field_definition
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (override_modifier)
         (property_identifier)
         (number))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (number))
       (method_definition
@@ -409,15 +409,15 @@ class A {
         (property_identifier)
         (formal_parameters)
         (statement_block))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (number))
-      (public_field_definition
+      (field_definition
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (number))
-      (public_field_definition
+      (field_definition
         (property_identifier)))))
 
 ============================================================
@@ -441,23 +441,23 @@ class A {
   (class_declaration
     (type_identifier)
     (class_body
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (property_identifier))
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (property_identifier))

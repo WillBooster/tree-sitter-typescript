@@ -1,42 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 
 import { expectNodeRanges } from '../helpers/nodeRanges.js';
+import {
+  firstNonExtraNamedChild,
+  nonExtraNamedChildren,
+  parameterBindingRanges,
+  typeAliasRoles,
+  walkNodes,
+} from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/functionTypeParameterNames.ts'), 'utf8');
 
 describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let query: Query | undefined;
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    query = new Query(
-      language,
-      `
-      [(required_parameter pattern: (identifier) @name)
-       (optional_parameter pattern: (identifier) @name)]
-      [(required_parameter type: (type_annotation (_) @type))
-       (optional_parameter type: (type_annotation (_) @type))]
-      (array (identifier) @reference)
-      (pair value: (identifier) @reference)
-    `
-    );
   }, 30_000);
-  afterAll(() => query?.delete());
   test.each(['unknown', 'never', 'unique'])(
     'requires the generic declaration arrow before accepting %s as an outer binding',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const header of ['keyof', 'readonly', 'infer'].flatMap((contextual) => [
@@ -57,12 +47,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree.delete();
                 tree = parser.parse(next)!;
                 expect(tree.rootNode.hasError).toBe(replacement !== '=>');
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual(replacement === '=>' ? [[name, 8, 8 + name.length]] : []);
+                expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                  replacement === '=>' ? [[name, 8, 8 + name.length]] : []
+                );
                 source = next;
                 before = replacement;
               }
@@ -72,7 +59,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -81,10 +67,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'requires the ordinary generic header continuation before accepting %s as an outer binding',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const header of ['<U>', '<U,V>', '<U extends T>']) {
@@ -102,12 +84,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   tree.delete();
                   tree = parser.parse(next)!;
                   expect(tree.rootNode.hasError).toBe(replacement !== '(x:U)=>U');
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual(replacement === '(x:U)=>U' ? [[name, 8, 8 + name.length]] : []);
+                  expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                    replacement === '(x:U)=>U' ? [[name, 8, 8 + name.length]] : []
+                  );
                   source = next;
                   before = replacement;
                 }
@@ -118,7 +97,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -127,14 +105,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through contextual method and property renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['keyof', 'readonly', 'infer']) {
@@ -210,21 +180,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -234,8 +190,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -244,14 +198,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through readonly function parameter renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           let source = `type F=(${name}${optional}:{a:(K:T)=>U})=>number;`;
@@ -266,21 +212,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               const next = source.slice(0, start) + replacement + source.slice(end);
               tree.delete();
               tree = parser.parse(next)!;
-              expect(tree.rootNode.hasError).toBe(false);
-              expect(
-                aliasQuery
-                  .captures(tree.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-              ).toEqual([
-                ['name', 'type_identifier', 'F', 5, 6],
-                ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-              ]);
-              expect(
-                namesQuery
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual([[name, 8, 8 + name.length]]);
+              expectAliasAndBinding(tree, next, name);
               source = next;
             }
           } finally {
@@ -288,8 +220,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -298,14 +228,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership across leading mapped type variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -328,21 +250,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
               }
             } finally {
@@ -351,8 +259,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -361,14 +267,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through conditional computed-key renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['keyof', 'readonly', 'infer']) {
@@ -404,21 +302,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -428,8 +312,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -438,14 +320,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through computed object method renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['typeof', 'new', 'void', 'delete']) {
@@ -471,21 +345,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -495,8 +355,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -505,14 +363,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through computed function return-type renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -539,21 +389,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
               }
             } finally {
@@ -562,8 +398,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -572,14 +406,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through computed parameter-type renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -609,21 +435,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
                 before = replacement;
               }
@@ -633,19 +445,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('keeps %s binding ownership across conditional branch variants', (name) => {
     const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         for (const type of [
@@ -672,21 +477,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               const next = source.slice(0, start) + replacement + source.slice(end);
               tree.delete();
               tree = parser.parse(next)!;
-              expect(tree.rootNode.hasError).toBe(false);
-              expect(
-                aliasQuery
-                  .captures(tree.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-              ).toEqual([
-                ['name', 'type_identifier', 'F', 5, 6],
-                ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-              ]);
-              expect(
-                namesQuery
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual([[name, 8, 8 + name.length]]);
+              expectAliasAndBinding(tree, next, name);
               source = next;
               before = replacement;
             }
@@ -696,8 +487,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      aliasQuery.delete();
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -705,14 +494,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership across nested function return variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -731,21 +512,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
                 before = replacement;
               }
@@ -755,8 +522,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -765,14 +530,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership across exact object delimiter variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const [opening, closing] of [
@@ -793,21 +550,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
                 before = replacement;
               }
@@ -817,19 +560,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('keeps %s binding fields around incomplete nested type arrows', (name) => {
     const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         for (const [opening, closing] of [
@@ -852,21 +588,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               tree = parser.parse(next)!;
               expect(tree.rootNode.hasError).toBe(replacement === '');
               if (replacement === '') continue;
-              const valueEnd = next.length - 1;
-              expect(
-                aliasQuery
-                  .captures(tree.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-              ).toEqual([
-                ['name', 'type_identifier', 'F', 5, 6],
-                ['value', 'function_type', next.slice(7, valueEnd), 7, valueEnd],
-              ]);
-              expect(
-                namesQuery
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual([[name, 8, 8 + name.length]]);
+              expectAliasAndBinding(tree, next, name);
               source = next;
               before = replacement;
             }
@@ -876,8 +598,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      aliasQuery.delete();
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -885,14 +605,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership around incomplete return properties',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -914,20 +626,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 expect(tree.rootNode.hasError).toBe(replacement === '');
                 expectNodeRanges(tree.rootNode, next);
                 if (replacement === '') continue;
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
                 before = replacement;
               }
@@ -937,8 +636,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -947,14 +644,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership across arrow return annotation variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const child of ['((a:T):K=>a)', '((a):K=>a)', '(():K=>a)', '(({a=1}:T):K=>a)']) {
@@ -979,21 +668,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 const next = source.slice(0, start) + replacement + source.slice(end);
                 tree.delete();
                 tree = parser.parse(next)!;
-                expect(tree.rootNode.hasError).toBe(false);
-                expect(
-                  aliasQuery
-                    .captures(tree.rootNode)
-                    .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                ).toEqual([
-                  ['name', 'type_identifier', 'F', 5, 6],
-                  ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                ]);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual([[name, 8, 8 + name.length]]);
+                expectAliasAndBinding(tree, next, name);
                 source = next;
                 before = replacement;
               }
@@ -1003,8 +678,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -1013,14 +686,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through contextual mapped operand renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['as']) {
@@ -1050,21 +715,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -1074,8 +725,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -1084,14 +733,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through contextual generic parameter renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['keyof', 'readonly', 'infer']) {
@@ -1125,21 +766,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -1149,8 +776,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
@@ -1159,14 +784,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s binding ownership through contextual index and property renames',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const contextual of ['keyof', 'readonly', 'infer']) {
@@ -1188,21 +805,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const next = source.slice(0, start) + replacement + source.slice(end);
                   tree.delete();
                   tree = parser.parse(next)!;
-                  expect(tree.rootNode.hasError).toBe(false);
-                  expect(
-                    aliasQuery
-                      .captures(tree.rootNode)
-                      .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
-                    ['name', 'type_identifier', 'F', 5, 6],
-                    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
-                  ]);
-                  expect(
-                    namesQuery
-                      .captures(tree.rootNode)
-                      .filter(({ node }) => node.text === name)
-                      .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                  ).toEqual([[name, 8, 8 + name.length]]);
+                  expectAliasAndBinding(tree, next, name);
                   source = next;
                 }
               } finally {
@@ -1212,15 +815,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        aliasQuery.delete();
-        namesQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('keeps %s annotation fields around HTML line comments', (name) => {
     const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     try {
       for (const marker of ['<!-- c -->', '--> c']) {
         let source = `type F = (${name}: /* c */ T) => void;`;
@@ -1237,11 +837,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             if (replacement === marker) continue;
             const valueStart = next.indexOf('('),
               valueEnd = next.length - 1;
-            expect(
-              aliasQuery
-                .captures(tree.rootNode)
-                .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-            ).toEqual([
+            expect(typeAliasRoles(tree.rootNode)).toEqual([
               ['name', 'type_identifier', 'F', 5, 6],
               ['value', 'function_type', next.slice(valueStart, valueEnd), valueStart, valueEnd],
             ]);
@@ -1252,7 +848,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      aliasQuery.delete();
       parser.delete();
     }
   });
@@ -1260,10 +855,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'preserves %s bindings for valid decimal types and rejects invalid ones',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const namesQuery = new Query(
-        language,
-        '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-      );
       try {
         for (const optional of ['', '?']) {
           for (const type of [
@@ -1310,13 +901,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree.delete();
                 tree = parser.parse(next)!;
                 expect(tree.rootNode.hasError).toBe(!valid);
-                const captures = namesQuery.captures(tree.rootNode).filter(({ node }) => node.text === name);
-                if (valid)
-                  expect(captures.map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual([
-                    [name, 8, 8 + name.length],
-                  ]);
-                for (const { node } of captures)
-                  expect([node.text, node.startIndex, node.endIndex]).toEqual([name, 8, 8 + name.length]);
+                const ranges = parameterBindingRanges(tree.rootNode, name);
+                if (valid) expect(ranges).toEqual([[name, 8, 8 + name.length]]);
+                for (const range of ranges) expect(range).toEqual([name, 8, 8 + name.length]);
                 expectNodeRanges(tree.rootNode, next);
                 source = next;
                 before = replacement;
@@ -1327,17 +914,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        namesQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('requires return operands after leading markers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?'])
         for (const marker of ['', '|', '&', '| &'])
@@ -1360,12 +942,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree.delete();
                 tree = parser.parse(next)!;
                 expect(tree.rootNode.hasError).toBe(replacement !== 'Value');
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual(replacement === 'Value' ? [[name, 8, 8 + name.length]] : []);
+                expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                  replacement === 'Value' ? [[name, 8, 8 + name.length]] : []
+                );
                 source = next;
                 before = replacement;
               }
@@ -1374,7 +953,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             }
           }
     } finally {
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -1446,10 +1024,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     )
   )('retains %s %s %s operand recovery in %s', (name, operator, operand, template) => {
     const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         let source = `type F = (${name}${optional}: ${template.replace('TYPE', `${operator} ${operand}`)}) => number;`;
@@ -1485,12 +1059,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
             tree = parser.parse(next)!;
             expect(tree.rootNode.hasError).toBe(replacement !== operand);
             const nameStart = next.indexOf(name);
-            expect(
-              namesQuery
-                .captures(tree.rootNode)
-                .filter(({ node }) => node.text === name)
-                .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-            ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
+            expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+              replacement === operand ? [[name, nameStart, nameStart + name.length]] : []
+            );
             source = next;
             before = replacement;
           }
@@ -1499,7 +1070,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -1516,10 +1086,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     )
   )('retains %s %s operand recovery across grouped separator variants', (name, operator, operand) => {
     const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         for (const template of ['[TYPE]', 'A<TYPE>', '(TYPE)[]', '(TYPE)']) {
@@ -1537,12 +1103,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
               tree = parser.parse(next)!;
               expect(tree.rootNode.hasError).toBe(replacement !== operand);
               const nameStart = next.indexOf(name);
-              expect(
-                namesQuery
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
+              expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                replacement === operand ? [[name, nameStart, nameStart + name.length]] : []
+              );
               source = next;
               before = replacement;
             }
@@ -1552,7 +1115,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -1562,10 +1124,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     )
   )('retains %s binding recovery through missing %s expression operands', (name, contextual) => {
     const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         for (const template of ['{[TYPE]:number}', '{outer:{[TYPE]:number}}', '`x${{[TYPE]:number}}`']) {
@@ -1590,12 +1148,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree = parser.parse(next)!;
                 expect(tree.rootNode.hasError).toBe(replacement !== operand);
                 const nameStart = next.indexOf(name);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
+                expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                  replacement === operand ? [[name, nameStart, nameStart + name.length]] : []
+                );
                 source = next;
                 before = replacement;
               }
@@ -1606,7 +1161,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -1616,10 +1170,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     )
   )('retains %s binding recovery through missing %s unary expression operands', (name, contextual) => {
     const parser = new Parser().setLanguage(language);
-    const namesQuery = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const optional of ['', '?']) {
         for (const template of ['{[TYPE]:number}', '{outer:{[TYPE]:number}}', '`x${{[TYPE]:number}}`']) {
@@ -1643,12 +1193,9 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                 tree = parser.parse(next)!;
                 expect(tree.rootNode.hasError).toBe(replacement !== operand);
                 const nameStart = next.indexOf(name);
-                expect(
-                  namesQuery
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-                ).toEqual(replacement === operand ? [[name, nameStart, nameStart + name.length]] : []);
+                expect(parameterBindingRanges(tree.rootNode, name)).toEqual(
+                  replacement === operand ? [[name, nameStart, nameStart + name.length]] : []
+                );
                 source = next;
                 before = replacement;
               }
@@ -1659,7 +1206,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      namesQuery.delete();
       parser.delete();
     }
   });
@@ -1667,13 +1213,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'reports incomplete %s operator operands and keeps parameter roles of complete ones',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const parameterQuery = new Query(
-        language,
-        `
-        [(required_parameter pattern: (identifier) @name type: (type_annotation) @annotation)
-         (optional_parameter pattern: (identifier) @name type: (type_annotation) @annotation)]
-      `
-      );
       try {
         for (const optional of ['', '?']) {
           for (const wrapper of ['', '(', '((']) {
@@ -1709,11 +1248,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
                   const start = text.indexOf(name),
                     annotation = text.indexOf(':'),
                     end = text.indexOf(') =>');
-                  expect(
-                    parameterQuery
-                      .captures(current.rootNode)
-                      .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-                  ).toEqual([
+                  expect(parameterAnnotationRoles(current.rootNode)).toEqual([
                     ['name', name, start, start + name.length],
                     ['annotation', text.slice(annotation, end), annotation, end],
                   ]);
@@ -1725,14 +1260,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           }
         }
       } finally {
-        parameterQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('reports %s type-operator fields with and without operands', (name) => {
     const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     try {
       for (const optional of ['', '?']) {
         for (const [operator, operand] of [
@@ -1745,28 +1278,15 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           let tree: Tree | undefined;
           try {
             tree = parser.parse(source)!;
-            check(tree, source, false);
+            checkTypeOperatorFields(tree, source, false);
             for (const replacement of ['', '/* operand */', operand]) {
               const start = source.indexOf(operator) + operator.length + 1;
               const end = source.indexOf(') =>');
               const next = source.slice(0, start) + replacement + source.slice(end);
               tree.delete();
               tree = parser.parse(next)!;
-              check(tree, next, replacement !== operand);
+              checkTypeOperatorFields(tree, next, replacement !== operand);
               source = next;
-            }
-            function check(current: Tree, text: string, missing: boolean): void {
-              expect(current.rootNode.hasError).toBe(missing);
-              if (missing) return;
-              const end = text.length - 1;
-              expect(
-                aliasQuery
-                  .captures(current.rootNode)
-                  .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-              ).toEqual([
-                ['name', 'type_identifier', 'F', 5, 6],
-                ['value', 'function_type', text.slice(9, end), 9, end],
-              ]);
             }
           } finally {
             tree?.delete();
@@ -1774,7 +1294,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         }
       }
     } finally {
-      aliasQuery.delete();
       parser.delete();
     }
   });
@@ -1888,13 +1407,6 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
   );
   test.each(['unknown', 'never', 'unique'])('retains %s optional extra-colon recovery across type variants', (name) => {
     const parser = new Parser().setLanguage(language);
-    const parameterQuery = new Query(
-      language,
-      `
-      [(required_parameter pattern: (identifier) @name type: (type_annotation (predefined_type) @type))
-       (optional_parameter pattern: (identifier) @name type: (type_annotation (predefined_type) @type))]
-    `
-    );
     let source = `type F = (${name}?: number) => void;`;
     let tree: Tree | undefined;
     try {
@@ -1928,16 +1440,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           const type = text.indexOf('string');
           expected.push(['name', 'm', m, m + 1], ['type', 'string', type, type + 6]);
         }
-        expect(
-          parameterQuery
-            .captures(current.rootNode)
-            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-        ).toEqual(expected);
+        expect(predefinedParameterRoles(current.rootNode)).toEqual(expected);
         expect(current.rootNode.descendantsOfType('optional_parameter')).toHaveLength(extraColon ? 0 : 1);
       }
     } finally {
       tree?.delete();
-      parameterQuery.delete();
       parser.delete();
     }
   });
@@ -1945,15 +1452,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'retains %s optional callback recovery across return-type variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const aliasQuery = new Query(
-        language,
-        '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-      );
       let source = `type F = (${name}?: number) => unknown;`;
       let tree: Tree | undefined;
       try {
         tree = parser.parse(source)!;
-        check(tree, source, false);
+        checkOptionalCallbackReturn(tree, source, false);
         for (const [before, after, missing] of [
           ['=> unknown;', '=>;', true],
           ['=>;', '=> /* return */ ;', true],
@@ -1964,36 +1467,22 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           const next = source.slice(0, start) + after + source.slice(start + before.length);
           tree.delete();
           tree = parser.parse(next)!;
-          check(tree, next, missing);
+          checkOptionalCallbackReturn(tree, next, missing);
           source = next;
-        }
-        function check(current: Tree, text: string, missing: boolean): void {
-          expect(current.rootNode.hasError).toBe(missing);
-          const end = missing ? text.lastIndexOf(')') + 1 : text.length - 1;
-          expect(
-            aliasQuery
-              .captures(current.rootNode)
-              .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-          ).toEqual([
-            ['name', 'type_identifier', 'F', 5, 6],
-            ['value', missing ? 'parenthesized_type' : 'function_type', text.slice(9, end), 9, end],
-          ]);
         }
       } finally {
         tree?.delete();
-        aliasQuery.delete();
         parser.delete();
       }
     }
   );
   test.each(['unknown', 'never', 'unique'])('retains %s optional callback ownership across arrow variants', (name) => {
     const parser = new Parser().setLanguage(language);
-    const aliasQuery = new Query(language, '(type_alias_declaration name: (type_identifier) @name value: (_) @value)');
     let source = `type F = (${name}?: number) => unknown;`;
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, false);
+      checkOptionalCallbackArrow(tree, source, false);
       for (const [before, after, error] of [
         [' => unknown', '', true],
         [');', ') => unknown;', false],
@@ -2007,36 +1496,22 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const next = source.slice(0, start) + after + source.slice(start + before.length);
         tree.delete();
         tree = parser.parse(next)!;
-        check(tree, next, error);
+        checkOptionalCallbackArrow(tree, next, error);
         source = next;
-      }
-      function check(current: Tree, text: string, error: boolean): void {
-        expect(current.rootNode.hasError).toBe(error);
-        const captures = aliasQuery.captures(current.rootNode);
-        expect(captures.map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])).toEqual([
-          ['name', 'F', 5, 6],
-          ['value', text.slice(9, -1), 9, text.length - 1],
-        ]);
-        expect(captures[1]!.node.type).toBe(error ? 'parenthesized_type' : 'function_type');
       }
     } finally {
       tree?.delete();
-      aliasQuery.delete();
       parser.delete();
     }
   });
   test('retains index-signature fields across name and trivia variants', () => {
     const parser = new Parser().setLanguage(language);
-    const indexQuery = new Query(
-      language,
-      '(index_signature name: (identifier) @name index_type: (_) @index type: (type_annotation (_) @result))'
-    );
     let source =
       'interface I { [unknown: string]: number; }\nclass C { [unique: string]: number; }\ntype T = { readonly [never: string]: number };';
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, 'unknown');
+      checkIndexSignatures(tree, source, 'unknown');
       for (const [before, after, name] of [
         ['unknown', 'value', 'value'],
         ['value', 'never', 'never'],
@@ -2050,30 +1525,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         tree.delete();
         tree = parser.parse(next)!;
         expect(tree.rootNode.hasError).toBe(false);
-        check(tree, next, name);
+        checkIndexSignatures(tree, next, name);
         source = next;
-      }
-      function check(current: Tree, text: string, firstName: string): void {
-        expect(current.rootNode.hasError).toBe(false);
-        const expected = [firstName, 'unique', 'never'].flatMap((name, i) => {
-          const start = text.indexOf('[' + name, i === 2 ? text.indexOf('type T') : 0) + 1;
-          const index = text.indexOf('string', start),
-            result = text.indexOf('number', index);
-          return [
-            ['name', name, start, start + name.length],
-            ['index', 'string', index, index + 6],
-            ['result', 'number', result, result + 6],
-          ];
-        });
-        expect(
-          indexQuery
-            .captures(current.rootNode)
-            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-        ).toEqual(expected);
       }
     } finally {
       tree?.delete();
-      indexQuery.delete();
       parser.delete();
     }
   });
@@ -2081,12 +1537,11 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     'keeps %s initializer ownership across nested-type arrow variants',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const valueQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
       let source = `const x = (${name}: (x: number) => number);`;
       let tree: Tree | undefined;
       try {
         tree = parser.parse(source)!;
-        check(tree, source, false);
+        checkNestedArrowInitializer(tree, source, false);
         for (const [before, after, error] of [
           [' => number', '', true],
           ['(x: number)', '((x: number))', true],
@@ -2102,36 +1557,22 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
           const next = source.slice(0, start) + after + source.slice(start + before.length);
           tree.delete();
           tree = parser.parse(next)!;
-          check(tree, next, error);
+          checkNestedArrowInitializer(tree, next, error);
           source = next;
-        }
-        function check(current: Tree, text: string, error: boolean): void {
-          expect(current.rootNode.hasError).toBe(error);
-          // A parenthesized parameter must be an assignment target, so `((x: number))` is no recovered parameter.
-          if (text.includes('((x: number))')) return;
-          const start = text.indexOf('(');
-          expect(
-            valueQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-          ).toEqual([[text.slice(start, -1), start, text.length - 1]]);
         }
       } finally {
         tree?.delete();
-        valueQuery.delete();
         parser.delete();
       }
     }
   );
   test('recovers malformed parenthesized types and parses a valid function type', () => {
     const parser = new Parser().setLanguage(language);
-    const recoveryQuery = new Query(
-      language,
-      '(type_alias_declaration name: (type_identifier) @name value: (_) @value)'
-    );
     let source = 'type T = (unknown: unknown);';
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, false);
+      checkMalformedParenthesizedType(tree, source, false);
       for (const [before, after, valid] of [
         [');', ') & (never: never);', false],
         [') & (never: never);', ') | undefined;', false],
@@ -2143,36 +1584,21 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const next = source.slice(0, start) + after + source.slice(start + before.length);
         tree.delete();
         tree = parser.parse(next)!;
-        check(tree, next, valid);
+        checkMalformedParenthesizedType(tree, next, valid);
         source = next;
-      }
-      function check(current: Tree, text: string, valid: boolean): void {
-        expect(current.rootNode.hasError).toBe(!valid);
-        if (!valid) return;
-        const start = text.indexOf('(');
-        expect(
-          recoveryQuery
-            .captures(current.rootNode)
-            .map(({ name, node }) => [name, node.type, node.text, node.startIndex, node.endIndex])
-        ).toEqual([
-          ['name', 'type_identifier', 'T', text.indexOf('T'), text.indexOf('T') + 1],
-          ['value', 'function_type', text.slice(start, -1), start, text.length - 1],
-        ]);
       }
     } finally {
       tree?.delete();
-      recoveryQuery.delete();
       parser.delete();
     }
   });
   test('retains the initializer with complete and incomplete unique types', () => {
     const parser = new Parser().setLanguage(language);
-    const recoveryQuery = new Query(language, '(variable_declarator value: (parenthesized_expression) @value)');
     let source = 'const a = (unique: unique<A>);';
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, true);
+      checkUniqueTypeInitializer(tree, source, true);
       for (const [before, after, error] of [
         ['unique<A>', 'unique symbol', false],
         ['unique symbol', 'unique<A>', true],
@@ -2181,30 +1607,21 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const next = source.slice(0, start) + after + source.slice(start + before.length);
         tree.delete();
         tree = parser.parse(next)!;
-        check(tree, next, error);
+        checkUniqueTypeInitializer(tree, next, error);
         source = next;
-      }
-      function check(current: Tree, text: string, error: boolean): void {
-        expect(current.rootNode.hasError).toBe(error);
-        const start = text.indexOf('(');
-        expect(
-          recoveryQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-        ).toEqual([[text.slice(start, -1), start, text.length - 1]]);
       }
     } finally {
       tree?.delete();
-      recoveryQuery.delete();
       parser.delete();
     }
   });
   test('preserves the type field across extra-colon variants', () => {
     const parser = new Parser().setLanguage(language);
-    const recoveryQuery = new Query(language, '(parenthesized_expression type: (type_annotation) @annotation)');
     let source = 'const x = (unknown: x: number);';
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source, ': number');
+      checkExtraColonTypeField(tree, source, ': number');
       for (const [before, after, annotation] of [
         [': x: number', ': x', ': x'],
         [': x', ': x: number', ': number'],
@@ -2215,34 +1632,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const next = source.slice(0, start) + after + source.slice(start + before!.length);
         tree.delete();
         tree = parser.parse(next)!;
-        check(tree, next, annotation!);
+        checkExtraColonTypeField(tree, next, annotation!);
         source = next;
-      }
-      function check(current: Tree, text: string, annotation: string): void {
-        expect(current.rootNode.hasError).toBe(annotation === ': number');
-        const start = text.lastIndexOf(annotation);
-        expect(
-          recoveryQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-        ).toEqual([[annotation, start, start + annotation.length]]);
       }
     } finally {
       tree?.delete();
-      recoveryQuery.delete();
       parser.delete();
     }
   });
   test.each(['unknown', 'never', 'unique'])('retains the annotated %s expression across arrow variants', (name) => {
     const parser = new Parser().setLanguage(language);
-    const roleQuery = new Query(
-      language,
-      `
-      (labeled_statement label: (statement_identifier) @label)
-      (parenthesized_expression (identifier) @expression_name)
-      (parenthesized_expression type: (type_annotation (predefined_type) @type))
-      (required_parameter pattern: (identifier) @binding_name
-        type: (type_annotation (predefined_type) @type))
-    `
-    );
     let source = `${name}: { const x = (${name} /* annotation */: number); }`;
     let tree: Tree | undefined;
     try {
@@ -2267,11 +1666,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         expect(current.rootNode.hasError).toBe(error);
         const nameStart = text.indexOf(name, text.indexOf('('));
         const typeStart = text.indexOf('number');
-        expect(
-          roleQuery
-            .captures(current.rootNode)
-            .map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-        ).toEqual([
+        expect(annotatedExpressionRoles(current.rootNode)).toEqual([
           ['label', name, 0, name.length],
           [role, name, nameStart, nameStart + name.length],
           ...(typeStart === -1 ? [] : [['type', 'number', typeStart, typeStart + 'number'.length]]),
@@ -2279,21 +1674,16 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
       }
     } finally {
       tree?.delete();
-      roleQuery.delete();
       parser.delete();
     }
   });
   test('retains the type alias result through invalid constructor bindings', () => {
     const parser = new Parser().setLanguage(language);
-    const recoveryQuery = new Query(
-      language,
-      '[(type_alias_declaration value: (predefined_type) @result) (type_alias_declaration value: (constructor_type type: (predefined_type) @result))]'
-    );
     let source = 'type F = new (void: T[]) => unknown;';
     let tree: Tree | undefined;
     try {
       tree = parser.parse(source)!;
-      check(tree, source);
+      checkAliasPredefinedResult(tree, source);
       const start = source.indexOf('void');
       for (const [before, after] of [
         ['void', 'value'],
@@ -2304,19 +1694,12 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         const next = source.slice(0, start) + after + source.slice(start + before!.length);
         tree.delete();
         tree = parser.parse(next)!;
-        check(tree, next);
+        checkAliasPredefinedResult(tree, next);
         expect(tree.rootNode.hasError).toBe(after !== 'value');
         source = next;
       }
-      function check(current: Tree, text: string): void {
-        const start = text.lastIndexOf('unknown');
-        expect(
-          recoveryQuery.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-        ).toEqual([['unknown', start, start + 'unknown'.length]]);
-      }
     } finally {
       tree?.delete();
-      recoveryQuery.delete();
       parser.delete();
     }
   });
@@ -2339,7 +1722,7 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
     let source = Source;
     try {
       tree = parser.parse(source)!;
-      check(tree, source);
+      checkParameterFixture(tree, source);
       const word = marker.includes('unique') ? 'unique' : marker.includes('unknown') ? 'unknown' : 'never';
       const markerStart = source.indexOf(marker);
       expect(markerStart).toBeGreaterThanOrEqual(0);
@@ -2352,37 +1735,237 @@ describe.each(['typescript', 'tsx'])('%s function-type parameter names', (dialec
         tree.delete();
         tree = parser.parse(next)!;
         expect(tree.rootNode.hasError).toBe(false);
-        check(tree, next);
+        checkParameterFixture(tree, next);
         source = next;
       }
       expect(source).toBe(Source);
-      function check(current: Tree, text: string): void {
-        const reference = ts.createSourceFile('parameters.ts', text, ts.ScriptTarget.Latest, true);
-        const expected: [string, string, number, number][] = [];
-        const visit = (node: ts.Node): void => {
-          if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
-            expected.push(['name', node.name.getText(reference), node.name.getStart(reference), node.name.getEnd()]);
-            if (node.type)
-              expected.push(['type', node.type.getText(reference), node.type.getStart(reference), node.type.getEnd()]);
-          }
-          if (
-            ts.isIdentifier(node) &&
-            (ts.isArrayLiteralExpression(node.parent) ||
-              (ts.isPropertyAssignment(node.parent) && node.parent.initializer === node))
-          ) {
-            expected.push(['reference', node.getText(reference), node.getStart(reference), node.getEnd()]);
-          }
-          ts.forEachChild(node, visit);
-        };
-        visit(reference);
-        expect(current.rootNode.hasError).toBe(false);
-        expect(
-          query!.captures(current.rootNode).map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-        ).toEqual(expected);
-      }
     } finally {
       tree?.delete();
       parser.delete();
     }
   });
 });
+
+function checkTypeOperatorFields(current: Tree, text: string, missing: boolean): void {
+  expect(current.rootNode.hasError).toBe(missing);
+  if (missing) return;
+  const end = text.length - 1;
+  expect(typeAliasRoles(current.rootNode)).toEqual([
+    ['name', 'type_identifier', 'F', 5, 6],
+    ['value', 'function_type', text.slice(9, end), 9, end],
+  ]);
+}
+
+function checkOptionalCallbackReturn(current: Tree, text: string, missing: boolean): void {
+  expect(current.rootNode.hasError).toBe(missing);
+  const end = missing ? text.lastIndexOf(')') + 1 : text.length - 1;
+  expect(typeAliasRoles(current.rootNode)).toEqual([
+    ['name', 'type_identifier', 'F', 5, 6],
+    ['value', missing ? 'parenthesized_type' : 'function_type', text.slice(9, end), 9, end],
+  ]);
+}
+
+function checkOptionalCallbackArrow(current: Tree, text: string, error: boolean): void {
+  expect(current.rootNode.hasError).toBe(error);
+  expect(typeAliasRoles(current.rootNode)).toEqual([
+    ['name', 'type_identifier', 'F', 5, 6],
+    ['value', error ? 'parenthesized_type' : 'function_type', text.slice(9, -1), 9, text.length - 1],
+  ]);
+}
+
+function checkIndexSignatures(current: Tree, text: string, firstName: string): void {
+  expect(current.rootNode.hasError).toBe(false);
+  const expected = [firstName, 'unique', 'never'].flatMap((name, i) => {
+    const start = text.indexOf('[' + name, i === 2 ? text.indexOf('type T') : 0) + 1;
+    const index = text.indexOf('string', start),
+      result = text.indexOf('number', index);
+    return [
+      ['name', name, start, start + name.length],
+      ['index', 'string', index, index + 6],
+      ['result', 'number', result, result + 6],
+    ];
+  });
+  expect(indexSignatureRoles(current.rootNode)).toEqual(expected);
+}
+
+function checkNestedArrowInitializer(current: Tree, text: string, error: boolean): void {
+  expect(current.rootNode.hasError).toBe(error);
+  // A parenthesized parameter must be an assignment target, so `((x: number))` is no recovered parameter.
+  if (text.includes('((x: number))')) return;
+  const start = text.indexOf('(');
+  expect(parenthesizedDeclaratorValues(current.rootNode)).toEqual([[text.slice(start, -1), start, text.length - 1]]);
+}
+
+function checkMalformedParenthesizedType(current: Tree, text: string, valid: boolean): void {
+  expect(current.rootNode.hasError).toBe(!valid);
+  if (!valid) return;
+  const start = text.indexOf('(');
+  expect(typeAliasRoles(current.rootNode)).toEqual([
+    ['name', 'type_identifier', 'T', text.indexOf('T'), text.indexOf('T') + 1],
+    ['value', 'function_type', text.slice(start, -1), start, text.length - 1],
+  ]);
+}
+
+function checkUniqueTypeInitializer(current: Tree, text: string, error: boolean): void {
+  expect(current.rootNode.hasError).toBe(error);
+  const start = text.indexOf('(');
+  expect(parenthesizedDeclaratorValues(current.rootNode)).toEqual([[text.slice(start, -1), start, text.length - 1]]);
+}
+
+function checkExtraColonTypeField(current: Tree, text: string, annotation: string): void {
+  expect(current.rootNode.hasError).toBe(annotation === ': number');
+  const start = text.lastIndexOf(annotation);
+  expect(
+    current.rootNode.descendantsOfType('parenthesized_expression').flatMap((node) => {
+      const typeAnnotation = node.childForFieldName('type');
+      return typeAnnotation?.type === 'type_annotation'
+        ? [[typeAnnotation.text, typeAnnotation.startIndex, typeAnnotation.endIndex]]
+        : [];
+    })
+  ).toEqual([[annotation, start, start + annotation.length]]);
+}
+
+function checkAliasPredefinedResult(current: Tree, text: string): void {
+  const start = text.lastIndexOf('unknown');
+  expect(aliasPredefinedResults(current.rootNode)).toEqual([['unknown', start, start + 'unknown'.length]]);
+}
+
+function checkParameterFixture(current: Tree, text: string): void {
+  const reference = ts.createSourceFile('parameters.ts', text, ts.ScriptTarget.Latest, true);
+  const expected: [string, string, number, number][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isParameter(node) && ts.isIdentifier(node.name)) {
+      expected.push(['name', node.name.getText(reference), node.name.getStart(reference), node.name.getEnd()]);
+      if (node.type)
+        expected.push(['type', node.type.getText(reference), node.type.getStart(reference), node.type.getEnd()]);
+    }
+    if (
+      ts.isIdentifier(node) &&
+      (ts.isArrayLiteralExpression(node.parent) ||
+        (ts.isPropertyAssignment(node.parent) && node.parent.initializer === node))
+    ) {
+      expected.push(['reference', node.getText(reference), node.getStart(reference), node.getEnd()]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(reference);
+  expect(current.rootNode.hasError).toBe(false);
+  expect(parameterFixtureRoles(current.rootNode)).toEqual(expected);
+}
+
+function expectAliasAndBinding(tree: Tree, next: string, name: string): void {
+  expect(tree.rootNode.hasError).toBe(false);
+  expect(typeAliasRoles(tree.rootNode)).toEqual([
+    ['name', 'type_identifier', 'F', 5, 6],
+    ['value', 'function_type', next.slice(7, -1), 7, next.length - 1],
+  ]);
+  expect(parameterBindingRanges(tree.rootNode, name)).toEqual([[name, 8, 8 + name.length]]);
+}
+
+function parameterAnnotationRoles(root: Node): [string, string, number, number][] {
+  return root.descendantsOfType(['required_parameter', 'optional_parameter']).flatMap((parameter) => {
+    const pattern = parameter.childForFieldName('pattern');
+    const annotation = parameter.childForFieldName('type');
+    return pattern?.type === 'identifier' && annotation?.type === 'type_annotation'
+      ? [
+          ['name', pattern.text, pattern.startIndex, pattern.endIndex],
+          ['annotation', annotation.text, annotation.startIndex, annotation.endIndex],
+        ]
+      : [];
+  });
+}
+
+function predefinedParameterRoles(root: Node): [string, string, number, number][] {
+  return root.descendantsOfType(['required_parameter', 'optional_parameter']).flatMap((parameter) => {
+    const pattern = parameter.childForFieldName('pattern');
+    const annotation = parameter.childForFieldName('type');
+    const inner = annotation?.type === 'type_annotation' ? firstNonExtraNamedChild(annotation) : undefined;
+    return pattern?.type === 'identifier' && inner?.type === 'predefined_type'
+      ? [
+          ['name', pattern.text, pattern.startIndex, pattern.endIndex],
+          ['type', inner.text, inner.startIndex, inner.endIndex],
+        ]
+      : [];
+  });
+}
+
+function indexSignatureRoles(root: Node): [string, string, number, number][] {
+  return root.descendantsOfType('index_signature').flatMap((signature) => {
+    const name = signature.childForFieldName('name');
+    const index = signature.childForFieldName('index_type');
+    const annotation = signature.childForFieldName('type');
+    const result = annotation?.type === 'type_annotation' ? firstNonExtraNamedChild(annotation) : undefined;
+    return name?.type === 'identifier' && index && result
+      ? [
+          ['name', name.text, name.startIndex, name.endIndex],
+          ['index', index.text, index.startIndex, index.endIndex],
+          ['result', result.text, result.startIndex, result.endIndex],
+        ]
+      : [];
+  });
+}
+
+function parenthesizedDeclaratorValues(root: Node): [string, number, number][] {
+  return root.descendantsOfType('variable_declarator').flatMap((declarator) => {
+    const value = declarator.childForFieldName('value');
+    return value?.type === 'parenthesized_expression' ? [[value.text, value.startIndex, value.endIndex]] : [];
+  });
+}
+
+function annotatedExpressionRoles(root: Node): [string, string, number, number][] {
+  const roles: [string, string, number, number][] = [];
+  walkNodes(root, (node) => {
+    if (node.type === 'labeled_statement') {
+      const label = node.childForFieldName('label');
+      if (label?.type === 'statement_identifier') roles.push(['label', label.text, label.startIndex, label.endIndex]);
+    } else if (node.type === 'parenthesized_expression') {
+      const typeAnnotation = node.childForFieldName('type');
+      for (const child of nonExtraNamedChildren(node)) {
+        if (child.type === 'identifier') roles.push(['expression_name', child.text, child.startIndex, child.endIndex]);
+        if (child.type === 'type_annotation' && typeAnnotation?.id === child.id) {
+          const inner = firstNonExtraNamedChild(child);
+          if (inner?.type === 'predefined_type') roles.push(['type', inner.text, inner.startIndex, inner.endIndex]);
+        }
+      }
+    } else if (node.type === 'required_parameter') {
+      const pattern = node.childForFieldName('pattern');
+      const annotation = node.childForFieldName('type');
+      const inner = annotation?.type === 'type_annotation' ? firstNonExtraNamedChild(annotation) : undefined;
+      if (pattern?.type === 'identifier' && inner?.type === 'predefined_type') {
+        roles.push(
+          ['binding_name', pattern.text, pattern.startIndex, pattern.endIndex],
+          ['type', inner.text, inner.startIndex, inner.endIndex]
+        );
+      }
+    }
+  });
+  return roles;
+}
+
+function aliasPredefinedResults(root: Node): [string, number, number][] {
+  return root.descendantsOfType('type_alias_declaration').flatMap((alias) => {
+    const value = alias.childForFieldName('value');
+    const result = value?.type === 'constructor_type' ? value.childForFieldName('type') : value;
+    return result?.type === 'predefined_type' ? [[result.text, result.startIndex, result.endIndex]] : [];
+  });
+}
+
+function parameterFixtureRoles(root: Node): [string, string, number, number][] {
+  const roles: [string, string, number, number][] = [];
+  walkNodes(root, (node) => {
+    if (node.type === 'required_parameter' || node.type === 'optional_parameter') {
+      const pattern = node.childForFieldName('pattern');
+      if (pattern?.type === 'identifier') roles.push(['name', pattern.text, pattern.startIndex, pattern.endIndex]);
+      const annotation = node.childForFieldName('type');
+      const inner = annotation?.type === 'type_annotation' ? firstNonExtraNamedChild(annotation) : undefined;
+      if (inner) roles.push(['type', inner.text, inner.startIndex, inner.endIndex]);
+    } else if (
+      node.type === 'identifier' &&
+      (node.parent?.type === 'array' ||
+        (node.parent?.type === 'pair' && node.parent.childForFieldName('value')?.id === node.id))
+    ) {
+      roles.push(['reference', node.text, node.startIndex, node.endIndex]);
+    }
+  });
+  return roles;
+}

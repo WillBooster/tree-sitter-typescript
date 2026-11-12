@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { walkNodes } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `type Bare = import("m")<string>;
@@ -30,10 +31,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(call_expression function: (import) arguments: (arguments (string) @module) type_arguments: (_) @arguments) @import (variable_declarator value: (instantiation_expression) @instantiation)'
-    );
     try {
       for (const type of [
         'import("m")<string>',
@@ -52,13 +49,12 @@ for (const dialect of ['typescript', 'tsx']) {
         const source = Prefix + type + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkImports(tree, source, dialect, query);
+          checkImports(tree, source, dialect);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -195,7 +191,7 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-function checkImports(tree: Tree, source: string, dialect: string, query: Query): void {
+function checkImports(tree: Tree, source: string, dialect: string): void {
   expect(
     ts.transpileModule(source, { reportDiagnostics: true, fileName: dialect === 'tsx' ? 'fixture.tsx' : 'fixture.ts' })
       .diagnostics ?? [],
@@ -225,14 +221,26 @@ function checkImports(tree: Tree, source: string, dialect: string, query: Query)
     ts.forEachChild(node, visit);
   };
   visit(reference);
-  const captures = query.captures(tree.rootNode);
+  const actual: Record<string, (string | number)[][]> = { import: [], module: [], arguments: [], instantiation: [] };
+  walkNodes(tree.rootNode, (node) => {
+    if (node.type === 'call_expression' && node.childForFieldName('function')?.type === 'import') {
+      const typeArguments = node.childForFieldName('type_arguments');
+      const moduleString = node.childForFieldName('arguments')?.namedChildren.find((child) => child.type === 'string');
+      if (moduleString && typeArguments) {
+        actual.import!.push([node.text, node.startIndex, node.endIndex]);
+        actual.module!.push([moduleString.text, moduleString.startIndex, moduleString.endIndex]);
+        actual.arguments!.push([typeArguments.text, typeArguments.startIndex, typeArguments.endIndex]);
+      }
+    }
+    if (node.type === 'variable_declarator') {
+      const value = node.childForFieldName('value');
+      if (value?.type === 'instantiation_expression') {
+        actual.instantiation!.push([value.text, value.startIndex, value.endIndex]);
+      }
+    }
+  });
   for (const [name, ranges] of Object.entries(expected)) {
-    expect(
-      captures
-        .filter((capture) => capture.name === name)
-        .map(({ node }) => [node.text, node.startIndex, node.endIndex]),
-      source
-    ).toEqual(ranges);
+    expect(actual[name], source).toEqual(ranges);
   }
   expect(tree.rootNode.lastNamedChild!.text).toBe('const following = 1;');
 }

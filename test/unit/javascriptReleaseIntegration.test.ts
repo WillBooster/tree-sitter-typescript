@@ -1,4 +1,4 @@
-import { Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -183,7 +183,6 @@ for (const dialect of ['typescript', 'tsx']) {
 
   test(`${dialect} keeps typed default declarations separate from following expressions`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(export_statement declaration: (_) @declaration)');
     try {
       for (const declaration of [
         'interface Shape<T> { value: T }',
@@ -201,7 +200,10 @@ for (const dialect of ['typescript', 'tsx']) {
           try {
             expect(tree.rootNode.hasError, source).toBe(false);
             expect(
-              query.captures(tree.rootNode).map(({ node }) => node.text),
+              tree.rootNode.descendantsOfType('export_statement').flatMap((statement) => {
+                const exported = statement.childForFieldName('declaration');
+                return exported ? [exported.text] : [];
+              }),
               source
             ).toEqual([declaration]);
             expect(tree.rootNode.lastNamedChild?.text, source).toBe(suffix);
@@ -212,7 +214,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });

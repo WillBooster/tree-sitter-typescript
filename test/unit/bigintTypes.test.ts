@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { jsxTagNameNodes } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `type Primitive = bigint;
@@ -37,6 +38,32 @@ interface I extends bigint {}
 interface GenericI extends bigint<bigint> {}
 `;
 
+const QualifiedSource = `namespace A { export namespace bigint { export interface B<T = number> {} } }
+namespace bigint { export namespace A { export interface B<T = number> {} } }
+type Box<T> = T[];
+let nested: A.bigint.B;
+let root: bigint.A.B;
+let generic: A.bigint.B<string>;
+let rootGeneric: bigint.A.B<string>;
+let array: A.bigint.B[];
+let list: Box<A.bigint.B>;
+class Nested implements A.bigint.B {}
+class Root implements bigint.A.B {}
+interface Extended extends A.bigint.B {}
+interface RootExtended extends bigint.A.B {}
+type X = { a: string };
+type Mapped = { [bigint in keyof X]: 1 };
+type Modified = { -readonly [bigint in keyof X as bigint]?: bigint };
+`;
+
+const QuerySource = `function bigint<T>(value: T) { return value; }
+namespace bigint { export const A = { B: 1n }; }
+type Root = (typeof bigint);
+type Chain = (typeof bigint.A.B);
+type Instantiated = (typeof bigint<string>);
+type Return = (value: unknown) => (typeof bigint);
+`;
+
 await Parser.init();
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -64,24 +91,6 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-const QualifiedSource = `namespace A { export namespace bigint { export interface B<T = number> {} } }
-namespace bigint { export namespace A { export interface B<T = number> {} } }
-type Box<T> = T[];
-let nested: A.bigint.B;
-let root: bigint.A.B;
-let generic: A.bigint.B<string>;
-let rootGeneric: bigint.A.B<string>;
-let array: A.bigint.B[];
-let list: Box<A.bigint.B>;
-class Nested implements A.bigint.B {}
-class Root implements bigint.A.B {}
-interface Extended extends A.bigint.B {}
-interface RootExtended extends bigint.A.B {}
-type X = { a: string };
-type Mapped = { [bigint in keyof X]: 1 };
-type Modified = { -readonly [bigint in keyof X as bigint]?: bigint };
-`;
-
 for (const dialect of ['typescript', 'tsx']) {
   test(`preserves qualified bigint names and mapped binders in ${dialect}`, async () => {
     const parser = new Parser().setLanguage(await loadCurrentWasmBuild(dialect));
@@ -103,19 +112,10 @@ for (const dialect of ['typescript', 'tsx']) {
   });
 }
 
-const QuerySource = `function bigint<T>(value: T) { return value; }
-namespace bigint { export const A = { B: 1n }; }
-type Root = (typeof bigint);
-type Chain = (typeof bigint.A.B);
-type Instantiated = (typeof bigint<string>);
-type Return = (value: unknown) => (typeof bigint);
-`;
-
 for (const dialect of ['typescript', 'tsx']) {
   test(`preserves bigint type queries and keyword-qualified heritage in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(type_query) @query');
     try {
       for (const source of [
         'const bigint = 1n; type T = (typeof bigint);',
@@ -129,13 +129,12 @@ class Generic implements ${name}.bigint<string> {}`
       ]) {
         const tree = parser.parse(source)!;
         try {
-          check(tree, source, 'bigint.ts', query);
+          check(tree, source, 'bigint.ts');
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -145,7 +144,6 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves bigint generic-arrow parameters in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(type_parameter name: (type_identifier) @name)');
     try {
       for (const parameters of [
         'bigint,',
@@ -169,7 +167,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
 
@@ -189,7 +186,12 @@ for (const dialect of ['typescript', 'tsx']) {
         ts.forEachChild(node, visit);
       }
       visit(reference);
-      expect(query.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(names);
+      expect(
+        current.rootNode.descendantsOfType('type_parameter').flatMap((node) => {
+          const name = node.childForFieldName('name');
+          return name?.type === 'type_identifier' ? [[name.startIndex, name.endIndex]] : [];
+        })
+      ).toEqual(names);
       expect(
         current.rootNode.descendantsOfType('arrow_function').map((node) => [node.startIndex, node.endIndex])
       ).toEqual(arrows);
@@ -201,7 +203,6 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves bigint function parameters in nested conditional types in ${dialect}`, async () => {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(function_type) @function (conditional_type) @conditional');
     const contexts = [
       'X extends Y ? FUNCTION : S',
       'X extends Y ? S : FUNCTION',
@@ -247,23 +248,7 @@ for (const dialect of ['typescript', 'tsx']) {
         tree.delete();
       }
     } finally {
-      query.delete();
       parser.delete();
-    }
-
-    function checkBranches(current: Tree, source: string): void {
-      check(current, source);
-      const reference = ts.createSourceFile('bigint.ts', source, ts.ScriptTarget.Latest, true);
-      const expected: [string, number, number][] = [];
-      function visit(node: ts.Node): void {
-        if (ts.isFunctionTypeNode(node)) expected.push(['function', node.getStart(reference), node.end]);
-        if (ts.isConditionalTypeNode(node)) expected.push(['conditional', node.getStart(reference), node.end]);
-        ts.forEachChild(node, visit);
-      }
-      visit(reference);
-      expect(query.captures(current.rootNode).map(({ name, node }) => [name, node.startIndex, node.endIndex])).toEqual(
-        expected
-      );
     }
   });
 }
@@ -271,14 +256,6 @@ for (const dialect of ['typescript', 'tsx']) {
 test('preserves bigint JSX names', async () => {
   const language = await loadCurrentWasmBuild('tsx');
   const parser = new Parser().setLanguage(language);
-  const query = new Query(
-    language,
-    `[
-    (jsx_opening_element name: (_) @name)
-    (jsx_closing_element name: (_) @name)
-    (jsx_self_closing_element name: (_) @name)
-  ]`
-  );
   const source = `const elements = [<bigint/>, <bigint a="1"/>, <bigint></bigint>,
     <bigint:x/>, <x:bigint/>, <bigint.A/>, <A.bigint.B/>];`;
   try {
@@ -291,25 +268,42 @@ test('preserves bigint JSX names', async () => {
       }
     }
   } finally {
-    query.delete();
     parser.delete();
-  }
-  function checkJsx(current: Tree, text: string): void {
-    check(current, text, 'bigint.tsx');
-    const reference = ts.createSourceFile('bigint.tsx', text, ts.ScriptTarget.Latest, true);
-    const names: string[] = [];
-    function visit(node: ts.Node): void {
-      if (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node)) {
-        names.push(node.tagName.getText(reference));
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(reference);
-    expect(query.captures(current.rootNode).map((capture) => capture.node.text)).toEqual(names);
   }
 });
 
-function check(tree: Tree, source: string, fileName = 'bigint.ts', query?: Query): void {
+function checkBranches(current: Tree, source: string): void {
+  check(current, source);
+  const reference = ts.createSourceFile('bigint.ts', source, ts.ScriptTarget.Latest, true);
+  const expected: [string, number, number][] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isFunctionTypeNode(node)) expected.push(['function', node.getStart(reference), node.end]);
+    if (ts.isConditionalTypeNode(node)) expected.push(['conditional', node.getStart(reference), node.end]);
+    ts.forEachChild(node, visit);
+  }
+  visit(reference);
+  expect(
+    current.rootNode
+      .descendantsOfType(['function_type', 'conditional_type'])
+      .map((node) => [node.type === 'function_type' ? 'function' : 'conditional', node.startIndex, node.endIndex])
+  ).toEqual(expected);
+}
+
+function checkJsx(current: Tree, text: string): void {
+  check(current, text, 'bigint.tsx');
+  const reference = ts.createSourceFile('bigint.tsx', text, ts.ScriptTarget.Latest, true);
+  const names: string[] = [];
+  function visit(node: ts.Node): void {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxClosingElement(node) || ts.isJsxSelfClosingElement(node)) {
+      names.push(node.tagName.getText(reference));
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(reference);
+  expect(jsxTagNameNodes(current.rootNode).map((node) => node.text)).toEqual(names);
+}
+
+function check(tree: Tree, source: string, fileName = 'bigint.ts'): void {
   const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   expect(ts.transpileModule(source, { reportDiagnostics: true, fileName }).diagnostics).toEqual([]);
   expect(tree.rootNode.hasError, tree.rootNode.toString()).toBe(false);
@@ -335,8 +329,6 @@ function check(tree: Tree, source: string, fileName = 'bigint.ts', query?: Query
   expect(tree.rootNode.descendantsOfType('type_query').map((node) => [node.startIndex, node.endIndex])).toEqual(
     typeQueries
   );
-  if (query)
-    expect(query.captures(tree.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(typeQueries);
   expect(
     tree.rootNode.descendantsOfType('nested_type_identifier').map((node) => [node.startIndex, node.endIndex])
   ).toEqual(qualifiedNames);

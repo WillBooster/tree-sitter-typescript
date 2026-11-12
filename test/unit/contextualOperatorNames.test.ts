@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild, walkNodes } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = `class as { value = 1; read() { return this.value; } }
@@ -81,26 +82,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(new_expression constructor: (identifier) @constructor)');
-    const operators = new Query(language, '(as_expression) @as\n(satisfies_expression) @satisfies');
-    const typeRoles = new Query(
-      language,
-      `
-      (parenthesized_type) @parenthesized
-      (type_query . (_) @query.value)
-      (mapped_type_clause name: (type_identifier) @mapped.name type: (_) @mapped.type alias: (_) @mapped.alias)
-      (extends_clause type_arguments: (type_arguments) @heritage)
-      (extends_type_clause type: (type_identifier) @interface.name)
-      (tuple_type (required_parameter name: (identifier) @tuple.name))
-      (tuple_type (optional_parameter name: (identifier) @tuple.name))
-      (tuple_type (required_parameter name: (rest_pattern (identifier) @tuple.name)))
-      (nested_type_identifier) @qualified.type
-      (type_predicate name: (identifier) @predicate.name)
-      (asserts . (identifier) @assert.name)
-      (type_parameter name: (type_identifier) @generic.name)
-      ${dialect === 'tsx' ? '(jsx_self_closing_element name: (_) @jsx.name) (jsx_opening_element name: (_) @jsx.name) (jsx_closing_element name: (_) @jsx.name)' : ''}
-    `
-    );
     const source = Source + (dialect === 'tsx' ? JsxSource : '');
     let tree: Tree | undefined;
     try {
@@ -144,9 +125,6 @@ for (const dialect of ['typescript', 'tsx']) {
       }
     } finally {
       tree?.delete();
-      typeRoles.delete();
-      operators.delete();
-      query.delete();
       parser.delete();
     }
 
@@ -197,15 +175,68 @@ for (const dialect of ['typescript', 'tsx']) {
       };
       visit(reference);
       expect(current.rootNode.hasError).toBe(false);
-      expect(query.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual(
-        constructors
-      );
       expect(
-        operators.captures(current.rootNode).map(({ name, node }) => [name, node.startIndex, node.endIndex])
+        current.rootNode.descendantsOfType('new_expression').flatMap((node) => {
+          const ctor = node.childForFieldName('constructor');
+          return ctor?.type === 'identifier' ? [[ctor.text, ctor.startIndex, ctor.endIndex]] : [];
+        })
+      ).toEqual(constructors);
+      expect(
+        current.rootNode
+          .descendantsOfType(['as_expression', 'satisfies_expression'])
+          .map((node) => [node.type === 'as_expression' ? 'as' : 'satisfies', node.startIndex, node.endIndex])
       ).toEqual(assertions);
-      expect(
-        typeRoles.captures(current.rootNode).map(({ name, node }) => [name, node.startIndex, node.endIndex])
-      ).toEqual(types);
+      expect(collectTypeRoles(current.rootNode, dialect === 'tsx')).toEqual(types);
     }
   });
+}
+
+function collectTypeRoles(root: Node, includeJsx: boolean): [string, number, number][] {
+  const roles: [string, number, number][] = [];
+  const push = (name: string, node: Node | null | undefined): void => {
+    if (node) roles.push([name, node.startIndex, node.endIndex]);
+  };
+  walkNodes(root, (node) => {
+    if (node.type === 'parenthesized_type') push('parenthesized', node);
+    else if (node.type === 'type_query') push('query.value', firstNonExtraNamedChild(node));
+    else if (node.type === 'mapped_type_clause') {
+      const name = node.childForFieldName('name');
+      if (name?.type === 'type_identifier') {
+        push('mapped.name', name);
+        push('mapped.type', node.childForFieldName('type'));
+        push('mapped.alias', node.childForFieldName('alias'));
+      }
+    } else if (node.type === 'extends_clause') {
+      const args = node.childForFieldName('type_arguments');
+      if (args?.type === 'type_arguments') push('heritage', args);
+    } else if (node.type === 'extends_type_clause') {
+      const type = node.childForFieldName('type');
+      if (type?.type === 'type_identifier') push('interface.name', type);
+    } else if (
+      (node.type === 'required_parameter' || node.type === 'optional_parameter') &&
+      node.parent?.type === 'tuple_type'
+    ) {
+      const label = node.childForFieldName('name');
+      const leaf = label?.type === 'rest_pattern' ? firstNonExtraNamedChild(label) : label;
+      if (leaf?.type === 'identifier') push('tuple.name', leaf);
+    } else if (node.type === 'nested_type_identifier') push('qualified.type', node);
+    else if (node.type === 'type_predicate') {
+      const name = node.childForFieldName('name');
+      if (name?.type === 'identifier') push('predicate.name', name);
+    } else if (node.type === 'asserts' && node.isNamed) {
+      const first = firstNonExtraNamedChild(node);
+      if (first?.type === 'identifier') push('assert.name', first);
+    } else if (node.type === 'type_parameter') {
+      const name = node.childForFieldName('name');
+      if (name?.type === 'type_identifier') push('generic.name', name);
+    } else if (
+      includeJsx &&
+      (node.type === 'jsx_self_closing_element' ||
+        node.type === 'jsx_opening_element' ||
+        node.type === 'jsx_closing_element')
+    ) {
+      push('jsx.name', node.childForFieldName('name'));
+    }
+  });
+  return roles;
 }

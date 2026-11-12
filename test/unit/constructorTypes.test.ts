@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -58,22 +58,19 @@ for (const dialect of ['typescript', 'tsx']) {
     test(`retains ${dialect} constructor ${description}`, async () => {
       await Parser.init();
       const parser = new Parser();
-      let query: Query | undefined;
       try {
         const language = await loadCurrentWasmBuild(dialect);
         parser.setLanguage(language);
-        query = new Query(language, '(constructor_type type: (_) @result) @factory');
         for (const source of sources) {
           const tree = parser.parse(source)!;
           try {
             expect(tree.rootNode.hasError).toBe(false);
-            expect(returnCaptures(query, tree)).toEqual(referenceReturns(source, dialect));
+            expect(returnCaptures(tree)).toEqual(referenceReturns(source, dialect));
           } finally {
             tree.delete();
           }
         }
       } finally {
-        query?.delete();
         parser.delete();
       }
     });
@@ -103,12 +100,11 @@ function referenceReturns(source: string, dialect: string): ReturnCapture[] {
   return expected.toSorted((a, b) => a[0] - b[0]);
 }
 
-function returnCaptures(query: Query, tree: Tree): ReturnCapture[] {
-  return query
-    .matches(tree.rootNode)
-    .map(({ captures }) => {
-      const factory = captures.find(({ name }) => name === 'factory')!.node;
-      const result = captures.find(({ name }) => name === 'result')!.node;
+function returnCaptures(tree: Tree): ReturnCapture[] {
+  return tree.rootNode
+    .descendantsOfType('constructor_type')
+    .map((factory) => {
+      const result = factory.childForFieldName('type')!;
       return [factory.startIndex, result.text, result.startIndex, result.endIndex] as const;
     })
     .toSorted((a, b) => a[0] - b[0]);

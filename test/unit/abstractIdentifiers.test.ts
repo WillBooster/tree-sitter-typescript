@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -87,36 +87,58 @@ for (const dialect of ['typescript', 'tsx']) {
     test(`retains ${dialect} abstract ${description}`, async () => {
       await Parser.init();
       const parser = new Parser();
-      let query: Query | undefined;
       try {
         const language = await loadCurrentWasmBuild(dialect);
         parser.setLanguage(language);
-        query = new Query(
-          language,
-          '(identifier) @name\n(property_identifier) @name\n(type_identifier) @name\n(call_signature) @signature\n(type_parameter name: (type_identifier) @parameter)'
-        );
         const ordinarySource = initialSource.slice(0, offset) + 'ordinary' + initialSource.slice(offset + 8);
         for (const source of [initialSource, ordinarySource]) {
           const tree = parser.parse(source)!;
           try {
             expect(tree.rootNode.hasError).toBe(false);
-            expect(captures(query, tree)).toEqual(referenceRanges(source, dialect));
-            expectNameKinds(parser, query, tree, source, dialect);
+            expect(captures(tree)).toEqual(referenceRanges(source, dialect));
+            expectNameKinds(parser, tree, source, dialect);
             if (description.includes('generic'))
-              expect(parameterCaptures(query, tree)).toEqual(referenceParameters(source, dialect));
+              expect(parameterCaptures(tree)).toEqual(referenceParameters(source, dialect));
           } finally {
             tree.delete();
           }
         }
       } finally {
-        query?.delete();
         parser.delete();
       }
     });
   }
 }
 
-function expectNameKinds(parser: Parser, query: Query, tree: Tree, source: string, dialect: string): void {
+for (const dialect of ['typescript', 'tsx']) {
+  test(`rejects ${dialect} keyword heritage names`, async () => {
+    await Parser.init();
+    const language = await loadCurrentWasmBuild(dialect);
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const name of ['abstract', 'in']) {
+        const source = `interface Named extends ${name} {}`;
+        const start = source.indexOf(name);
+        const tree = parser.parse(source)!;
+        try {
+          expect(tree.rootNode.hasError).toBe(name === 'in');
+          expect(
+            tree.rootNode.descendantsOfType('extends_type_clause').flatMap((node) => {
+              const type = node.childForFieldName('type');
+              return type?.type === 'type_identifier' ? [[type.text, type.startIndex, type.endIndex]] : [];
+            })
+          ).toEqual(name === 'abstract' ? [['abstract', start, start + name.length]] : []);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+}
+
+function expectNameKinds(parser: Parser, tree: Tree, source: string, dialect: string): void {
   const ranges = referenceRanges(source, dialect);
   let ordinarySource = source;
   for (const [start, end] of ranges) {
@@ -132,13 +154,10 @@ function expectNameKinds(parser: Parser, query: Query, tree: Tree, source: strin
   }
 
   function kinds(current: Tree): readonly (readonly [string, number, number])[] {
-    return query
-      .captures(current.rootNode)
-      .filter(
-        ({ name, node }) =>
-          name !== 'parameter' && ranges.some(([start, end]) => node.startIndex === start && node.endIndex === end)
-      )
-      .map(({ node }) => [node.type, node.startIndex, node.endIndex] as const)
+    return current.rootNode
+      .descendantsOfType(['identifier', 'property_identifier', 'type_identifier', 'call_signature'])
+      .filter((node) => ranges.some(([start, end]) => node.startIndex === start && node.endIndex === end))
+      .map((node) => [node.type, node.startIndex, node.endIndex] as const)
       .toSorted((a, b) => a[1] - b[1]);
   }
 }
@@ -171,38 +190,11 @@ function referenceRanges(source: string, dialect: string): Capture[] {
   return names.toSorted((a, b) => a[0] - b[0]);
 }
 
-for (const dialect of ['typescript', 'tsx']) {
-  test(`rejects ${dialect} keyword heritage names`, async () => {
-    await Parser.init();
-    const language = await loadCurrentWasmBuild(dialect);
-    const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(extends_type_clause type: (type_identifier) @heritage)');
-    try {
-      for (const name of ['abstract', 'in']) {
-        const source = `interface Named extends ${name} {}`;
-        const start = source.indexOf(name);
-        const tree = parser.parse(source)!;
-        try {
-          expect(tree.rootNode.hasError).toBe(name === 'in');
-          expect(query.captures(tree.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])).toEqual(
-            name === 'abstract' ? [['abstract', start, start + name.length]] : []
-          );
-        } finally {
-          tree.delete();
-        }
-      }
-    } finally {
-      query.delete();
-      parser.delete();
-    }
-  });
-}
-
-function captures(query: Query, tree: Tree): Capture[] {
-  return query
-    .captures(tree.rootNode)
-    .filter(({ name, node }) => name !== 'parameter' && (node.text === 'abstract' || node.type === 'call_signature'))
-    .map(({ node }) => [node.startIndex, node.endIndex] as const)
+function captures(tree: Tree): Capture[] {
+  return tree.rootNode
+    .descendantsOfType(['identifier', 'property_identifier', 'type_identifier', 'call_signature'])
+    .filter((node) => node.text === 'abstract' || node.type === 'call_signature')
+    .map((node) => [node.startIndex, node.endIndex] as const)
     .toSorted((a, b) => a[0] - b[0]);
 }
 
@@ -223,9 +215,9 @@ function referenceParameters(source: string, dialect: string): Capture[] {
   return names;
 }
 
-function parameterCaptures(query: Query, tree: Tree): Capture[] {
-  return query
-    .captures(tree.rootNode)
-    .filter(({ name }) => name === 'parameter')
-    .map(({ node }) => [node.startIndex, node.endIndex] as const);
+function parameterCaptures(tree: Tree): Capture[] {
+  return tree.rootNode.descendantsOfType('type_parameter').flatMap((node) => {
+    const name = node.childForFieldName('name');
+    return name?.type === 'type_identifier' ? [[name.startIndex, name.endIndex] as const] : [];
+  });
 }

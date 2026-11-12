@@ -1,6 +1,7 @@
-import { Parser, Query } from '@willbooster/web-tree-sitter';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { Parser } from '@willbooster/web-tree-sitter';
+import { beforeAll, describe, expect, test } from 'vitest';
 
+import { parameterBindingIdentifiers } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Names = [
@@ -31,19 +32,10 @@ const Contexts = [
 
 describe.each(['typescript', 'tsx'])('%s contextual function-type parameter names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let query: Query | undefined;
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    query = new Query(
-      language,
-      `
-      [(required_parameter pattern: (identifier) @binding)
-       (optional_parameter pattern: (identifier) @binding)]
-    `
-    );
   }, 30_000);
-  afterAll(() => query?.delete());
 
   test.each(Names)(
     'keeps $name ($optional) bindings with $returnType and rejects missing annotations',
@@ -60,14 +52,11 @@ describe.each(['typescript', 'tsx'])('%s contextual function-type parameter name
               const tree = parser.parse(source)!;
               try {
                 expect(tree.rootNode.hasError).toBe(false);
-                const captures = query!.captures(tree.rootNode);
-                const bindings = captures.filter(
-                  ({ name: capture, node }) => capture === 'binding' && node.text === name
-                );
-                expect(bindings.map(({ node }) => [node.startIndex, node.endIndex])).toEqual([
+                const bindings = parameterBindingIdentifiers(tree.rootNode).filter((node) => node.text === name);
+                expect(bindings.map((node) => [node.startIndex, node.endIndex])).toEqual([
                   [nameStart, nameStart + name.length],
                 ]);
-                const parameter = bindings[0]!.node.parent!;
+                const parameter = bindings[0]!.parent!;
                 expect(parameter.type).toBe(optional ? 'optional_parameter' : 'required_parameter');
                 expect(parameter.childForFieldName('type')?.text).toBe(`:${annotation}`);
                 const signature = parameter.parent!.parent!;
