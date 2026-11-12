@@ -3,15 +3,30 @@
 
 #define TS_GLOBAL_KEYWORD_MAX_LENGTH 11
 
-static const char *const TS_GLOBAL_KEYWORDS[] = {
+typedef char TSKeyword[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1];
+
+static const TSKeyword TS_GLOBAL_KEYWORDS[] = {
+    "abstract",
+    "accessor",
+    "any",
+    "as",
+    "assert",
+    "asserts",
+    "async",
+    "await",
+    "bigint",
+    "boolean",
     "break",
     "case",
     "catch",
     "class",
     "const",
+    "constructor",
     "continue",
     "debugger",
+    "declare",
     "default",
+    "defer",
     "delete",
     "do",
     "else",
@@ -20,76 +35,63 @@ static const char *const TS_GLOBAL_KEYWORDS[] = {
     "false",
     "finally",
     "for",
+    "from",
     "function",
+    "get",
+    "global",
     "if",
+    "implements",
     "import",
     "in",
+    "infer",
     "instanceof",
+    "interface",
+    "intrinsic",
+    "is",
+    "keyof",
+    "let",
+    "module",
+    "namespace",
+    "never",
     "new",
     "null",
-    "return",
-    "super",
-    "switch",
-    "this",
-    "throw",
-    "true",
-    "try",
-    "typeof",
-    "var",
-    "void",
-    "while",
-    "with",
-    "implements",
-    "interface",
-    "let",
+    "number",
+    "object",
+    "of",
+    "out",
+    "override",
     "package",
     "private",
     "protected",
     "public",
-    "static",
-    "yield",
-    "abstract",
-    "accessor",
-    "as",
-    "asserts",
-    "assert",
-    "any",
-    "async",
-    "await",
-    "boolean",
-    "constructor",
-    "declare",
-    "get",
-    "infer",
-    "intrinsic",
-    "is",
-    "keyof",
-    "module",
-    "namespace",
-    "never",
-    "out",
     "readonly",
     "require",
-    "number",
-    "object",
+    "return",
     "satisfies",
     "set",
+    "static",
     "string",
+    "super",
+    "switch",
     "symbol",
+    "this",
+    "throw",
+    "true",
+    "try",
     "type",
+    "typeof",
     "undefined",
     "unique",
     "unknown",
     "using",
-    "from",
-    "global",
-    "bigint",
-    "override",
-    "of",
-    "defer",
+    "var",
+    "void",
+    "while",
+    "with",
+    "yield",
 };
 
-static const char *const TS_BINDING_RESERVED_KEYWORDS[] = {
+static const TSKeyword TS_BINDING_RESERVED_KEYWORDS[] = {
     "break",
     "case",
     "catch",
@@ -128,7 +130,7 @@ static const char *const TS_BINDING_RESERVED_KEYWORDS[] = {
     "with",
 };
 
-static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
+static const TSKeyword TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
     "abstract",
     "accessor",
     "any",
@@ -171,7 +173,7 @@ static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
     "yield",
 };
 
-static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
     "class",
     "delete",
     "function",
@@ -181,7 +183,7 @@ static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
     "yield",
 };
 
-static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_PREFIX_KEYWORDS[] = {
     "async",
     "await",
     "class",
@@ -193,7 +195,7 @@ static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
     "yield",
 };
 
-static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
+static const TSKeyword TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
     "class",
     "delete",
     "false",
@@ -207,13 +209,13 @@ static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
     "yield",
 };
 
-static const char *const TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
+static const TSKeyword TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
     "never",
     "unknown",
     "void",
 };
 
-static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
+static const TSKeyword TS_PARAMETER_HEADER_KEYWORDS[] = {
     "accessor",
     "async",
     "declare",
@@ -233,11 +235,11 @@ static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
     "using",
 };
 
-static const char *const TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
+static const TSKeyword TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
     "void",
 };
 
-static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
+static const TSKeyword TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
     "break",
     "case",
     "catch",

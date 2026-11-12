@@ -44,8 +44,9 @@ the trees that error recovery produces may change; such changes are released as 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. The supported runtime is WillBooster version 19.1.0 or later within 19.x. The runtime's CLI generates the Wasm files
-with its own language ABI number, which earlier versions and the upstream tree-sitter runtime reject.
+for `.tsx` files. Use `@willbooster/web-tree-sitter` version 19.1.1 or later within 19.x. Each generated `TSLanguage`
+carries the WillBooster ABI (`0x5742000c`), which upstream `tree-sitter` runtimes reject, and omits `alias_map` and
+`primary_state_bitmap` tables that pre-19.1.0 WillBooster runtimes dereference despite sharing ABI `0x5742000c`.
 
 In Node.js and Bun:
 
@@ -89,11 +90,11 @@ parser.setLanguage(await Language.load(typescript));
 The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`.
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
-[willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter), the runtime this package is tested and
-fuzzed with. Use version 19.1.0 or later within 19.x:
+[willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter) version 19.1.1 or later within 19.x (the
+same `0x5742000c` ABI and `TSLanguage` table requirements apply):
 
 ```sh
-cargo add willbooster-tree-sitter@19.1.0 --rename tree-sitter
+cargo add willbooster-tree-sitter@19.1.1 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 

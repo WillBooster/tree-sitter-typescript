@@ -147,10 +147,11 @@ enum TokenType {
 
 static bool scan_let(TSLexer *lexer);
 static bool scan_declaration_keyword(TSLexer *lexer, const bool *valid_symbols);
-static bool scan_block_comment(TSLexer *lexer, bool *saw_newline, bool skip_contents);
+static bool scan_block_comment(TSLexer *lexer, bool *saw_newline, bool skip_contents, bool allow_line_breaks);
 static bool scan_expression_trivia(TSLexer *lexer, bool *saw_newline, bool *scanned_comment);
 static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, const bool *valid_symbols);
 static bool is_reserved_word(const char *name);
+static bool assertion_binding_word_is_reserved(const char *word);
 
 typedef struct {
     // Serialized because the parser restores the scanner from the state saved with each stack version's last
@@ -167,7 +168,7 @@ static bool await_is_identifier(const Scanner *scanner);
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer);
 static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool html_comments);
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break);
-static bool restart_after_jsx_whitespace(TSLexer *lexer);
+static void restart_after_jsx_whitespace(TSLexer *lexer);
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer);
 static bool scan_type_parameter_prefix(TSLexer *lexer);
 static bool scan_import_type_arguments_start(TSLexer *lexer);
@@ -179,10 +180,15 @@ static inline void external_scanner_destroy(void *payload) { ts_free(payload); }
 
 static inline unsigned external_scanner_serialize(void *payload, char *buffer) {
     Scanner *scanner = (Scanner *)payload;
+    unsigned function_bytes = function_context_serialize(&scanner->functions, buffer + 3);
+    if (!function_bytes && !scanner->automatic_semicolon_pending && !scanner->heritage_type_pending &&
+        !scanner->default_declaration_pending) {
+        return 0;
+    }
     buffer[0] = (char)scanner->automatic_semicolon_pending;
     buffer[1] = (char)scanner->heritage_type_pending;
     buffer[2] = (char)scanner->default_declaration_pending;
-    return 3 + function_context_serialize(&scanner->functions, buffer + 3);
+    return 3 + function_bytes;
 }
 
 static inline void external_scanner_deserialize(void *payload, const char *buffer, unsigned length) {
@@ -197,18 +203,16 @@ static inline void advance(TSLexer *lexer) { lexer->advance(lexer, false); }
 
 static inline void skip(TSLexer *lexer) { lexer->advance(lexer, true); }
 
-static inline bool is_line_terminator(int32_t c) { return c == '\n' || c == '\r' || c == 0x2028 || c == 0x2029; }
+static inline bool is_line_terminator(int32_t c) {
+    if ((uint32_t)c < 0x80) return c == '\n' || c == '\r';
+    return c == 0x2028 || c == 0x2029;
+}
 
 // The characters of the whitespace class in the grammar's extras (which includes the line terminators). iswspace
 // depends on the C library and locale and differs from that class.
 static inline bool is_whitespace(int32_t c) {
+    if ((uint32_t)c < 0x80) return c == ' ' || (uint32_t)(c - '\t') <= '\r' - '\t';
     switch (c) {
-        case '\t':
-        case '\n':
-        case '\v':
-        case '\f':
-        case '\r':
-        case ' ':
         case 0x85:
         case 0xA0:
         case 0x1680:
@@ -229,9 +233,49 @@ static inline bool is_whitespace(int32_t c) {
 // character from U+007F on other than whitespace, which suffices to tell `in` and `instanceof` from the identifiers they
 // start.
 static inline bool is_identifier_part(int32_t c) {
-    return is_ascii_letter(c) || is_ascii_digit(c) || c == '_' || c == '$' || c == '\\' ||
-           (c >= 0x7F && !is_whitespace(c));
+    if ((uint32_t)c < 0x7F) {
+        return is_ascii_letter(c) || is_ascii_digit(c) || c == '_' || c == '$' || c == '\\';
+    }
+    return c >= 0x7F && !is_whitespace(c);
 }
+
+static inline int word_cmp(const char *a, const char *b) {
+    unsigned i = 0;
+    while (a[i] == b[i]) {
+        if (!a[i]) return 0;
+        i++;
+    }
+    return (unsigned char)a[i] - (unsigned char)b[i];
+}
+
+static const char EMPTY_WORD[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
+
+#define WORD_EQ(word, literal) \
+    ((void)sizeof(char[TS_GLOBAL_KEYWORD_MAX_LENGTH + 2 - sizeof(literal)]), \
+     __builtin_memcmp((word), (literal), sizeof(literal)) == 0)
+
+static inline bool word_starts_with(const char *word, const char *prefix) {
+    for (unsigned i = 0; prefix[i]; i++) {
+        if (word[i] != prefix[i]) return false;
+    }
+    return true;
+}
+
+static bool is_type_probe_word(const char *word, const TSKeyword *words, unsigned count) {
+    unsigned char first = (unsigned char)word[0];
+    if (!count || first < (unsigned char)words[0][0] || first > (unsigned char)words[count - 1][0]) return false;
+    unsigned low = 0, high = count;
+    while (low < high) {
+        unsigned mid = low + (high - low) / 2;
+        int cmp = word_cmp(word, words[mid]);
+        if (cmp == 0) return true;
+        if (cmp < 0) high = mid;
+        else low = mid + 1;
+    }
+    return false;
+}
+
+#define WORD_IN_SORTED_LIST(word, list) is_type_probe_word((word), (list), sizeof(list) / sizeof((list)[0]))
 
 // Consumes the lookahead while it matches `word`, and returns whether the whole word matched and ends there.
 static bool scan_word(TSLexer *lexer, const char *word, bool skip_contents) {
@@ -255,7 +299,7 @@ typedef enum {
 static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment, bool skip_input) {
     lexer->advance(lexer, skip_input);
     if (lexer->lookahead == '/') {
-        while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+        while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) {
             lexer->advance(lexer, skip_input);
         }
         *scanned_comment = true;
@@ -266,18 +310,7 @@ static CommentResult skip_comment(TSLexer *lexer, bool *scanned_comment, bool sk
     }
     lexer->advance(lexer, skip_input);
     bool saw_line_terminator = false;
-    while (!lexer->eof(lexer)) {
-        if (lexer->lookahead == '*') {
-            lexer->advance(lexer, skip_input);
-            if (lexer->lookahead == '/') {
-                lexer->advance(lexer, skip_input);
-                break;
-            }
-        } else {
-            saw_line_terminator |= is_line_terminator(lexer->lookahead);
-            lexer->advance(lexer, skip_input);
-        }
-    }
+    scan_block_comment(lexer, &saw_line_terminator, skip_input, true);
     *scanned_comment = true;
     return saw_line_terminator ? COMMENT_WITH_LINE_TERMINATOR : COMMENT;
 }
@@ -306,9 +339,7 @@ typedef enum {
     ACCEPT_AFTER_COMMENT_LINE_BREAK_BEFORE_SLASH,
 } WhitespaceResult;
 
-/**
- * @param consume If false, only consume enough to check if comment indicates semicolon-legality
- */
+// code-gauge-allow functionCognitiveComplexity 25 -- Trivia comment and newline decisions share the same lexer cursor and consumption mode.
 static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_content, bool consume, bool skip_contents) {
     bool saw_comment_newline = false;
     for (;;) {
@@ -319,7 +350,7 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
         lexer->advance(lexer, skip_contents);
         if (lexer->lookahead == '/') {
             lexer->advance(lexer, skip_contents);
-            while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+            while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) {
                 lexer->advance(lexer, skip_contents);
             }
             saw_comment_newline |= is_line_terminator(lexer->lookahead);
@@ -331,7 +362,7 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
             return !consume && saw_comment_newline ? ACCEPT_AFTER_COMMENT_LINE_BREAK_BEFORE_SLASH : REJECT;
         }
         lexer->advance(lexer, skip_contents);
-        if (!scan_block_comment(lexer, &saw_comment_newline, skip_contents)) return ACCEPT;
+        if (!scan_block_comment(lexer, &saw_comment_newline, skip_contents, true)) return ACCEPT;
         *scanned_content = true;
         if (!consume && lexer->lookahead != '/') {
             return saw_comment_newline ? ACCEPT_AFTER_COMMENT_LINE_BREAK : NO_NEWLINE;
@@ -339,18 +370,21 @@ static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scann
     }
 }
 
-static bool scan_block_comment(TSLexer *lexer, bool *saw_newline, bool skip_contents) {
-    while (!lexer->eof(lexer)) {
-        if (lexer->lookahead != '*') {
-            *saw_newline |= is_line_terminator(lexer->lookahead);
+static bool scan_block_comment(TSLexer *lexer, bool *saw_newline, bool skip_contents, bool allow_line_breaks) {
+    while (!lexer_eof(lexer)) {
+        if (lexer->lookahead == '*') {
             lexer->advance(lexer, skip_contents);
+            if (lexer->lookahead == '/') {
+                lexer->advance(lexer, skip_contents);
+                return true;
+            }
             continue;
         }
-        lexer->advance(lexer, skip_contents);
-        if (lexer->lookahead == '/') {
-            lexer->advance(lexer, skip_contents);
-            return true;
+        if (is_line_terminator(lexer->lookahead)) {
+            if (!allow_line_breaks) return false;
+            if (saw_newline) *saw_newline = true;
         }
+        lexer->advance(lexer, skip_contents);
     }
     return false;
 }
@@ -394,6 +428,8 @@ static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool 
 static bool follows_yield_operand(TSLexer *lexer);
 static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator);
 
+// code-gauge-allow functionNcss 50 -- ASI state machine shares lookahead and comment-break state across branches.
+// code-gauge-allow functionParameterCount 8 -- ASI probes pass caller context flags without allocating state structs.
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool comment_condition, bool after_block_arrow,
                                      LineBreakRule rule, bool *scanned_content, bool *before_line_break, bool allow_resource_binding) {
     *before_line_break = false;
@@ -403,7 +439,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
     bool resource_line_break = false;
 
     for (;;) {
-        if (lexer->eof(lexer)) {
+        if (lexer_eof(lexer)) {
             return true;
         }
 
@@ -416,7 +452,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
                 return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_content, true);
             }
 
-            if (after_block_arrow && lexer->eof(lexer)) {
+            if (after_block_arrow && lexer_eof(lexer)) {
                 return true;
             }
 
@@ -482,6 +518,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
     return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_content, false);
 }
 
+// code-gauge-allow duplicateLines 15 -- Punctuation switch mirrors operator delimiters with ASI-specific return values.
 static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow, LineBreakRule rule,
                                   bool *scanned_content, bool before_slash) {
     if (after_block_arrow) {
@@ -509,7 +546,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                 *scanned_content = true;
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
-                if (ascii_word && strcmp(word, "yield") == 0) {
+                if (ascii_word && WORD_EQ(word, "yield")) {
                     if (follows_yield_operand(lexer)) {
                         return true;
                     }
@@ -520,12 +557,12 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                 if (followed_by_trivia && lexer->lookahead == ':') {
                     return true;
                 }
-                if (ascii_word && strcmp(word, "async") == 0 && is_identifier_part(lexer->lookahead)) {
+                if (ascii_word && WORD_EQ(word, "async") && is_identifier_part(lexer->lookahead)) {
                     char parameter[16] = {0};
                     scan_identifier(lexer, parameter, sizeof(parameter), true);
                     scan_whitespace_and_comments(lexer, scanned_content, true, true);
                 }
-                if (ascii_word && strcmp(word, "async") == 0 && lexer->lookahead == '(') {
+                if (ascii_word && WORD_EQ(word, "async") && lexer->lookahead == '(') {
                     lexer->result_symbol = AWAIT_IDENTIFIER_LINE_BREAK;
                     return true;
                 }
@@ -537,24 +574,22 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                     lexer->result_symbol = AWAIT_IDENTIFIER_LINE_BREAK;
                     return true;
                 }
-                if (strcmp(word, "import") == 0) {
+                if (WORD_EQ(word, "import")) {
                     return lexer->lookahead != '(' && lexer->lookahead != '.';
                 }
-                if ((strcmp(word, "using") == 0 || strcmp(word, "let") == 0 ||
-                     (strcmp(word, "namespace") == 0 && followed_by_trivia)) && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+                if ((WORD_EQ(word, "using") || WORD_EQ(word, "let") ||
+                     (WORD_EQ(word, "namespace") && followed_by_trivia)) && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
                     char binding[16] = {0};
                     bool ascii_binding = scan_identifier(lexer, binding, sizeof(binding), true);
-                    return !ascii_binding || (strcmp(binding, "in") != 0 && strcmp(binding, "instanceof") != 0);
+                    return !ascii_binding || (!WORD_EQ(binding, "in") && !WORD_EQ(binding, "instanceof"));
                 }
-                static const char *const statements[] = {
+                static const TSKeyword statements[] = {
                     "break", "case", "catch", "const", "continue", "debugger", "default", "do", "else", "enum",
                     "export", "finally", "for", "if", "return", "switch",
                     "throw", "try", "var", "while", "with",
                 };
-                for (unsigned i = 0; i < sizeof(statements) / sizeof(statements[0]); i++) {
-                    if (strcmp(word, statements[i]) == 0) {
-                        return true;
-                    }
+                if (WORD_IN_SORTED_LIST(word, statements)) {
+                    return true;
                 }
                 lexer->result_symbol = AWAIT_IDENTIFIER_LINE_BREAK;
                 return true;
@@ -617,7 +652,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
                     return true;
             }
         case LINE_BREAK_AFTER_MODIFIER_WORD:
-            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->eof(lexer));
+            return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer_eof(lexer));
         case LINE_BREAK_BEFORE_FROM_CLAUSE:
             return before_slash || !scan_word(lexer, "from", true);
         case LINE_BREAK_BEFORE_IMPORT_ATTRIBUTES:
@@ -625,7 +660,7 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
             return scan_whitespace_and_comments(lexer, scanned_content, true, true) == REJECT || lexer->lookahead != '{';
         case LINE_BREAK_AFTER_ACCESSOR_WORD:
             return !before_slash && (lexer->lookahead == '}' || lexer->lookahead == '@' || lexer->lookahead == '*' ||
-                                     lexer->eof(lexer));
+                                     lexer_eof(lexer));
         default:
             break;
     }
@@ -724,41 +759,19 @@ static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, boo
     return true;
 }
 
+static bool skip_same_line_yield_trivia(TSLexer *lexer, bool *slash_operand);
+static bool scan_identifier_body(TSLexer *lexer, char *word, unsigned capacity, bool skip_contents, bool strict_escape, bool *ascii_word);
+static void skip_identifier_escape(TSLexer *lexer, bool skip_contents);
+static bool scan_type_identifier_escape(TSLexer *lexer);
+
 static bool follows_yield_operand(TSLexer *lexer) {
-    for (;;) {
-        while (is_whitespace(lexer->lookahead)) {
-            if (is_line_terminator(lexer->lookahead)) {
-                return false;
-            }
-            skip(lexer);
-        }
-        if (lexer->lookahead != '/') {
-            break;
-        }
-        skip(lexer);
-        if (lexer->lookahead == '/') {
-            return false;
-        }
-        if (lexer->lookahead != '*') {
-            return true;
-        }
-        skip(lexer);
-        for (;;) {
-            if (lexer->eof(lexer) || is_line_terminator(lexer->lookahead)) {
-                return false;
-            }
-            bool after_asterisk = lexer->lookahead == '*';
-            skip(lexer);
-            if (after_asterisk && lexer->lookahead == '/') {
-                skip(lexer);
-                break;
-            }
-        }
-    }
+    bool slash_operand = false;
+    if (!skip_same_line_yield_trivia(lexer, &slash_operand)) return false;
+    if (slash_operand) return true;
     if (is_identifier_part(lexer->lookahead)) {
         char word[16] = {0};
         bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
-        return !ascii_word || (strcmp(word, "in") != 0 && strcmp(word, "instanceof") != 0);
+        return !ascii_word || (!WORD_EQ(word, "in") && !WORD_EQ(word, "instanceof"));
     }
     if (lexer->lookahead == '.') {
         skip(lexer);
@@ -767,13 +780,11 @@ static bool follows_yield_operand(TSLexer *lexer) {
     if (lexer->lookahead == '+' || lexer->lookahead == '-') {
         int32_t sign = lexer->lookahead;
         skip(lexer);
-        if (lexer->lookahead != sign) {
-            return false;
-        }
+        if (lexer->lookahead != sign) return false;
         skip(lexer);
         bool scanned_content = false;
         scan_whitespace_and_comments(lexer, &scanned_content, true, true);
-        return !lexer->eof(lexer) && lexer->lookahead != ';' && lexer->lookahead != '}' && lexer->lookahead != ')' &&
+        return !lexer_eof(lexer) && lexer->lookahead != ';' && lexer->lookahead != '}' && lexer->lookahead != ')' &&
                lexer->lookahead != ']' && lexer->lookahead != ',' && lexer->lookahead != ':';
     }
     return lexer->lookahead == '*' || lexer->lookahead == ':' || lexer->lookahead == '(' ||
@@ -781,37 +792,66 @@ static bool follows_yield_operand(TSLexer *lexer) {
            lexer->lookahead == '\'' || lexer->lookahead == '"' || lexer->lookahead == '!' || lexer->lookahead == '~';
 }
 
+static bool skip_same_line_yield_trivia(TSLexer *lexer, bool *slash_operand) {
+    for (;;) {
+        while (is_whitespace(lexer->lookahead)) {
+            if (is_line_terminator(lexer->lookahead)) return false;
+            skip(lexer);
+        }
+        if (lexer->lookahead != '/') return true;
+        skip(lexer);
+        if (lexer->lookahead == '/') return false;
+        if (lexer->lookahead != '*') {
+            *slash_operand = true;
+            return true;
+        }
+        skip(lexer);
+        if (!scan_block_comment(lexer, NULL, true, false)) return false;
+    }
+}
+
 static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool skip_contents) {
-    unsigned length = 0;
     bool ascii_word = true;
+    scan_identifier_body(lexer, word, capacity, skip_contents, false, &ascii_word);
+    return ascii_word;
+}
+
+static bool scan_identifier_body(TSLexer *lexer, char *word, unsigned capacity, bool skip_contents, bool strict_escape, bool *ascii_word) {
+    unsigned length = 0;
+    *ascii_word = true;
     while (is_identifier_part(lexer->lookahead)) {
         if (lexer->lookahead == '\\') {
-            ascii_word = false;
-            lexer->advance(lexer, skip_contents);
-            if (lexer->lookahead == 'u') {
-                lexer->advance(lexer, skip_contents);
-                if (lexer->lookahead == '{') {
-                    lexer->advance(lexer, skip_contents);
-                    while (is_ascii_digit(lexer->lookahead) ||
-                           (lexer->lookahead >= 'a' && lexer->lookahead <= 'f') ||
-                           (lexer->lookahead >= 'A' && lexer->lookahead <= 'F')) {
-                        lexer->advance(lexer, skip_contents);
-                    }
-                    if (lexer->lookahead == '}') {
-                        lexer->advance(lexer, skip_contents);
-                    }
-                }
+            *ascii_word = false;
+            if (!strict_escape) {
+                skip_identifier_escape(lexer, skip_contents);
+                continue;
+            }
+            if (!scan_type_identifier_escape(lexer)) {
+                word[length] = '\0';
+                return false;
             }
             continue;
         }
-        if (lexer->lookahead > 0x7F || length == capacity - 1) {
-            ascii_word = false;
-        } else {
-            word[length++] = (char)lexer->lookahead;
-        }
+        if (lexer->lookahead > 0x7F || length == capacity - 1) *ascii_word = false;
+        else word[length++] = (char)lexer->lookahead;
         lexer->advance(lexer, skip_contents);
     }
-    return ascii_word;
+    word[length] = '\0';
+    return true;
+}
+
+static void skip_identifier_escape(TSLexer *lexer, bool skip_contents) {
+    lexer->advance(lexer, skip_contents);
+    if (lexer->lookahead != 'u') return;
+    lexer->advance(lexer, skip_contents);
+    if (lexer->lookahead != '{') return;
+    lexer->advance(lexer, skip_contents);
+    while (hex_digit_value(lexer->lookahead) >= 0) {
+        lexer->advance(lexer, skip_contents);
+    }
+    if (lexer->lookahead == '}') {
+        lexer->advance(lexer, skip_contents);
+    }
 }
 
 static bool question_mark_can_start_ternary(TSLexer *lexer) {
@@ -853,7 +893,7 @@ static bool scan_html_comment(TSLexer *lexer, bool opening_advanced) {
         advance(lexer);
     }
 
-    while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+    while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) {
         advance(lexer);
     }
 
@@ -880,13 +920,13 @@ static bool scan_adjacent_type_angles_after_opening(TSLexer *lexer, const bool *
 
 static bool scan_type_parameter_prefix(TSLexer *lexer) {
     if (!scan_default_trivia(lexer, true, true) || !is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
-    char word[8] = {0};
+    char word[16] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     if (!scan_default_trivia(lexer, true, false)) return false;
     if (is_identifier_part(lexer->lookahead)) {
-        if (ascii_word && (strcmp(word, "const") == 0 || strcmp(word, "in") == 0 || strcmp(word, "out") == 0)) return true;
-        char next[8] = {0};
-        return scan_identifier(lexer, next, sizeof(next), false) && strcmp(next, "extends") == 0;
+        if (ascii_word && (WORD_EQ(word, "const") || WORD_EQ(word, "in") || WORD_EQ(word, "out"))) return true;
+        char next[16] = {0};
+        return scan_identifier(lexer, next, sizeof(next), false) && WORD_EQ(next, "extends");
     }
     if (lexer->lookahead == '<') {
         advance(lexer);
@@ -898,7 +938,7 @@ static bool scan_type_parameter_prefix(TSLexer *lexer) {
 // The reserved words that TypeScript does not read as the start of an expression: after type arguments, they end the
 // type arguments like a token that cannot start an expression, while `in`, `instanceof`, `as`, and `satisfies` end them
 // as binary operators.
-static const char *const WORDS_ENDING_TYPE_ARGUMENTS[] = {
+static const TSKeyword WORDS_ENDING_TYPE_ARGUMENTS[] = {
     "as",     "break", "case",      "catch",  "const", "continue", "debugger", "default", "do",
     "else",   "enum",  "export",    "extends", "finally", "for",   "if",       "in",      "instanceof",
     "return", "satisfies", "switch", "throw", "try",   "var",      "while",    "with",
@@ -1011,7 +1051,7 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
         default:
             break;
     }
-    if (lexer->eof(lexer) || !is_identifier_part(lexer->lookahead)) {
+    if (lexer_eof(lexer) || !is_identifier_part(lexer->lookahead)) {
         return TYPE_ARGUMENTS_KEPT;
     }
     if (is_ascii_digit(lexer->lookahead)) {
@@ -1028,7 +1068,7 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
     if (length == 0 || is_identifier_part(lexer->lookahead)) {
         return before_expression;
     }
-    if (strcmp(word, "import") == 0) {
+    if (WORD_EQ(word, "import")) {
         // `import` starts an expression only as `import(...)`, `import.meta`, or `import<T>` (an error TypeScript
         // recovers from).
         bool scanned_comment = false;
@@ -1038,10 +1078,8 @@ static TypeArgumentsEnd scan_type_arguments_end_context(TSLexer *lexer, bool *co
         }
         return TYPE_ARGUMENTS_KEPT;
     }
-    for (unsigned i = 0; i < sizeof(WORDS_ENDING_TYPE_ARGUMENTS) / sizeof(WORDS_ENDING_TYPE_ARGUMENTS[0]); i++) {
-        if (strcmp(word, WORDS_ENDING_TYPE_ARGUMENTS[i]) == 0) {
-            return TYPE_ARGUMENTS_KEPT;
-        }
+    if (WORD_IN_SORTED_LIST(word, WORDS_ENDING_TYPE_ARGUMENTS)) {
+        return TYPE_ARGUMENTS_KEPT;
     }
     return before_expression;
 }
@@ -1069,31 +1107,24 @@ static int32_t scan_identifier_character(TSLexer *lexer) {
     return (int32_t)value;
 }
 
+static bool global_augmentation_word_follows(TSLexer *lexer);
+
 static bool scan_global_declaration_start(TSLexer *lexer) {
-    while (is_whitespace(lexer->lookahead)) {
-        skip(lexer);
+    while (is_whitespace(lexer->lookahead)) skip(lexer);
+    for (const char *word = "global"; *word; word++) {
+        if (scan_identifier_character(lexer) != *word) return false;
     }
-    const char *word = "global";
-    for (; *word; word++) {
-        if (scan_identifier_character(lexer) != *word) {
-            return false;
-        }
-    }
-    if (is_identifier_part(lexer->lookahead)) {
-        return false;
-    }
+    if (is_identifier_part(lexer->lookahead)) return false;
     lexer->mark_end(lexer);
     bool scanned_comment = false;
-    if (!scan_type_whitespace_and_comments(lexer, &scanned_comment, false)) {
-        return false;
-    }
-    if (lexer->lookahead == '{') {
-        lexer->result_symbol = GLOBAL_DECLARATION_START;
-        return true;
-    }
-    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) {
-        return false;
-    }
+    if (!scan_type_whitespace_and_comments(lexer, &scanned_comment, false)) return false;
+    if (lexer->lookahead != '{' && !global_augmentation_word_follows(lexer)) return false;
+    lexer->result_symbol = GLOBAL_DECLARATION_START;
+    return true;
+}
+
+static bool global_augmentation_word_follows(TSLexer *lexer) {
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char next_word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
     unsigned length = 0;
     while (is_identifier_part(lexer->lookahead)) {
@@ -1101,48 +1132,25 @@ static bool scan_global_declaration_start(TSLexer *lexer) {
         if (!is_identifier_part(character) || character == '\\' || (length == 0 && is_ascii_digit(character))) {
             return false;
         }
-        if (character > 0x7F || length == sizeof(next_word) - 1) {
-            lexer->result_symbol = GLOBAL_DECLARATION_START;
-            return true;
-        }
+        if (character > 0x7F || length == sizeof(next_word) - 1) return true;
         next_word[length++] = (char)character;
     }
     // TypeScript starts a global augmentation before a brace, an Identifier token, or export,
     // including across line breaks; contextual keyword tokens do not satisfy that lookahead.
-    for (unsigned i = 0; i < sizeof(TS_GLOBAL_KEYWORDS) / sizeof(TS_GLOBAL_KEYWORDS[0]); i++) {
-        if (strcmp(next_word, TS_GLOBAL_KEYWORDS[i]) == 0) {
-            return false;
-        }
-    }
-    lexer->result_symbol = GLOBAL_DECLARATION_START;
-    return true;
+    return !WORD_IN_SORTED_LIST(next_word, TS_GLOBAL_KEYWORDS);
 }
 
 static bool scan_global_declaration_end(TSLexer *lexer) {
     lexer->mark_end(lexer);
     bool saw_line_break = false;
-    for (;;) {
-        while (is_whitespace(lexer->lookahead)) {
-            saw_line_break |= is_line_terminator(lexer->lookahead);
-            skip(lexer);
-        }
-        if (lexer->lookahead != '/') {
-            break;
-        }
-        bool scanned_comment = false;
-        CommentResult result = skip_comment(lexer, &scanned_comment, true);
-        if (result == NO_COMMENT) {
-            return false;
-        }
-        saw_line_break |= result == COMMENT_WITH_LINE_TERMINATOR;
-    }
-    if (!saw_line_break || lexer->lookahead == '{') {
+    if (!scan_expression_trivia(lexer, &saw_line_break, NULL) || !saw_line_break || lexer->lookahead == '{') {
         return false;
     }
     lexer->result_symbol = GLOBAL_DECLARATION_END;
     return true;
 }
 
+// code-gauge-allow duplicateLines 16 -- Expression-end lookahead switch differs in skip vs advance cursor semantics.
 static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statement_end, const bool *valid_symbols, bool *scanned_content) {
     lexer->mark_end(lexer);
     lexer->result_symbol = after_postfix ? POSTFIX_UPDATE_END : AWAIT_OPERAND_END;
@@ -1190,7 +1198,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
             *scanned_content = true;
             char word[16] = {0};
             bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
-            return saw_newline || (ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0));
+            return saw_newline || (ascii_word && (WORD_EQ(word, "in") || WORD_EQ(word, "instanceof")));
         }
         case '!':
             *scanned_content = true;
@@ -1225,10 +1233,11 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
         case '}':
             return true;
         default:
-            return lexer->eof(lexer) || saw_newline;
+            return lexer_eof(lexer) || saw_newline;
     }
 }
 
+// code-gauge-allow functionNcss 42 -- Decodes escaped resource binding identifiers inline with contextual checks.
 static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator) {
     char word[16] = {0};
     unsigned length = 0;
@@ -1267,14 +1276,14 @@ static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_
         }
     }
     if (infix_operator) {
-        *infix_operator = !escaped && ascii_word && (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
+        *infix_operator = !escaped && ascii_word && (WORD_EQ(word, "in") || WORD_EQ(word, "instanceof"));
     }
-    if (ascii_word && plain_for_of && strcmp(word, "of") == 0) {
+    if (ascii_word && plain_for_of && WORD_EQ(word, "of")) {
         bool scanned_content = false;
         return scan_whitespace_and_comments(lexer, &scanned_content, true, false) != REJECT &&
             (lexer->lookahead == '=' || lexer->lookahead == ':');
     }
-    return !after_line_break && (!ascii_word || (strcmp(word, "enum") != 0 && !is_reserved_word(word)));
+    return !after_line_break && (!ascii_word || !assertion_binding_word_is_reserved(word));
 }
 
 #ifndef JAVASCRIPT_SCRIPT_GOAL
@@ -1303,8 +1312,8 @@ static bool scan_await_or_async(Scanner *scanner, TSLexer *lexer, const bool *va
     lexer->mark_end(lexer);
     char keyword[16] = {0};
     if (!scan_identifier(lexer, keyword, sizeof(keyword), false)) return false;
-    if (strcmp(keyword, "async") == 0) return scan_async_start(lexer, keyword, sizeof(keyword), valid_symbols);
-    if (strcmp(keyword, "await") != 0) return false;
+    if (WORD_EQ(keyword, "async")) return scan_async_start(lexer, keyword, sizeof(keyword), valid_symbols);
+    if (!WORD_EQ(keyword, "await")) return false;
     bool identifier = await_is_identifier(scanner) || (valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] && !scanner->functions.depth);
     TSSymbol identifier_symbol = valid_symbols[CLASS_EXTENDS_AWAIT_IDENTIFIER] ? CLASS_EXTENDS_AWAIT_IDENTIFIER : AWAIT_IDENTIFIER;
     TSSymbol symbol = identifier ? identifier_symbol : AWAIT_KEYWORD;
@@ -1444,7 +1453,7 @@ static bool scan_type_numeric_operand(TSLexer *lexer);
 static bool is_type_probe_punctuation(int32_t c);
 static bool is_nonreference_type_word(const char *word);
 static bool is_type_predicate_name_word(int32_t first, const char *word, bool ascii_word);
-static bool is_type_probe_word(const char *word, const char *const *words, unsigned count);
+static bool is_type_operator_word(const char *word);
 static bool is_query_argument_expression(const TypeGroupFrame *stack, unsigned size);
 static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const char *word, bool first, bool *unsafe_conditional);
 static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word);
@@ -1478,7 +1487,6 @@ typedef struct {
 
 static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word, bool *escaped);
 static bool scan_assertion_name_tail(TSLexer *lexer);
-static bool assertion_binding_word_is_reserved(const char *word);
 static bool scan_assertion_formal_parameter_boundary(TSLexer *lexer, const bool *valid_symbols);
 static bool assertion_type_identifier_allowed(const char *word, AssertionIdentifier kind, bool ascii_word, bool non_array);
 static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word);
@@ -1596,11 +1604,11 @@ static void scan_parameter_probe_word(TSLexer *lexer, ParameterProbe *probe) {
     bool keyword_candidate = scan_identifier(lexer, word, sizeof(word), false) && !probe->property_name;
     probe->property_name = false;
     bool prefix = keyword_candidate && parameter_probe_keyword_starts_expression(word);
-    if (keyword_candidate && strcmp(word, "await") == 0) {
+    if (keyword_candidate && WORD_EQ(word, "await")) {
         probe->contextual_word = PARAMETER_PROBE_WORD_AWAIT;
-    } else if (keyword_candidate && strcmp(word, "yield") == 0) {
+    } else if (keyword_candidate && WORD_EQ(word, "yield")) {
         probe->contextual_word = PARAMETER_PROBE_WORD_YIELD;
-    } else if (!keyword_candidate || (strcmp(word, "in") != 0 && strcmp(word, "instanceof") != 0)) {
+    } else if (!keyword_candidate || (!WORD_EQ(word, "in") && !WORD_EQ(word, "instanceof"))) {
         probe->contextual_word = PARAMETER_PROBE_WORD_NONE;
     }
     probe->expression_start = prefix;
@@ -1622,26 +1630,26 @@ static int32_t scan_parameter_probe_slash(TSLexer *lexer, ParameterProbe *probe)
 }
 
 static void skip_parameter_probe_literal(TSLexer *lexer, int32_t quote) {
-    while (lexer->lookahead != quote && !lexer->eof(lexer)) {
+    while (lexer->lookahead != quote && !lexer_eof(lexer)) {
         if (lexer->lookahead == '\\') advance(lexer);
         advance(lexer);
     }
-    if (!lexer->eof(lexer)) advance(lexer);
+    if (!lexer_eof(lexer)) advance(lexer);
 }
 
 static bool parameter_probe_keyword_starts_expression(const char *word) {
-    return strcmp(word, "return") == 0 || strcmp(word, "throw") == 0 || strcmp(word, "typeof") == 0 ||
-        strcmp(word, "void") == 0 || strcmp(word, "delete") == 0 || strcmp(word, "new") == 0 ||
-        strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0;
+    return WORD_EQ(word, "return") || WORD_EQ(word, "throw") || WORD_EQ(word, "typeof") ||
+        WORD_EQ(word, "void") || WORD_EQ(word, "delete") || WORD_EQ(word, "new") ||
+        WORD_EQ(word, "in") || WORD_EQ(word, "instanceof");
 }
 
 static bool skip_parameter_probe_regex(TSLexer *lexer) {
     bool character_class = false;
-    while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+    while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) {
         int32_t c = lexer->lookahead;
         advance(lexer);
         if (c == '\\') {
-            if (lexer->eof(lexer) || is_line_terminator(lexer->lookahead)) return false;
+            if (lexer_eof(lexer) || is_line_terminator(lexer->lookahead)) return false;
             advance(lexer);
         } else if (c == '[') {
             character_class = true;
@@ -1687,13 +1695,13 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
     } else {
         ascii_word = scan_identifier(lexer, word, sizeof(word), false);
     }
-    if (valid_symbols[AS_CONSTRUCTOR_TYPE_START] && name_kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "new") == 0) {
+    if (valid_symbols[AS_CONSTRUCTOR_TYPE_START] && name_kind == ASSERTION_IDENTIFIER_WORD && WORD_EQ(word, "new")) {
         lexer->mark_start(lexer, &name_start);
         lexer->mark_end_at(lexer, &name_start);
         lexer->result_symbol = AS_CONSTRUCTOR_TYPE_START;
         return true;
     }
-    if ((valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_ASSERTION] || valid_symbols[AS_CONST_QUALIFIED_NAME]) && ascii_word && strcmp(word, "const") == 0) return scan_as_const_type(lexer, valid_symbols, &name_start);
+    if ((valid_symbols[AS_CONST_TYPE] || valid_symbols[AS_CONST_ASSERTION] || valid_symbols[AS_CONST_QUALIFIED_NAME]) && ascii_word && WORD_EQ(word, "const")) return scan_as_const_type(lexer, valid_symbols, &name_start);
     TSLexerCheckpoint name_end;
     lexer->get_checkpoint(lexer, &name_end);
     if (fallback && (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) && assertion_type_identifier_allowed(word, name_kind, ascii_word, valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START])) {
@@ -1703,13 +1711,13 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         fallback->end = name_end;
     }
     if (unqualified && (valid_symbols[PREDEFINED_PARAMETER_NAME] || valid_symbols[PREDEFINED_ANNOTATED_NAME] || conditional_parameter) && !private_name && ascii_word &&
-        (strcmp(word, "bigint") == 0 || strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) {
+        (WORD_EQ(word, "bigint") || WORD_EQ(word, "unknown") || WORD_EQ(word, "never") || WORD_EQ(word, "unique") || WORD_EQ(word, "infer") || WORD_EQ(word, "readonly") || WORD_EQ(word, "keyof"))) {
         lexer->mark_end(lexer);
         if (!scan_default_trivia(lexer, true, true)) return false;
         // A qualified name (`(bigint.M)`) is a type reference, never a parameter.
         if (lexer->lookahead == '.') goto reference;
         bool optional_parameter = lexer->lookahead == '?';
-        if (strcmp(word, "readonly") == 0 && !optional_parameter) return false;
+        if (WORD_EQ(word, "readonly") && !optional_parameter) return false;
         if (optional_parameter) {
             advance(lexer);
             if (!scan_default_trivia(lexer, true, false)) return false;
@@ -1718,12 +1726,14 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         // TypeScript reads `(name?` as a parameter list even before a type (`(unique ? A)` misses `,` and `=>`); a tuple's
         // optional element (`[unknown?]`) and the other delimiters below keep their own readings.
         if (optional_parameter && !untyped_parameter &&
-            !(lexer->lookahead < 128 && strchr(":]>=;}", (int)lexer->lookahead))) {
+            lexer->lookahead != 0 && lexer->lookahead != ':' && lexer->lookahead != ']' &&
+            lexer->lookahead != '>' && lexer->lookahead != '=' && lexer->lookahead != ';' &&
+            lexer->lookahead != '}') {
             if (!valid_symbols[PREDEFINED_PARAMETER_NAME]) return false;
             lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
             return true;
         }
-        if (untyped_parameter && !optional_parameter && (strcmp(word, "infer") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "keyof") == 0)) return false;
+        if (untyped_parameter && !optional_parameter && (WORD_EQ(word, "infer") || WORD_EQ(word, "readonly") || WORD_EQ(word, "keyof"))) return false;
         if (!untyped_parameter && lexer->lookahead != ':') return false;
         if (!untyped_parameter && (optional_parameter || valid_symbols[PREDEFINED_ANNOTATED_NAME])) {
             advance(lexer);
@@ -1732,7 +1742,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
                 advance(lexer);
                 if (!scan_default_trivia(lexer, true, false)) return false;
             }
-            if (lexer->eof(lexer)) return false;
+            if (lexer_eof(lexer)) return false;
             switch (lexer->lookahead) {
                 case ')':
                 case ']':
@@ -1767,16 +1777,16 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         }
         // As above, `(keyof ?)` stays a parameter list that misses `=>`.
         if (!arrow) return optional_parameter && untyped_parameter;
-        if (strcmp(word, "bigint") == 0) {
+        if (WORD_EQ(word, "bigint")) {
             if (untyped_parameter && valid_symbols[PREDEFINED_PARAMETER_NAME]) lexer->result_symbol = PREDEFINED_PARAMETER_NAME;
             return true;
         }
         if (optional_parameter || untyped_parameter) {
-            if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+            if (!scan_default_trivia(lexer, true, false) || lexer_eof(lexer)) return false;
             if (untyped_parameter) {
                 while (lexer->lookahead == '|' || lexer->lookahead == '&' || lexer->lookahead == '?') {
                     advance(lexer);
-                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+                    if (!scan_default_trivia(lexer, true, false) || lexer_eof(lexer)) return false;
                 }
             }
             switch (lexer->lookahead) {
@@ -1818,7 +1828,7 @@ static bool scan_type_reference_arguments_start(TSLexer *lexer, const bool *vali
         return true;
     }
 reference:;
-    bool abstract_prefix = valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] && ascii_word && strcmp(word, "abstract") == 0;
+    bool abstract_prefix = valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX] && ascii_word && WORD_EQ(word, "abstract");
     bool line_break = false;
     if (valid_symbols[AS_TYPE_REFERENCE_START] || valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) {
         if (!scan_expression_trivia(lexer, &line_break, NULL)) return false;
@@ -1834,13 +1844,14 @@ reference:;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
     if (unqualified && ascii_word) {
-        static const char *keywords[] = {"new", "typeof", "keyof", "readonly", "unique", "infer", "any", "number", "boolean", "string", "symbol", "bigint", "void", "unknown", "never", "object", "this", "import", "true", "false", "null", "undefined"};
-        for (unsigned i = 0; i < sizeof(keywords) / sizeof(keywords[0]); i++) {
-            if (strcmp(word, keywords[i]) != 0) continue;
-            bool as_name = valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
-            bool non_array_name = valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
-            if (as_name && strcmp(word, "new") == 0) continue;
-            if (non_array_name && (strcmp(word, "infer") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0)) continue;
+        static const TSKeyword keywords[] = {
+            "any", "bigint", "boolean", "false", "import", "infer", "keyof", "never", "new", "null", "number",
+            "object", "readonly", "string", "symbol", "this", "true", "typeof", "undefined", "unique", "unknown", "void",
+        };
+        bool as_name = valid_symbols[AS_TYPE_IDENTIFIER_BEFORE_ANGLE] || valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
+        bool non_array_name = valid_symbols[AS_NON_ARRAY_TYPE_IDENTIFIER_BEFORE_ANGLE];
+        if (WORD_IN_SORTED_LIST(word, keywords) && !(as_name && WORD_EQ(word, "new")) &&
+            !(non_array_name && is_type_operator_word(word))) {
             return false;
         }
     }
@@ -1858,8 +1869,8 @@ reference:;
         if (result != COMMENT && !((heritage || abstract_prefix) && result == COMMENT_WITH_LINE_TERMINATOR)) return false;
     }
     if (abstract_prefix && lexer->lookahead == 'n') {
-        char next[4] = {0};
-        if (!scan_identifier(lexer, next, sizeof(next), false) || strcmp(next, "new") != 0) return false;
+        char next[16] = {0};
+        if (!scan_identifier(lexer, next, sizeof(next), false) || !WORD_EQ(next, "new")) return false;
         lexer->result_symbol = ABSTRACT_CONSTRUCTOR_PREFIX;
         return true;
     }
@@ -1870,7 +1881,7 @@ reference:;
         lexer->mark_start(lexer, &name_start);
         lexer->mark_end_at(lexer, &name_end);
     }
-    if (unqualified && ascii_word && strcmp(word, "const") == 0) {
+    if (unqualified && ascii_word && WORD_EQ(word, "const")) {
         if (!valid_symbols[CONST_GENERIC_NAME]) return false;
         lexer->result_symbol = CONST_GENERIC_NAME;
     } else {
@@ -1885,22 +1896,22 @@ reference:;
 }
 
 static bool is_type_operator_word(const char *word) {
-    return strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0;
+    return WORD_EQ(word, "keyof") || WORD_EQ(word, "readonly") || WORD_EQ(word, "unique") || WORD_EQ(word, "infer");
 }
 
 static bool assertion_type_identifier_allowed(const char *word, AssertionIdentifier kind, bool ascii_word, bool non_array) {
     if (kind == ASSERTION_IDENTIFIER_OTHER) return true;
-    if (kind != ASSERTION_IDENTIFIER_WORD || (!non_array && is_type_operator_word(word)) || strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0) return false;
-    return !is_nonreference_type_word(word) && (!ascii_word || strcmp(word, "const") != 0);
+    if (kind != ASSERTION_IDENTIFIER_WORD || (!non_array && is_type_operator_word(word)) || WORD_EQ(word, "typeof") || WORD_EQ(word, "import")) return false;
+    return !is_nonreference_type_word(word) && (!ascii_word || !WORD_EQ(word, "const"));
 }
 
 static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, const char *word, AssertionIdentifier kind, bool ascii_word) {
     if (valid_symbols[AS_NON_ARRAY_TYPE_REFERENCE_START]) return AS_NON_ARRAY_TYPE_IDENTIFIER;
     if (ascii_word) {
-        if (strcmp(word, "public") == 0) return AS_PUBLIC_IDENTIFIER;
-        if (strcmp(word, "private") == 0) return AS_PRIVATE_IDENTIFIER;
-        if (strcmp(word, "protected") == 0) return AS_PROTECTED_IDENTIFIER;
-        if (strcmp(word, "override") == 0) return AS_OVERRIDE_IDENTIFIER;
+        if (WORD_EQ(word, "public")) return AS_PUBLIC_IDENTIFIER;
+        if (WORD_EQ(word, "private")) return AS_PRIVATE_IDENTIFIER;
+        if (WORD_EQ(word, "protected")) return AS_PROTECTED_IDENTIFIER;
+        if (WORD_EQ(word, "override")) return AS_OVERRIDE_IDENTIFIER;
     }
     return kind == ASSERTION_IDENTIFIER_WORD && assertion_binding_word_is_reserved(word) ? AS_RESERVED_TYPE_IDENTIFIER : AS_TYPE_IDENTIFIER;
 }
@@ -1908,7 +1919,7 @@ static TSSymbol assertion_type_identifier_symbol(const bool *valid_symbols, cons
 static bool assertion_reference_word_allowed(const char *word, AssertionIdentifier kind, bool non_array, bool qualified) {
     if (kind == ASSERTION_IDENTIFIER_OTHER) return true;
     if (kind != ASSERTION_IDENTIFIER_WORD || (!non_array && is_type_operator_word(word))) return false;
-    static const char *const special[] = {"typeof", "import", "function", "void", "this", "null", "true", "false"};
+    static const TSKeyword special[] = {"false", "function", "import", "null", "this", "true", "typeof", "void"};
     if (is_type_probe_word(word, special, sizeof(special) / sizeof(special[0]))) return false;
     return qualified || !is_nonreference_type_word(word);
 }
@@ -1930,22 +1941,21 @@ static AssertionReferenceResult scan_assertion_reference_start(TSLexer *lexer, c
 }
 
 static bool assertion_binding_word_is_reserved(const char *word) {
-    for (unsigned i = 0; i < sizeof(TS_BINDING_RESERVED_KEYWORDS) / sizeof(TS_BINDING_RESERVED_KEYWORDS[0]); i++) {
-        if (strcmp(word, TS_BINDING_RESERVED_KEYWORDS[i]) == 0) return true;
-    }
-    return false;
+    return WORD_IN_SORTED_LIST(word, TS_BINDING_RESERVED_KEYWORDS);
 }
 
 static bool scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break) {
-    if (ascii_word && strcmp(word, "this") != 0 && assertion_binding_word_is_reserved(word)) return false;
+    bool is_this = ascii_word && WORD_EQ(word, "this");
+    if (ascii_word && !is_this && assertion_binding_word_is_reserved(word)) return false;
     if (!scan_expression_trivia(lexer, line_break, NULL)) return false;
-    bool name_follows = is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead);
-    bool this_predicate = valid_symbols[AS_THIS_TYPE_PREDICATE_START] && ascii_word && strcmp(word, "this") == 0;
-    bool predicate = valid_symbols[AS_ASSERTS_PREDICATE_START] || (this_predicate && !*line_break) || (valid_symbols[AS_TYPE_PREDICATE_START] && !*line_break);
-    if (predicate && lexer->lookahead == 'i' && scan_word(lexer, "is", true)) {
-        lexer->result_symbol = valid_symbols[AS_ASSERTS_PREDICATE_START] ? AS_ASSERTS_PREDICATE_START :
-                               this_predicate ? AS_THIS_TYPE_PREDICATE_START : AS_TYPE_PREDICATE_START;
-    } else if (valid_symbols[AS_ASSERTS_START] && ascii_word && strcmp(word, "asserts") == 0 && !*line_break && name_follows) {
+    bool this_predicate = valid_symbols[AS_THIS_TYPE_PREDICATE_START] && is_this;
+    bool same_line_predicate = !*line_break && (this_predicate || valid_symbols[AS_TYPE_PREDICATE_START]);
+    TSSymbol predicate_symbol = this_predicate ? AS_THIS_TYPE_PREDICATE_START : AS_TYPE_PREDICATE_START;
+    if (valid_symbols[AS_ASSERTS_PREDICATE_START]) predicate_symbol = AS_ASSERTS_PREDICATE_START;
+    if ((valid_symbols[AS_ASSERTS_PREDICATE_START] || same_line_predicate) && lexer->lookahead == 'i' && scan_word(lexer, "is", true)) {
+        lexer->result_symbol = predicate_symbol;
+    } else if (valid_symbols[AS_ASSERTS_START] && !*line_break && ascii_word && WORD_EQ(word, "asserts") &&
+               is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
         lexer->result_symbol = AS_ASSERTS_START;
     } else {
         return false;
@@ -1991,21 +2001,7 @@ static bool whole_const_assertion_can_end(TSLexer *lexer, bool trivia, bool line
 }
 
 static bool scan_type_identifier_name(TSLexer *lexer, char *word, unsigned capacity, bool *ascii_word) {
-    unsigned length = 0;
-    while (is_identifier_part(lexer->lookahead)) {
-        if (lexer->lookahead == '\\') {
-            *ascii_word = false;
-            if (!scan_type_identifier_escape(lexer)) return false;
-            continue;
-        }
-        if (lexer->lookahead > 0x7F || length == capacity - 1) {
-            *ascii_word = false;
-        } else {
-            word[length++] = (char)lexer->lookahead;
-        }
-        advance(lexer);
-    }
-    return true;
+    return scan_identifier_body(lexer, word, capacity, false, true, ascii_word);
 }
 
 static bool scan_type_identifier_escape(TSLexer *lexer) {
@@ -2028,11 +2024,14 @@ static bool scan_type_identifier_escape(TSLexer *lexer) {
 }
 
 
+static bool grow_type_group_stack(TypeGroupFrame **stack, const TypeGroupFrame *inline_stack, unsigned *capacity);
+
+// code-gauge-allow functionParameterCount 7 -- Balanced type-group scanner threads mode flags without heap state.
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, unsigned *completion, bool complete_conditionals, bool *unsafe_conditional) {
     if (completion) *completion = 0;
+    TypeGroupFrame inline_stack[32];
     unsigned size = 1, capacity = 32;
-    TypeGroupFrame *stack = ts_malloc(capacity * sizeof(TypeGroupFrame));
-    if (!stack) return false;
+    TypeGroupFrame *stack = inline_stack;
     stack[0] = (TypeGroupFrame){.context = type_operands && close == '}' ? OBJECT_PROPERTY_GROUP_END : type_operands && (close & ~(TYPE_QUERY_ARGUMENT_GROUP | TYPE_GROUP_FORMAL_BINDING)) == ')' ? TYPE_OPERAND_GROUP_END | TYPE_GROUP_PARAMETER | (close & (TYPE_QUERY_ARGUMENT_GROUP | TYPE_GROUP_FORMAL_BINDING)) : close};
     bool result = false;
     bool slot_named = true, slot_annotation = false;
@@ -2041,7 +2040,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
         stack[0].exact_object = true;
         advance(lexer);
     }
-    while (!lexer->eof(lexer)) {
+    while (!lexer_eof(lexer)) {
         TypeGroupFrame *group = &stack[size - 1];
         int32_t c = lexer->lookahead, context = group->context;
         bool reference_line_break = group->prefix & TYPE_GROUP_REFERENCE_LINE_BREAK;
@@ -2144,7 +2143,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 continue;
             }
-            if (c == '\\' && !lexer->eof(lexer)) advance(lexer);
+            if (c == '\\' && !lexer_eof(lexer)) advance(lexer);
             else if (end == '`' && c == '$' && lexer->lookahead == '{') {
                 advance(lexer);
                 push = check_type_operands || check_expression_operands ? TYPE_SUBSTITUTION_GROUP_END : '}';
@@ -2200,45 +2199,45 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && !group->default_value && !computed_expression &&
                     !group->property && !query_operand && ascii_word) {
                     if ((group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && parameter_position) group->expression_only = true;
-                    if ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) && strcmp(word, "is") != 0) group->expression_only = true;
+                    if ((group->prefix & TYPE_GROUP_ASSERTION_PREDICATE) && !WORD_EQ(word, "is")) group->expression_only = true;
                 }
                 TypePredicateSubject previous_subject = group->predicate_subject;
-                bool predicate_word = ascii_word && strcmp(word, "is") == 0 && !group->property && !query_operand && previous_subject != TYPE_PREDICATE_SUBJECT_NONE;
-                bool unique_completion = ascii_word && strcmp(word, "symbol") == 0 && (group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NAME && !group->property && !query_operand;
+                bool predicate_word = ascii_word && WORD_EQ(word, "is") && !group->property && !query_operand && previous_subject != TYPE_PREDICATE_SUBJECT_NONE;
+                bool unique_completion = ascii_word && WORD_EQ(word, "symbol") && (group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NAME && !group->property && !query_operand;
                 bool assertion_unique_completion = unique_completion && (group->prefix & TYPE_GROUP_ASSERTION_SUBJECT);
                 if (complete_conditionals && !group->default_value && !computed_expression && (frame == '>' || (frame == ']' && !(context & TYPE_GROUP_PARAMETER))) &&
                     (group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && !unique_completion && !predicate_word && !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
                 bool assertion_subject = (group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && !object_member_name && !query_operand && !group->property;
-                bool assertion_is = assertion_subject && ascii_word && strcmp(word, "is") == 0;
+                bool assertion_is = assertion_subject && ascii_word && WORD_EQ(word, "is");
                 if (complete_conditionals && !group->default_value && !computed_expression && (!object_member_name || (frame == OBJECT_PROPERTY_GROUP_END && group->binding_type)) && !is_query_argument_expression(stack, size)) {
                     if (predicate_word && previous_subject != TYPE_PREDICATE_SUBJECT_NAME && unsafe_conditional) *unsafe_conditional = true;
-                    if ((group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && !unique_completion && !(ascii_word && strcmp(word, "is") == 0) && unsafe_conditional) *unsafe_conditional = true;
+                    if ((group->prefix & TYPE_GROUP_ASSERTION_SUBJECT) && !unique_completion && !(ascii_word && WORD_EQ(word, "is")) && unsafe_conditional) *unsafe_conditional = true;
                     group->predicate_subject = predicate_word ? TYPE_PREDICATE_SUBJECT_NONE :
                         is_type_predicate_name_word(c, word, ascii_word) && !group->property && !query_operand &&
                         (previous_subject == TYPE_PREDICATE_SUBJECT_NONE || assertion_subject || unique_completion) ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_COMPOSED;
                 }
-                if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && parameter_position && !group->default_value && !query_operand && ascii_word && strcmp(word, "is") == 0 && (previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || previous_parameter_pattern == TYPE_PARAMETER_PATTERN_INVALID || (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT))) group->expression_only = true;
+                if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && parameter_position && !group->default_value && !query_operand && ascii_word && WORD_EQ(word, "is") && (previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || previous_parameter_pattern == TYPE_PARAMETER_PATTERN_INVALID || (group->parameter_pattern & TYPE_PARAMETER_PATTERN_INVALID_SLOT))) group->expression_only = true;
                 bool assertion_predicate = (group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && ascii_word &&
                     is_type_probe_word(word, TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS, sizeof(TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS) / sizeof(TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[0]));
                 if (complete_conditionals && check_type_operands && !group->default_value && (end == ')' || frame == ']') && group->property && previous_parameter_pattern == TYPE_PARAMETER_PATTERN_NAME && !is_query_argument_expression(stack, size)) group->parameter_header = true;
                 if (parameter_pattern_position && !group->property) {
                     bool ambiguous_parameter_owner = ambiguous_parameter_context && !is_query_argument_expression(stack, size);
                     unsigned pattern = group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK;
-                    bool modifier = ascii_word && (strcmp(word, "public") == 0 || strcmp(word, "private") == 0 || strcmp(word, "protected") == 0 || strcmp(word, "override") == 0 || strcmp(word, "readonly") == 0);
+                    bool modifier = ascii_word && (WORD_EQ(word, "public") || WORD_EQ(word, "private") || WORD_EQ(word, "protected") || WORD_EQ(word, "override") || WORD_EQ(word, "readonly"));
                     if (pattern == TYPE_PARAMETER_PATTERN_NAME || pattern == TYPE_PARAMETER_PATTERN_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN || pattern == TYPE_PARAMETER_PATTERN_INVALID || pattern == TYPE_PARAMETER_PATTERN_TYPE_ONLY || pattern == TYPE_PARAMETER_PATTERN_PUNCTUATED_NAME || pattern == TYPE_PARAMETER_PATTERN_MEMBER_NAME) pattern = TYPE_PARAMETER_PATTERN_INVALID;
                     else if (modifier) pattern = TYPE_PARAMETER_PATTERN_MODIFIER;
                     else if (ascii_word && ambiguous_parameter_owner && !(group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) &&
-                        (strcmp(word, "unique") == 0 || (is_type_probe_word(word, TS_TYPE_ONLY_ATOM_KEYWORDS, sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS) / sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS[0])) && !is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0]))))) {
+                        (WORD_EQ(word, "unique") || (is_type_probe_word(word, TS_TYPE_ONLY_ATOM_KEYWORDS, sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS) / sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS[0])) && !is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0]))))) {
                         pattern = TYPE_PARAMETER_PATTERN_TYPE_ONLY;
                         if (frame == ']' || frame == OBJECT_PROPERTY_GROUP_END) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_INVALID_SLOT;
                     }
-                    else if (ascii_word && ambiguous_parameter_owner && !(group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) && strcmp(word, "this") != 0 && is_nonreference_type_word(word) && !is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0]))) pattern = TYPE_PARAMETER_PATTERN_PUNCTUATED_NAME;
-                    else if (ascii_word && ambiguous_parameter_owner && frame == OBJECT_PROPERTY_GROUP_END && strcmp(word, "this") == 0) pattern = TYPE_PARAMETER_PATTERN_MEMBER_NAME;
+                    else if (ascii_word && ambiguous_parameter_owner && !(group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) && !WORD_EQ(word, "this") && is_nonreference_type_word(word) && !is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0]))) pattern = TYPE_PARAMETER_PATTERN_PUNCTUATED_NAME;
+                    else if (ascii_word && ambiguous_parameter_owner && frame == OBJECT_PROPERTY_GROUP_END && WORD_EQ(word, "this")) pattern = TYPE_PARAMETER_PATTERN_MEMBER_NAME;
                     else if (frame == ']' && ascii_word && is_type_probe_word(word, TS_TYPE_ONLY_ATOM_KEYWORDS, sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS) / sizeof(TS_TYPE_ONLY_ATOM_KEYWORDS[0]))) pattern = is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0])) ? TYPE_PARAMETER_PATTERN_TYPE_ONLY_NON_PATTERN : TYPE_PARAMETER_PATTERN_TYPE_ONLY;
-                    else pattern = is_ascii_digit(c) || (ascii_word && (is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0])) || ((frame == ']' || frame == OBJECT_PROPERTY_GROUP_END || (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) && strcmp(word, "this") == 0))) ? TYPE_PARAMETER_PATTERN_NON_PATTERN : TYPE_PARAMETER_PATTERN_NAME;
+                    else pattern = is_ascii_digit(c) || (ascii_word && (is_type_probe_word(word, TS_NON_PARAMETER_PATTERN_KEYWORDS, sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS) / sizeof(TS_NON_PARAMETER_PATTERN_KEYWORDS[0])) || ((frame == ']' || frame == OBJECT_PROPERTY_GROUP_END || (group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT)) && WORD_EQ(word, "this")))) ? TYPE_PARAMETER_PATTERN_NON_PATTERN : TYPE_PARAMETER_PATTERN_NAME;
                     group->parameter_pattern = (group->parameter_pattern & (TYPE_PARAMETER_PATTERN_INVALID_SLOT | TYPE_PARAMETER_PATTERN_OBJECT_CANDIDATE | TYPE_PARAMETER_PATTERN_ANNOTATABLE_OBJECT | TYPE_PARAMETER_PATTERN_REST_SLOT)) | pattern;
                 }
-                bool type_operator = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0);
+                bool type_operator = ascii_word && (WORD_EQ(word, "typeof") || WORD_EQ(word, "keyof") || WORD_EQ(word, "readonly") || WORD_EQ(word, "infer"));
                 bool parenthesized_query = complete_conditionals && query_operand && frame == TYPE_OPERAND_GROUP_END && parameter_position &&
                     !(group->prefix & TYPE_GROUP_TYPE_PREFIX) && !group->default_value && !computed_expression && !object_member_name;
                 bool object_query = complete_conditionals && query_operand && frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !parameter_position && !group->default_value && !is_query_argument_expression(stack, size);
@@ -2250,12 +2249,12 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if ((ambiguous_start && ((group->prefix & TYPE_GROUP_READONLY_PREFIX) || is_type_probe_word(word, TS_NON_IDENTIFIER_QUERY_KEYWORDS, sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS) / sizeof(TS_NON_IDENTIFIER_QUERY_KEYWORDS[0]))) && is_type_probe_word(word, TS_EXPRESSION_ONLY_TYPE_KEYWORDS, sizeof(TS_EXPRESSION_ONLY_TYPE_KEYWORDS) / sizeof(TS_EXPRESSION_ONLY_TYPE_KEYWORDS[0]))) ||
                         ((group->prefix & TYPE_GROUP_ASSERTS_PREFIX) && is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0])))) group->expression_only = true;
                 }
-                if (query_operand && ascii_word && strcmp(word, "typeof") == 0) break;
-                if (frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && operand_pending && ascii_word && strcmp(word, "as") == 0) {
+                if (query_operand && ascii_word && WORD_EQ(word, "typeof")) break;
+                if (frame == COMPUTED_PROPERTY_GROUP_END && !parameter_position && operand_pending && ascii_word && WORD_EQ(word, "as")) {
                     if (!scan_default_trivia(lexer, true, false)) break;
                     if (is_identifier_part(lexer->lookahead)) {
                         char next[16] = {0};
-                        if (!scan_identifier(lexer, next, sizeof(next), false) || (strcmp(next, "extends") != 0 && strcmp(next, "as") != 0)) break;
+                        if (!scan_identifier(lexer, next, sizeof(next), false) || (!WORD_EQ(next, "extends") && !WORD_EQ(next, "as"))) break;
                         operand_pending = false;
                         query_operand = false;
                         first_operand = true;
@@ -2265,34 +2264,34 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 }
                 if (complete_conditionals && frame == TYPE_OPERAND_GROUP_END && !group->default_value &&
                     !computed_expression && !group->property && !query_operand && !first_operand && !operand_pending &&
-                    !(ascii_word && (strcmp(word, "extends") == 0 || strcmp(word, "is") == 0)) &&
+                    !(ascii_word && (WORD_EQ(word, "extends") || WORD_EQ(word, "is"))) &&
                     !(group->prefix & (TYPE_GROUP_ASSERTS_PREFIX | TYPE_GROUP_PREDICATE_PREFIX)) &&
-                    !((group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && ascii_word && strcmp(word, "symbol") == 0)) {
+                    !((group->prefix & TYPE_GROUP_UNIQUE_PREFIX) && ascii_word && WORD_EQ(word, "symbol"))) {
                     group->expression_only = true;
                 }
                 if (complete_conditionals && !group->default_value && !computed_expression && !object_member_name) {
-                    bool predicate = ascii_word && strcmp(word, "is") == 0 && !group->property && !query_operand && !first_operand && (!(group->prefix & TYPE_GROUP_ASSERTS_PREFIX) || assertion_is);
+                    bool predicate = ascii_word && WORD_EQ(word, "is") && !group->property && !query_operand && !first_operand && (!(group->prefix & TYPE_GROUP_ASSERTS_PREFIX) || assertion_is);
                     if (group->return_owner != TYPE_RETURN_FUNCTION && ((predicate && !operand_pending) || assertion_subject ||
-                        ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && !(ascii_word && strcmp(word, "extends") == 0))) &&
+                        ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && !(ascii_word && WORD_EQ(word, "extends")))) &&
                         !is_query_argument_expression(stack, size) && unsafe_conditional) *unsafe_conditional = true;
-                    bool predicate_operator = (group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && (type_operator || (ascii_word && strcmp(word, "unique") == 0));
-                    group->prefix = (predicate || predicate_operator) ? TYPE_GROUP_PREDICATE_PREFIX : update_type_group_prefix(group->prefix, ascii_word ? word : "", (first_operand || ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && ascii_word && strcmp(word, "new") == 0)) && !group->property && !query_operand, unsafe_conditional);
+                    bool predicate_operator = (group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && (type_operator || (ascii_word && WORD_EQ(word, "unique")));
+                    group->prefix = (predicate || predicate_operator) ? TYPE_GROUP_PREDICATE_PREFIX : update_type_group_prefix(group->prefix, ascii_word ? word : EMPTY_WORD, (first_operand || ((group->prefix & TYPE_GROUP_PREDICATE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NONE && ascii_word && WORD_EQ(word, "new"))) && !group->property && !query_operand, unsafe_conditional);
                 }
-                if (assertion_subject && !assertion_is) group->prefix = TYPE_GROUP_ASSERTION_SUBJECT | (assertion_predicate ? TYPE_GROUP_ASSERTION_PREDICATE : 0) | (ascii_word && strcmp(word, "unique") == 0 ? TYPE_GROUP_UNIQUE_PREFIX : 0);
+                if (assertion_subject && !assertion_is) group->prefix = TYPE_GROUP_ASSERTION_SUBJECT | (assertion_predicate ? TYPE_GROUP_ASSERTION_PREDICATE : 0) | (ascii_word && WORD_EQ(word, "unique") ? TYPE_GROUP_UNIQUE_PREFIX : 0);
                 if (assertion_unique_completion) group->prefix = TYPE_GROUP_ASSERTION_SUBJECT | TYPE_GROUP_ASSERTION_PREDICATE;
                 if (complete_conditionals && first_operand && !group->property && !group->default_value && !computed_expression && !object_member_name) {
-                    if (!query_operand && frame == TYPE_OPERAND_GROUP_END && ascii_word && strcmp(word, "import") == 0 && unsafe_conditional) *unsafe_conditional = true;
-                    group->query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
+                    if (!query_operand && frame == TYPE_OPERAND_GROUP_END && ascii_word && WORD_EQ(word, "import") && unsafe_conditional) *unsafe_conditional = true;
+                    group->query_call_operand = ascii_word && (WORD_EQ(word, "typeof") || WORD_EQ(word, "import"));
                 }
                 group->nonreference_type = complete_conditionals && !group->default_value && !computed_expression && !query_operand && !object_member_name && !assertion_subject && !assertion_unique_completion && !(predicate_word && previous_subject == TYPE_PREDICATE_SUBJECT_NAME) && !(group->parameter_pattern & TYPE_PARAMETER_PATTERN_REST_SLOT) &&
                     (is_ascii_digit(c) || (!group->property && (group->infer_name || (ascii_word && is_nonreference_type_word(word)))));
                 if ((formal_binding_owner || group->property) && parameter_pattern_position && frame == OBJECT_PROPERTY_GROUP_END && (group->parameter_pattern & TYPE_PARAMETER_PATTERN_MASK) == TYPE_PARAMETER_PATTERN_NAME) group->parameter_pattern |= TYPE_PARAMETER_PATTERN_COMPLETED_BINDING;
-                if ((parenthesized_query || (complete_conditionals && query_operand && frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !parameter_position && !group->default_value && !is_query_argument_expression(stack, size))) && ascii_word && strcmp(word, "import") == 0) group->prefix = TYPE_GROUP_IMPORT_QUERY_PREFIX;
-                if (complete_conditionals && query_operand && !group->default_value && !computed_expression && !object_member_name && ascii_word && strcmp(word, "this") == 0) {
+                if ((parenthesized_query || (complete_conditionals && query_operand && frame == OBJECT_PROPERTY_GROUP_END && group->binding_type && !parameter_position && !group->default_value && !is_query_argument_expression(stack, size))) && ascii_word && WORD_EQ(word, "import")) group->prefix = TYPE_GROUP_IMPORT_QUERY_PREFIX;
+                if (complete_conditionals && query_operand && !group->default_value && !computed_expression && !object_member_name && ascii_word && WORD_EQ(word, "this")) {
                     group->nonreference_type = true;
                     group->prefix = TYPE_GROUP_MEMBER_QUERY_PREFIX;
                 }
-                bool default_operator = ascii_word && (strcmp(word, "as") == 0 || strcmp(word, "satisfies") == 0 || strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
+                bool default_operator = ascii_word && (WORD_EQ(word, "as") || WORD_EQ(word, "satisfies") || WORD_EQ(word, "in") || WORD_EQ(word, "instanceof"));
                 bool default_identifier = complete_conditionals && group->default_value && !group->default_type && !group->property && !object_member_name && !default_operator &&
                     !(parameter_position && (frame == FUNCTION_PARAMETER_GROUP_END || frame == METHOD_PARAMETER_GROUP_END)) && first_operand &&
                     !(ascii_word && is_type_probe_word(word, TS_EXPRESSION_PREFIX_KEYWORDS, sizeof(TS_EXPRESSION_PREFIX_KEYWORDS) / sizeof(TS_EXPRESSION_PREFIX_KEYWORDS[0])));
@@ -2306,58 +2305,58 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 bool default_member = complete_conditionals && group->default_value && group->property;
                 bool default_assertion = complete_conditionals && group->default_value && !group->property &&
                     !(frame == OBJECT_PROPERTY_GROUP_END && parameter_position) && ascii_word &&
-                    (strcmp(word, "as") == 0 || strcmp(word, "satisfies") == 0);
+                    (WORD_EQ(word, "as") || WORD_EQ(word, "satisfies"));
                 if (complete_conditionals && group->default_value) {
                     group->operand_required = false;
                     bool member_name = frame == OBJECT_PROPERTY_GROUP_END && parameter_position;
-                    if (!group->property && !member_name && ascii_word && strcmp(word, "extends") == 0 &&
+                    if (!group->property && !member_name && ascii_word && WORD_EQ(word, "extends") &&
                         !group->default_declaration_header && !group->default_type && end != '>') break;
-                    if (!group->property && !member_name && ascii_word && (strcmp(word, "class") == 0 || strcmp(word, "function") == 0)) {
+                    if (!group->property && !member_name && ascii_word && (WORD_EQ(word, "class") || WORD_EQ(word, "function"))) {
                         group->default_declaration_header = true;
                     }
                     if (default_assertion) group->default_type = true;
                     if (group->default_type || end == '>') {
-                        if (!group->property && ascii_word && strcmp(word, "extends") == 0 &&
+                        if (!group->property && ascii_word && WORD_EQ(word, "extends") &&
                             !group->default_declaration_header && !group->infer_constraint &&
                             !(parameter_position && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END))) {
                             group->question_pending = true;
                         }
                         group->infer_constraint = group->infer_name;
-                        group->infer_name = !group->property && ascii_word && strcmp(word, "infer") == 0;
+                        group->infer_name = !group->property && ascii_word && WORD_EQ(word, "infer");
                     }
                     group->property = false;
                 }
                 bool computed_key = frame == COMPUTED_PROPERTY_GROUP_END && parameter_position;
-                if (computed_key && !first_operand && !(ascii_word && strcmp(word, "in") == 0)) {
+                if (computed_key && !first_operand && !(ascii_word && WORD_EQ(word, "in"))) {
                     stack[size - 1].context |= TYPE_EXPRESSION_GROUP;
-                    if (ascii_word && strcmp(word, "instanceof") == 0) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND;
+                    if (ascii_word && WORD_EQ(word, "instanceof")) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND;
                 }
                 bool mapped_operand = frame == COMPUTED_PROPERTY_GROUP_END && ascii_word &&
-                    ((strcmp(word, "in") == 0 && parameter_position && (!first_operand || operand_pending)) ||
-                     (strcmp(word, "as") == 0 && !parameter_position && !first_operand && !operand_pending));
+                    ((WORD_EQ(word, "in") && parameter_position && (!first_operand || operand_pending)) ||
+                     (WORD_EQ(word, "as") && !parameter_position && !first_operand && !operand_pending));
                 bool prefix = !computed_key && !default_member && first_operand && type_operator;
                 if (complete_conditionals && group->default_value && group->default_type) {
                     group->operand_required = prefix || (!default_member && first_operand && ascii_word &&
-                        (strcmp(word, "new") == 0 || strcmp(word, "import") == 0 || strcmp(word, "unique") == 0));
+                        (WORD_EQ(word, "new") || WORD_EQ(word, "import") || WORD_EQ(word, "unique")));
                 }
-                bool extends_operand = !computed_key && !default_member && ascii_word && strcmp(word, "extends") == 0 &&
+                bool extends_operand = !computed_key && !default_member && ascii_word && WORD_EQ(word, "extends") &&
                     (!complete_conditionals || (!first_operand && !operand_pending && !group->property));
                 if (complete_conditionals && !group->default_value) {
                     group->operand_required = prefix || extends_operand || mapped_operand ||
                         (!computed_key && !group->property && first_operand && ascii_word &&
-                         (strcmp(word, "new") == 0 || strcmp(word, "import") == 0));
+                         (WORD_EQ(word, "new") || WORD_EQ(word, "import")));
                     bool constraint_position = parameter_position && (frame == TYPE_PARAMETER_GROUP_END || frame == METHOD_TYPE_PARAMETER_GROUP_END);
                     if (extends_operand && !constraint_position) {
                         if (group->infer_constraint) group->conditional_candidate = true;
                         else group->question_pending = true;
                     }
                     group->infer_constraint = group->infer_name;
-                    group->infer_name = prefix && strcmp(word, "infer") == 0;
+                    group->infer_name = prefix && WORD_EQ(word, "infer");
                     group->property = false;
                 }
                 operand_pending = prefix;
-                query_operand = prefix && strcmp(word, "typeof") == 0;
-                first_operand = default_assertion || (prefix && !query_operand && strcmp(word, "infer") != 0) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0));
+                query_operand = prefix && WORD_EQ(word, "typeof");
+                first_operand = default_assertion || (prefix && !query_operand && !WORD_EQ(word, "infer")) || extends_operand || mapped_operand || (!computed_key && first_operand && ascii_word && (WORD_EQ(word, "new") || WORD_EQ(word, "abstract")));
                 if (extends_operand || mapped_operand) {
                     parameter_position = false;
                     if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1].context &= ~TYPE_GROUP_PARAMETER;
@@ -2368,11 +2367,11 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 char word[16] = {0};
                 bool ascii_word = scan_identifier(lexer, word, sizeof(word), false);
                 bool expression_prefix = !(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word &&
-                    (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "void") == 0 || strcmp(word, "delete") == 0);
+                    (WORD_EQ(word, "in") || WORD_EQ(word, "instanceof") || WORD_EQ(word, "typeof") || WORD_EQ(word, "new") || WORD_EQ(word, "void") || WORD_EQ(word, "delete"));
                 bool member_name = (frame & TYPE_GROUP_ROLE_MASK) == OBJECT_PROPERTY_GROUP_END && (frame & TYPE_EXPRESSION_PROPERTY);
                 stack[size - 1].context &= ~(TYPE_EXPRESSION_OPERAND | TYPE_EXPRESSION_EMPTY_GROUP | TYPE_EXPRESSION_BODY);
                 if (!member_name) stack[size - 1].context &= ~TYPE_EXPRESSION_PROPERTY;
-                if (!(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word && strcmp(word, "function") == 0) stack[size - 1].context |= TYPE_EXPRESSION_FUNCTION;
+                if (!(frame & TYPE_EXPRESSION_PROPERTY) && ascii_word && WORD_EQ(word, "function")) stack[size - 1].context |= TYPE_EXPRESSION_FUNCTION;
                 if (expression_prefix) stack[size - 1].context |= TYPE_EXPRESSION_OPERAND;
                 first_operand = expression_prefix;
                 operand_pending = false;
@@ -2551,7 +2550,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                     if (!scan_default_trivia(lexer, true, false)) break;
                 }
                 int32_t operand = lexer->lookahead;
-                if (lexer->eof(lexer) || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>') break;
+                if (lexer_eof(lexer) || operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>') break;
                 if (frame == TYPE_OPERAND_GROUP_END) stack[size - 1].context = FUNCTION_PARAMETER_GROUP_END;
                 first_operand = true;
                 operand_pending = false;
@@ -2705,7 +2704,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                         advance(lexer);
                         return_operand = scan_default_trivia(lexer, true, false);
                     }
-                    if (!return_operand || lexer->eof(lexer)) break;
+                    if (!return_operand || lexer_eof(lexer)) break;
                     int32_t operand = lexer->lookahead;
                     if (expression_arrow) {
                         if (operand == ')' || operand == ']' || operand == '}' || operand == ',' || operand == ';' || operand == ':' || operand == '=' || operand == '>' || operand == '|' || operand == '&' || operand == '?') break;
@@ -2897,12 +2896,7 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
                 group->parameter_pattern = (group->parameter_pattern & (TYPE_PARAMETER_PATTERN_INVALID_SLOT | TYPE_PARAMETER_PATTERN_OBJECT_CANDIDATE | TYPE_PARAMETER_PATTERN_ANNOTATABLE_OBJECT | TYPE_PARAMETER_PATTERN_REST_SLOT)) | pattern;
             }
             group->operand_required = false;
-            if (size == capacity) {
-                capacity *= 2;
-                TypeGroupFrame *grown = ts_realloc(stack, capacity * sizeof(TypeGroupFrame));
-                if (!grown) break;
-                stack = grown;
-            }
+            if (size == capacity && !grow_type_group_stack(&stack, inline_stack, &capacity)) break;
             if ((push & TYPE_GROUP_ROLE_MASK) == TYPE_OPERAND_GROUP_END && !(push & TYPE_EXPRESSION_GROUP)) push |= TYPE_GROUP_PARAMETER;
             bool default_value = stack[size - 1].default_value;
             bool default_type = stack[size - 1].default_type || (default_value && c == '<');
@@ -2915,10 +2909,26 @@ static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, b
             stack[size++] = (TypeGroupFrame){.context = push | (frame & TYPE_EXPRESSION_GROUP), .default_value = default_value, .exact_object = exact_object, .default_type = default_type, .default_declaration_header = default_declaration_header, .query_argument_ancestor = query_argument_ancestor, .object_query_owner = object_query_owner};
         }
     }
-    ts_free(stack);
+    if (stack != inline_stack) ts_free(stack);
     return result;
 }
 
+static bool grow_type_group_stack(TypeGroupFrame **stack, const TypeGroupFrame *inline_stack, unsigned *capacity) {
+    unsigned next_capacity = *capacity * 2;
+    TypeGroupFrame *grown;
+    if (*stack == inline_stack) {
+        grown = ts_malloc(next_capacity * sizeof(TypeGroupFrame));
+        if (grown) memcpy(grown, inline_stack, *capacity * sizeof(TypeGroupFrame));
+    } else {
+        grown = ts_realloc(*stack, next_capacity * sizeof(TypeGroupFrame));
+    }
+    if (!grown) return false;
+    *stack = grown;
+    *capacity = next_capacity;
+    return true;
+}
+
+// code-gauge-allow duplicateLines 15 -- Annotated type delimiter cases mirror punctuation boundaries with return-type state.
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter) {
     unsigned conditional_depth = 0;
     bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
@@ -2928,7 +2938,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
     TypePredicateSubject predicate_subject = untyped_return && !first ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_NONE;
     TypeGroupPrefix group_prefix = TYPE_GROUP_NO_PREFIX;
     bool trailing_group_line_break = false;
-    while (!lexer->eof(lexer)) {
+    while (!lexer_eof(lexer)) {
         bool line_break = false;
         if (!scan_default_trivia_with_line_break(lexer, true, false, &line_break)) return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         line_break |= trailing_group_line_break;
@@ -2948,7 +2958,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             if (c == '<' || c == '(' || (c == '.' && !query_call)) unsafe_conditional = true;
             if (c != '[') nonreference_type = false;
         }
-        if (lexer->eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
+        if (lexer_eof(lexer) || c == ')' || c == ']' || c == '}' || c == ',' || c == ';' || c == '>') return !untyped_return || (!return_operand && !member_property && conditional_depth == 0 && !conditional_question_pending);
         if (is_identifier_part(c)) {
             char word[16] = {0};
             bool ascii_word = false;
@@ -2957,82 +2967,82 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 if (!query_operand && is_identifier_part(lexer->lookahead)) unsafe_conditional = true;
             } else ascii_word = scan_identifier(lexer, word, sizeof(word), false);
             if (untyped_return && line_break && conditional_depth == 0 && !conditional_question_pending && !return_operand && !member_property &&
-                !(ascii_word && (strcmp(word, "is") == 0 || strcmp(word, "extends") == 0 ||
-                                  (abstract_constructor && strcmp(word, "new") == 0)))) return true;
-            if (pending_contextual_predicate && !(ascii_word && strcmp(word, "extends") == 0)) {
+                !(ascii_word && (WORD_EQ(word, "is") || WORD_EQ(word, "extends") ||
+                                  (abstract_constructor && WORD_EQ(word, "new"))))) return true;
+            if (pending_contextual_predicate && !(ascii_word && WORD_EQ(word, "extends"))) {
                 if (return_owner == TYPE_RETURN_CONSTRUCTOR) unsafe_conditional = true;
                 first = true;
                 return_operand = true;
                 predicate_subject = TYPE_PREDICATE_SUBJECT_NONE;
             }
-            if (untyped_return && !member_property && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "import") == 0)) {
+            if (untyped_return && !member_property && ascii_word && (WORD_EQ(word, "new") || WORD_EQ(word, "import"))) {
                 if (predicate_name || !scan_default_trivia(lexer, true, false)) return false;
-                if (lexer->lookahead != '(' && !(strcmp(word, "new") == 0 && lexer->lookahead == '<')) return false;
+                if (lexer->lookahead != '(' && !(WORD_EQ(word, "new") && lexer->lookahead == '<')) return false;
             }
             if (untyped_return && predicate_name && ascii_word && is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0]))) unsafe_conditional = true;
-            if (untyped_return && assertion_predicate && !(ascii_word && strcmp(word, "is") == 0)) unsafe_conditional = true;
+            if (untyped_return && assertion_predicate && !(ascii_word && WORD_EQ(word, "is"))) unsafe_conditional = true;
             assertion_predicate = untyped_return && predicate_name && ascii_word && is_type_probe_word(word, TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS, sizeof(TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS) / sizeof(TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[0]));
             TypePredicateSubject previous_subject = predicate_subject;
             TypeGroupPrefix previous_prefix = group_prefix;
-            bool predicate_word = ascii_word && strcmp(word, "is") == 0 && !member_property && !query_operand && previous_subject != TYPE_PREDICATE_SUBJECT_NONE;
-            bool unique_completion = ascii_word && strcmp(word, "symbol") == 0 && (previous_prefix & TYPE_GROUP_UNIQUE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NAME && !member_property && !query_operand;
+            bool predicate_word = ascii_word && WORD_EQ(word, "is") && !member_property && !query_operand && previous_subject != TYPE_PREDICATE_SUBJECT_NONE;
+            bool unique_completion = ascii_word && WORD_EQ(word, "symbol") && (previous_prefix & TYPE_GROUP_UNIQUE_PREFIX) && previous_subject == TYPE_PREDICATE_SUBJECT_NAME && !member_property && !query_operand;
             bool assertion_unique_completion = unique_completion && (previous_prefix & TYPE_GROUP_ASSERTION_SUBJECT);
             bool assertion_subject = untyped_return && predicate_name;
-            bool assertion_is = assertion_subject && ascii_word && strcmp(word, "is") == 0;
+            bool assertion_is = assertion_subject && ascii_word && WORD_EQ(word, "is");
             if (untyped_return) {
                 if (predicate_word && previous_subject != TYPE_PREDICATE_SUBJECT_NAME) unsafe_conditional = true;
-                if ((group_prefix & TYPE_GROUP_ASSERTION_SUBJECT) && !unique_completion && !(ascii_word && strcmp(word, "is") == 0)) unsafe_conditional = true;
+                if ((group_prefix & TYPE_GROUP_ASSERTION_SUBJECT) && !unique_completion && !(ascii_word && WORD_EQ(word, "is"))) unsafe_conditional = true;
                 predicate_subject = predicate_word ? TYPE_PREDICATE_SUBJECT_NONE :
                     is_type_predicate_name_word(c, word, ascii_word) && !member_property && !query_operand &&
                     (previous_subject == TYPE_PREDICATE_SUBJECT_NONE || assertion_subject || unique_completion) ? TYPE_PREDICATE_SUBJECT_NAME : TYPE_PREDICATE_SUBJECT_COMPOSED;
             }
-            if (untyped_return) group_prefix = update_type_group_prefix(group_prefix, ascii_word ? word : "", first && !query_operand && !member_property && !predicate_name, &unsafe_conditional);
-            if (assertion_subject && !assertion_is) group_prefix = TYPE_GROUP_ASSERTION_SUBJECT | (ascii_word && strcmp(word, "unique") == 0 ? TYPE_GROUP_UNIQUE_PREFIX : 0);
+            if (untyped_return) group_prefix = update_type_group_prefix(group_prefix, ascii_word ? word : EMPTY_WORD, first && !query_operand && !member_property && !predicate_name, &unsafe_conditional);
+            if (assertion_subject && !assertion_is) group_prefix = TYPE_GROUP_ASSERTION_SUBJECT | (ascii_word && WORD_EQ(word, "unique") ? TYPE_GROUP_UNIQUE_PREFIX : 0);
             if (assertion_unique_completion) { group_prefix = TYPE_GROUP_ASSERTION_SUBJECT; assertion_predicate = true; }
             if (untyped_return && first && !query_operand && !member_property) {
-                query_call_operand = ascii_word && (strcmp(word, "typeof") == 0 || strcmp(word, "import") == 0);
+                query_call_operand = ascii_word && (WORD_EQ(word, "typeof") || WORD_EQ(word, "import"));
             }
             nonreference_type = untyped_return && !query_operand && !assertion_subject && !assertion_unique_completion &&
                 (is_ascii_digit(c) || (!member_property && (infer_name || (ascii_word && is_nonreference_type_word(word)))));
-            abstract_constructor = return_operand && !member_property && ascii_word && strcmp(word, "abstract") == 0;
+            abstract_constructor = return_operand && !member_property && ascii_word && WORD_EQ(word, "abstract");
             bool contextual_predicate = return_operand && previous_subject == TYPE_PREDICATE_SUBJECT_NAME &&
                 (infer_name || (previous_prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_READONLY_PREFIX))) &&
-                !member_property && ascii_word && strcmp(word, "is") == 0;
-            bool predicate_operator = (!return_operand || assertion_is) && !member_property && ascii_word && strcmp(word, "is") == 0;
+                !member_property && ascii_word && WORD_EQ(word, "is");
+            bool predicate_operator = (!return_operand || assertion_is) && !member_property && ascii_word && WORD_EQ(word, "is");
             if (untyped_return && return_owner == TYPE_RETURN_CONSTRUCTOR && (predicate_operator || assertion_subject)) unsafe_conditional = true;
             if (contextual_predicate) {
                 group_prefix = TYPE_GROUP_PREDICATE_PREFIX;
                 predicate_subject = TYPE_PREDICATE_SUBJECT_NAME;
             }
-            bool extends_operand = ascii_word && strcmp(word, "extends") == 0 &&
+            bool extends_operand = ascii_word && WORD_EQ(word, "extends") &&
                 (!untyped_return || (!return_operand && !member_property));
-            bool asserts_prefix = !member_property && (predicate_start || !return_operand) && ascii_word && strcmp(word, "asserts") == 0;
+            bool asserts_prefix = !member_property && (predicate_start || !return_operand) && ascii_word && WORD_EQ(word, "asserts");
             bool type_prefix = first || !return_operand;
             bool infer_extends = infer_constraint;
             infer_constraint = infer_name;
-            infer_name = untyped_return && !member_property && type_prefix && ascii_word && strcmp(word, "infer") == 0;
+            infer_name = untyped_return && !member_property && type_prefix && ascii_word && WORD_EQ(word, "infer");
             return_operand = !member_property && ascii_word &&
-                (asserts_prefix || predicate_operator || extends_operand || (type_prefix && (strcmp(word, "infer") == 0 ||
-                 strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 ||
-                 strcmp(word, "new") == 0 || strcmp(word, "import") == 0)));
+                (asserts_prefix || predicate_operator || extends_operand || (type_prefix && (WORD_EQ(word, "infer") ||
+                 WORD_EQ(word, "typeof") || WORD_EQ(word, "keyof") || WORD_EQ(word, "readonly") ||
+                 WORD_EQ(word, "new") || WORD_EQ(word, "import"))));
             if (assertion_is) return_operand = false;
             predicate_name = untyped_return && asserts_prefix;
             predicate_start = false;
             member_property = false;
             if (query_operand) {
-                if (untyped_return && ascii_word && strcmp(word, "this") == 0) {
+                if (untyped_return && ascii_word && WORD_EQ(word, "this")) {
                     nonreference_type = true;
                     group_prefix = TYPE_GROUP_MEMBER_QUERY_PREFIX;
                 }
-                if (ascii_word && strcmp(word, "typeof") == 0) return false;
+                if (ascii_word && WORD_EQ(word, "typeof")) return false;
                 query_operand = false;
             } else if (!allow_expression && first && ascii_word) {
-                if (strcmp(word, "unique") == 0) {
-                    if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || strcmp(word, "symbol") != 0) return false;
+                if (WORD_EQ(word, "unique")) {
+                    if (!scan_default_trivia(lexer, true, false) || !scan_identifier(lexer, word, sizeof(word), false) || !WORD_EQ(word, "symbol")) return false;
                     nonreference_type = untyped_return;
-                } else if (strcmp(word, "typeof") == 0 || strcmp(word, "keyof") == 0 || strcmp(word, "readonly") == 0 || strcmp(word, "infer") == 0) {
-                    type_query_return |= strcmp(word, "typeof") == 0;
-                    if (!scan_default_trivia(lexer, true, false) || lexer->eof(lexer)) return false;
+                } else if (WORD_EQ(word, "typeof") || WORD_EQ(word, "keyof") || WORD_EQ(word, "readonly") || WORD_EQ(word, "infer")) {
+                    type_query_return |= WORD_EQ(word, "typeof");
+                    if (!scan_default_trivia(lexer, true, false) || lexer_eof(lexer)) return false;
                     switch (lexer->lookahead) {
                         case '\\':
                             if (!scan_type_identifier_operand(lexer)) return false;
@@ -3046,14 +3056,14 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                             continue;
                         case '-':
                         case '+':
-                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
+                            if (WORD_EQ(word, "typeof") || WORD_EQ(word, "infer")) return false;
                             advance(lexer);
                             if (!scan_default_trivia(lexer, true, false)) return false;
                             if (lexer->lookahead == '.') advance(lexer);
                             if (!is_ascii_digit(lexer->lookahead)) return false;
                             break;
                         case '.':
-                            if (strcmp(word, "typeof") == 0 || strcmp(word, "infer") == 0) return false;
+                            if (WORD_EQ(word, "typeof") || WORD_EQ(word, "infer")) return false;
                             advance(lexer);
                             if (!is_ascii_digit(lexer->lookahead)) return false;
                             break;
@@ -3078,8 +3088,8 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                         default:
                             break;
                     }
-                    query_operand = strcmp(word, "typeof") == 0;
-                    first = !query_operand && strcmp(word, "infer") != 0;
+                    query_operand = WORD_EQ(word, "typeof");
+                    first = !query_operand && !WORD_EQ(word, "infer");
                     continue;
                 }
             }
@@ -3087,7 +3097,7 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
                 saw_extends = true;
                 if (untyped_return && !infer_extends) conditional_question_pending = true;
             }
-            first = !allow_expression && ((untyped_return && predicate_operator) || extends_operand || (first && ascii_word && (strcmp(word, "new") == 0 || strcmp(word, "abstract") == 0)));
+            first = !allow_expression && ((untyped_return && predicate_operator) || extends_operand || (first && ascii_word && (WORD_EQ(word, "new") || WORD_EQ(word, "abstract"))));
             continue;
         }
         if (pending_contextual_predicate && (c == '\\' || c == '\'' || c == '"' || c == '`' || c == '+' || c == '-' || c == '{')) {
@@ -3180,16 +3190,16 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
             return_operand = generic_parameters || pending_return;
             predicate_start = pending_return;
         } else if (c == '\'' || c == '"' || c == '`') {
-            while (!lexer->eof(lexer) && lexer->lookahead != c) {
+            while (!lexer_eof(lexer) && lexer->lookahead != c) {
                 int32_t part = lexer->lookahead;
                 advance(lexer);
-                if (part == '\\' && !lexer->eof(lexer)) advance(lexer);
+                if (part == '\\' && !lexer_eof(lexer)) advance(lexer);
                 else if (c == '`' && part == '$' && lexer->lookahead == '{') {
                     advance(lexer);
                     if (!scan_type_group(lexer, allow_expression ? '}' : TYPE_SUBSTITUTION_GROUP_END, !allow_expression, true, NULL, untyped_return, &unsafe_conditional)) return allow_expression;
                 }
             }
-            if (lexer->eof(lexer)) {
+            if (lexer_eof(lexer)) {
                 if (untyped_return) return false;
             } else advance(lexer);
             if (untyped_return && (group_prefix & (TYPE_GROUP_CONSTRUCTOR_PREFIX | TYPE_GROUP_ABSTRACT_PREFIX))) unsafe_conditional = true;
@@ -3202,22 +3212,17 @@ static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bo
 
 static TypeGroupPrefix update_type_group_prefix(TypeGroupPrefix prefix, const char *word, bool first, bool *unsafe_conditional) {
     if (!first) return TYPE_GROUP_NO_PREFIX;
-    bool constructor = strcmp(word, "new") == 0;
+    bool constructor = WORD_EQ(word, "new");
     if (unsafe_conditional && ((prefix & TYPE_GROUP_CONSTRUCTOR_PREFIX) || ((prefix & TYPE_GROUP_PRIMARY_PREFIX) && constructor))) *unsafe_conditional = true;
-    static const struct { const char *word; TypeGroupPrefix prefix; } prefixes[] = {
-        {"asserts", TYPE_GROUP_ASSERTS_PREFIX},
-        {"unique", TYPE_GROUP_UNIQUE_PREFIX},
-        {"keyof", TYPE_GROUP_PRIMARY_PREFIX},
-    };
-    for (unsigned i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
-        if (strcmp(word, prefixes[i].word) == 0) return prefixes[i].prefix;
-    }
+    if (WORD_EQ(word, "asserts")) return TYPE_GROUP_ASSERTS_PREFIX;
+    if (WORD_EQ(word, "unique")) return TYPE_GROUP_UNIQUE_PREFIX;
+    if (WORD_EQ(word, "keyof")) return TYPE_GROUP_PRIMARY_PREFIX;
     if (constructor) return TYPE_GROUP_CONSTRUCTOR_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
     bool type_only = prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_TYPE_PREFIX);
     bool repeated_readonly = prefix & (TYPE_GROUP_PRIMARY_PREFIX | TYPE_GROUP_TYPE_PREFIX | TYPE_GROUP_READONLY_PREFIX);
-    if (strcmp(word, "readonly") == 0) return repeated_readonly ? TYPE_GROUP_TYPE_PREFIX : TYPE_GROUP_READONLY_PREFIX;
-    if (strcmp(word, "typeof") == 0 && type_only) return TYPE_GROUP_TYPE_PREFIX;
-    if (strcmp(word, "abstract") == 0) return TYPE_GROUP_ABSTRACT_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
+    if (WORD_EQ(word, "readonly")) return repeated_readonly ? TYPE_GROUP_TYPE_PREFIX : TYPE_GROUP_READONLY_PREFIX;
+    if (WORD_EQ(word, "typeof") && type_only) return TYPE_GROUP_TYPE_PREFIX;
+    if (WORD_EQ(word, "abstract")) return TYPE_GROUP_ABSTRACT_PREFIX | (prefix & TYPE_GROUP_PRIMARY_PREFIX);
     return TYPE_GROUP_NO_PREFIX;
 }
 
@@ -3236,51 +3241,53 @@ static bool is_type_predicate_name_word(int32_t first, const char *word, bool as
     return !is_ascii_digit(first) && (!ascii_word || !is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0])));
 }
 
-static bool is_type_probe_word(const char *word, const char *const *words, unsigned count) {
-    for (unsigned i = 0; i < count; i++) {
-        if (strcmp(word, words[i]) == 0) return true;
-    }
-    return false;
-}
-
 static bool is_nonreference_type_word(const char *word) {
-    return strcmp(word, "any") == 0 || strcmp(word, "number") == 0 || strcmp(word, "boolean") == 0 ||
-        strcmp(word, "string") == 0 || strcmp(word, "symbol") == 0 || strcmp(word, "bigint") == 0 || strcmp(word, "void") == 0 ||
-        strcmp(word, "unknown") == 0 || strcmp(word, "never") == 0 || strcmp(word, "object") == 0 ||
-        strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 ||
-        strcmp(word, "undefined") == 0 || strcmp(word, "this") == 0;
+    static const TSKeyword words[] = {
+        "any", "bigint", "boolean", "false", "never", "null", "number", "object",
+        "string", "symbol", "this", "true", "undefined", "unknown", "void",
+    };
+    return WORD_IN_SORTED_LIST(word, words);
 }
 
 static bool is_type_probe_punctuation(int32_t c) {
     return c == '%' || c == '^' || c == '!' || c == '~' || c == '@' || c == '#' || c == '*' || c == '+' || c == '-';
 }
 
+static bool is_radix_digit(int32_t c, int32_t radix);
+static void skip_decimal_digits(TSLexer *lexer);
+
 static bool scan_type_numeric_operand(TSLexer *lexer) {
     int32_t first = lexer->lookahead;
     advance(lexer);
-    if (first == '0' && (lexer->lookahead == 'x' || lexer->lookahead == 'X' ||
-                        lexer->lookahead == 'b' || lexer->lookahead == 'B' ||
-                        lexer->lookahead == 'o' || lexer->lookahead == 'O')) {
-        int32_t radix = lexer->lookahead;
+    int32_t radix = lexer->lookahead | 0x20;
+    if (first == '0' && (radix == 'x' || radix == 'b' || radix == 'o')) {
         advance(lexer);
-        if ((radix == 'x' || radix == 'X') ? hex_digit_value(lexer->lookahead) < 0 :
-            !(lexer->lookahead >= '0' && lexer->lookahead <= (radix == 'b' || radix == 'B' ? '1' : '7'))) return false;
+        if (!is_radix_digit(lexer->lookahead, radix)) return false;
         while (is_identifier_part(lexer->lookahead)) advance(lexer);
         return true;
     }
-    while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+    skip_decimal_digits(lexer);
     if (lexer->lookahead == '.') {
         advance(lexer);
-        while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+        skip_decimal_digits(lexer);
     }
-    if (lexer->lookahead == 'e' || lexer->lookahead == 'E') {
+    if ((lexer->lookahead | 0x20) == 'e') {
         advance(lexer);
         if (lexer->lookahead == '+' || lexer->lookahead == '-') advance(lexer);
         if (!is_ascii_digit(lexer->lookahead)) return false;
-        while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
+        skip_decimal_digits(lexer);
     }
     if (lexer->lookahead == 'n') advance(lexer);
     return true;
+}
+
+static bool is_radix_digit(int32_t c, int32_t radix) {
+    if (radix == 'x') return hex_digit_value(c) >= 0;
+    return c >= '0' && c <= (radix == 'b' ? '1' : '7');
+}
+
+static void skip_decimal_digits(TSLexer *lexer) {
+    while (is_ascii_digit(lexer->lookahead) || lexer->lookahead == '_') advance(lexer);
 }
 
 static bool scan_type_question_tail(TSLexer *lexer, bool conditional) {
@@ -3321,7 +3328,7 @@ static bool scan_arrow_predefined_return_start(TSLexer *lexer) {
     if (!scan_default_trivia(lexer, true, true)) return false;
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false) ||
-        (strcmp(word, "unknown") != 0 && strcmp(word, "never") != 0 && strcmp(word, "unique") != 0)) return false;
+        (!WORD_EQ(word, "unknown") && !WORD_EQ(word, "never") && !WORD_EQ(word, "unique"))) return false;
     if (!scan_default_trivia(lexer, true, true) || lexer->lookahead != ')') return false;
     advance(lexer);
     if (!scan_default_trivia(lexer, true, false) || lexer->lookahead != '=') return false;
@@ -3336,16 +3343,16 @@ static bool starts_keyword_heritage_generic(TSLexer *lexer) {
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false)) return false;
-    if (!((is_nonreference_type_word(word) && strcmp(word, "void") != 0) ||
-          strcmp(word, "import") == 0 || strcmp(word, "keyof") == 0 ||
-          strcmp(word, "readonly") == 0 || strcmp(word, "unique") == 0 || strcmp(word, "infer") == 0)) return false;
+    if (!((is_nonreference_type_word(word) && !WORD_EQ(word, "void")) ||
+          WORD_EQ(word, "import") || WORD_EQ(word, "keyof") ||
+          WORD_EQ(word, "readonly") || WORD_EQ(word, "unique") || WORD_EQ(word, "infer"))) return false;
     return scan_default_trivia(lexer, true, false) && lexer->lookahead == '<';
 }
 
 static bool scan_infix_word(TSLexer *lexer, bool skip_characters) {
     char word[16] = {0};
     return scan_identifier(lexer, word, sizeof(word), skip_characters) &&
-        (strcmp(word, "in") == 0 || strcmp(word, "instanceof") == 0);
+        (WORD_EQ(word, "in") || WORD_EQ(word, "instanceof"));
 }
 
 
@@ -3358,7 +3365,7 @@ static bool scan_async_start(TSLexer *lexer, char *keyword, unsigned capacity, c
     if (!constructor) lexer->mark_end(lexer);
     lexer->result_symbol = constructor ? CONSTRUCTOR_ASYNC_FUNCTION_START : ASYNC_KEYWORD;
     return scan_default_trivia(lexer, false, false) &&
-        (constructor ? scan_identifier(lexer, keyword, capacity, false) && strcmp(keyword, "function") == 0
+        (constructor ? scan_identifier(lexer, keyword, capacity, false) && WORD_EQ(keyword, "function")
                      : valid_symbols[ASYNC_KEYWORD]);
 }
 
@@ -3385,13 +3392,14 @@ static bool scan_contextual_keyword(Scanner *scanner, TSLexer *lexer, const bool
 static bool scan_declaration_keyword(TSLexer *lexer, const bool *valid_symbols) {
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false)) return false;
-    if (strcmp(word, "function") == 0) lexer->result_symbol = DECLARATION_FUNCTION_KEYWORD;
-    else if (strcmp(word, "class") == 0) lexer->result_symbol = DECLARATION_CLASS_KEYWORD;
+    if (WORD_EQ(word, "function")) lexer->result_symbol = DECLARATION_FUNCTION_KEYWORD;
+    else if (WORD_EQ(word, "class")) lexer->result_symbol = DECLARATION_CLASS_KEYWORD;
     else return false;
     lexer->mark_end(lexer);
     return valid_symbols[lexer->result_symbol];
 }
 
+// code-gauge-allow functionNcss 49 -- Single-switch lookahead dispatch for arrow expression continuations.
 static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end, bool *scanned_content) {
     lexer->mark_end(lexer);
     bool saw_newline = false;
@@ -3416,7 +3424,7 @@ static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool 
             *scanned_content = true;
             return !scan_infix_word(lexer, false);
         case ';': case ',': case ':': case ')': case ']': case '}': return true;
-        default: return lexer->eof(lexer) || saw_newline;
+        default: return lexer_eof(lexer) || saw_newline;
     }
 }
 
@@ -3432,12 +3440,12 @@ static bool scan_expression_trivia(TSLexer *lexer, bool *saw_newline, bool *scan
         if (scanned_comment) *scanned_comment = true;
         skip(lexer);
         if (lexer->lookahead == '/') {
-            while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) {
+            while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) {
                 skip(lexer);
             }
         } else if (lexer->lookahead == '*') {
             skip(lexer);
-            scan_block_comment(lexer, saw_newline, true);
+            scan_block_comment(lexer, saw_newline, true, true);
         } else {
             return false;
         }
@@ -3469,7 +3477,7 @@ static bool scan_method_signature_end(Scanner *scanner, TSLexer *lexer, const bo
     lexer->mark_end(lexer);
     bool saw_newline = false;
     if (!scan_expression_trivia(lexer, &saw_newline, NULL)) return false;
-    if (lexer->lookahead == ';' || lexer->lookahead == ',' || lexer->lookahead == '}' || lexer->eof(lexer)) {
+    if (lexer->lookahead == ';' || lexer->lookahead == ',' || lexer->lookahead == '}' || lexer_eof(lexer)) {
         return finish_function_context(scanner, lexer, METHOD_SIGNATURE_END);
     }
     if (lexer->lookahead == '|') {
@@ -3601,6 +3609,8 @@ static bool scan_assertion_type_boundary(TSLexer *lexer, const bool *valid_symbo
     return false;
 }
 
+// code-gauge-allow functionCognitiveComplexity 30 -- Disambiguates const assertion suffixes across valid symbol combinations.
+// code-gauge-allow functionNcss 48 -- Keeps const assertion suffix dispatch together in one place.
 static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool line_break = false;
@@ -3675,11 +3685,15 @@ static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word,
         const TSCharacterRange *ranges = first ? TS_IDENTIFIER_START_RANGES : TS_IDENTIFIER_PART_RANGES;
         uint32_t count = first ? sizeof(TS_IDENTIFIER_START_RANGES) / sizeof(TS_IDENTIFIER_START_RANGES[0]) :
                                  sizeof(TS_IDENTIFIER_PART_RANGES) / sizeof(TS_IDENTIFIER_PART_RANGES[0]);
-        if (!set_contains(ranges, count, character)) return ASSERTION_IDENTIFIER_INVALID;
+        if (!set_contains(ranges, count, character)) {
+            word[length] = '\0';
+            return ASSERTION_IDENTIFIER_INVALID;
+        }
         first = false;
         if (character > 0x7F || length == TS_GLOBAL_KEYWORD_MAX_LENGTH) other = true;
         else if (!other) word[length++] = (char)character;
     }
+    word[length] = '\0';
     if (first) return ASSERTION_IDENTIFIER_INVALID;
     return other ? ASSERTION_IDENTIFIER_OTHER : ASSERTION_IDENTIFIER_WORD;
 }
@@ -3728,12 +3742,12 @@ static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
     bool reserved = kind == ASSERTION_IDENTIFIER_WORD && assertion_binding_word_is_reserved(word);
-    if (reserved && (escaped || strcmp(word, "this") != 0)) return false;
+    if (reserved && (escaped || !WORD_EQ(word, "this"))) return false;
     bool line_break = false;
     if ((valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_PREDICATE_START]) &&
         scan_assertion_return_prefix(lexer, valid_symbols, word, kind == ASSERTION_IDENTIFIER_WORD && !escaped, &name_start, &line_break)) return true;
     lexer->result_symbol = ASSERTION_BINDING_IDENTIFIER_START;
-    return !reserved || strcmp(word, "this") == 0;
+    return !reserved || WORD_EQ(word, "this");
 }
 
 static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_start) {
@@ -3746,9 +3760,9 @@ static bool assertion_type_keyword_can_start(TSLexer *lexer, bool parameter_star
 
 static bool assertion_type_word_allowed(AssertionIdentifier kind, const char *word, bool escaped, bool parameter_start) {
     if (kind != ASSERTION_IDENTIFIER_WORD) return kind == ASSERTION_IDENTIFIER_OTHER;
-    return !assertion_binding_word_is_reserved(word) || strcmp(word, "function") == 0 ||
-        (parameter_start && (strcmp(word, "this") == 0 || strcmp(word, "const") == 0 || strcmp(word, "default") == 0 || strcmp(word, "export") == 0 || strcmp(word, "in") == 0)) ||
-        (!escaped && (strcmp(word, "void") == 0 || strcmp(word, "typeof") == 0 || strcmp(word, "new") == 0 || strcmp(word, "null") == 0 || strcmp(word, "true") == 0 || strcmp(word, "false") == 0 || strcmp(word, "import") == 0 || strcmp(word, "this") == 0));
+    return !assertion_binding_word_is_reserved(word) || WORD_EQ(word, "function") ||
+        (parameter_start && (WORD_EQ(word, "this") || WORD_EQ(word, "const") || WORD_EQ(word, "default") || WORD_EQ(word, "export") || WORD_EQ(word, "in"))) ||
+        (!escaped && (WORD_EQ(word, "void") || WORD_EQ(word, "typeof") || WORD_EQ(word, "new") || WORD_EQ(word, "null") || WORD_EQ(word, "true") || WORD_EQ(word, "false") || WORD_EQ(word, "import") || WORD_EQ(word, "this")));
 }
 
 static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier kind, const char *word, bool escaped,
@@ -3764,6 +3778,7 @@ static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier ki
     return scan_assertion_name_tail(lexer);
 }
 
+// code-gauge-allow functionNcss 43 -- Handles parenthesized, signed, and punctuated index-type starts together.
 static bool as_lookup_index_can_start(TSLexer *lexer) {
     bool parenthesized = false;
     while (lexer->lookahead == '(') {
@@ -3803,7 +3818,7 @@ static bool unique_operand_can_start(TSLexer *lexer) {
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
-    if (kind != ASSERTION_IDENTIFIER_WORD || strcmp(word, "symbol") != 0) return true;
+    if (kind != ASSERTION_IDENTIFIER_WORD || !WORD_EQ(word, "symbol")) return true;
     bool line_break = false;
     return scan_expression_trivia(lexer, &line_break, NULL) && lexer->lookahead == '.';
 }
@@ -3818,18 +3833,19 @@ static bool assertion_compound_type_operand_can_start(TSLexer *lexer, bool inter
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
-    bool constructor = kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "new") == 0;
-    if (kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "abstract") == 0) {
+    bool constructor = kind == ASSERTION_IDENTIFIER_WORD && WORD_EQ(word, "new");
+    if (kind == ASSERTION_IDENTIFIER_WORD && WORD_EQ(word, "abstract")) {
         bool line_break = false;
         if (!scan_expression_trivia(lexer, &line_break, NULL)) return false;
         kind = scan_assertion_identifier(lexer, word, &escaped);
-        constructor = kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "new") == 0;
+        constructor = kind == ASSERTION_IDENTIFIER_WORD && WORD_EQ(word, "new");
     }
     lexer->mark_start(lexer, &start);
     lexer->mark_end_at(lexer, &start);
     return !constructor;
 }
 
+// code-gauge-allow functionCognitiveComplexity 20 -- Dispatches assertion type start probes by valid symbol priority.
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START]) {
         bool intersection = valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START] && !valid_symbols[AS_COMPOUND_TYPE_OPERAND_START];
@@ -3896,7 +3912,7 @@ static bool scan_assertion_query_name_boundary(TSLexer *lexer, bool root) {
     bool escaped = false;
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID ||
-        (root && escaped && kind == ASSERTION_IDENTIFIER_WORD && strcmp(word, "import") == 0)) return false;
+        (root && escaped && kind == ASSERTION_IDENTIFIER_WORD && WORD_EQ(word, "import"))) return false;
     lexer->mark_start(lexer, &boundary);
     lexer->mark_end_at(lexer, &boundary);
     return true;
@@ -3974,15 +3990,11 @@ static bool const_assertion_type_can_end(TSLexer *lexer, bool line_break) {
 static bool type_end_word_can_follow(TSLexer *lexer) {
     char word[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
     bool ascii_word = scan_identifier(lexer, word, sizeof(word), true);
-    static const char *const operators[] = {"as", "satisfies", "in", "instanceof", "of", "extends"};
+    static const TSKeyword operators[] = {"as", "extends", "in", "instanceof", "of", "satisfies"};
     const unsigned count = sizeof(operators) / sizeof(operators[0]);
-    if (ascii_word) {
-        for (unsigned i = 0; i < count; i++) {
-            if (strcmp(word, operators[i]) == 0) return strcmp(word, "extends") != 0;
-        }
-    }
+    if (ascii_word && WORD_IN_SORTED_LIST(word, operators)) return !WORD_EQ(word, "extends");
     for (unsigned i = 0; i < count; i++) {
-        if (strncmp(word, operators[i], strlen(operators[i])) == 0) return false;
+        if (word_starts_with(word, operators[i])) return false;
     }
     return true;
 }
@@ -4029,7 +4041,7 @@ static bool scan_type_angle_opening(TSLexer *lexer, const bool *valid_symbols) {
     AssertionIdentifier kind = scan_assertion_identifier(lexer, word, &escaped);
     if (kind == ASSERTION_IDENTIFIER_INVALID) return false;
     // The variance keyword may still root a qualified type name (`A<in.a>`), though not a type of its own (`A<in>`).
-    if (kind == ASSERTION_IDENTIFIER_WORD && !escaped && strcmp(word, "in") == 0) {
+    if (kind == ASSERTION_IDENTIFIER_WORD && !escaped && WORD_EQ(word, "in")) {
         return scan_default_trivia(lexer, true, false) && lexer->lookahead == '.';
     }
     return assertion_type_word_can_start(lexer, kind, word, escaped, false);
@@ -4049,28 +4061,36 @@ static bool scan_type_reference_name(Scanner *scanner, TSLexer *lexer, const boo
     return result;
 }
 
+static bool declaration_keyword_allows_extends_type_argument(TSLexer *lexer, const char *word);
+
 static bool scan_extends_type_argument_start(TSLexer *lexer) {
     if (!scan_default_trivia(lexer, true, false)) return false;
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
     char word[16] = {0};
     if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
-    if (strcmp(word, "import") == 0) {
+    if (WORD_EQ(word, "import")) {
         return scan_default_trivia(lexer, true, false) && lexer->lookahead == '(';
     }
-    static const char *const declaration_keywords[] = {"interface", "enum", "let", "function", "async"};
-    if (is_type_probe_word(word, declaration_keywords, sizeof(declaration_keywords) / sizeof(declaration_keywords[0]))) {
-        if (!scan_default_trivia(lexer, true, false)) return false;
-        if (strcmp(word, "function") == 0 && (lexer->lookahead == '.' || lexer->lookahead == '<' || lexer->lookahead == '*')) return false;
-        if (strcmp(word, "let") == 0 && lexer->lookahead == '{') return false;
-        if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
-        char next[16] = {0};
-        return scan_identifier(lexer, next, sizeof(next), false) && strcmp(next, "extends") == 0;
+    static const TSKeyword declaration_keywords[] = {"async", "enum", "function", "interface", "let"};
+    if (WORD_IN_SORTED_LIST(word, declaration_keywords)) {
+        return declaration_keyword_allows_extends_type_argument(lexer, word);
     }
-    static const char *const type_keywords[] = {"false", "new", "null", "true", "typeof"};
-    return !is_type_probe_word(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS, sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) / sizeof(TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[0])) ||
-           is_type_probe_word(word, type_keywords, sizeof(type_keywords) / sizeof(type_keywords[0]));
+    static const TSKeyword type_keywords[] = {"false", "new", "null", "true", "typeof"};
+    return !WORD_IN_SORTED_LIST(word, TS_NON_ASSERTION_IDENTIFIER_KEYWORDS) ||
+           WORD_IN_SORTED_LIST(word, type_keywords);
 }
 
+static bool declaration_keyword_allows_extends_type_argument(TSLexer *lexer, const char *word) {
+    if (!scan_default_trivia(lexer, true, false)) return false;
+    if (WORD_EQ(word, "function") && (lexer->lookahead == '.' || lexer->lookahead == '<' || lexer->lookahead == '*')) return false;
+    if (WORD_EQ(word, "let") && lexer->lookahead == '{') return false;
+    if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return true;
+    char next[16] = {0};
+    return scan_identifier(lexer, next, sizeof(next), false) && WORD_EQ(next, "extends");
+}
+
+// code-gauge-allow functionCognitiveComplexity 20 -- Tracks HTML comments, block comments, and newline boundaries before heritage clauses.
+// code-gauge-allow functionNcss 49 -- Keeps heritage-clause trivia and delimiter checks together.
 static bool scan_class_extends_end(TSLexer *lexer, const bool *valid_symbols) {
     bool allow_html_comment = valid_symbols[HTML_COMMENT];
     lexer->mark_end(lexer);
@@ -4190,7 +4210,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
             if (lexer->lookahead == '>') {
                 advance(lexer);
                 if (!scan_default_trivia(lexer, true, false)) return false;
-                if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
+                if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer_eof(lexer)) return false;
             }
             lexer->result_symbol = KEYWORD_HERITAGE_ARGUMENTS_END;
             return true;
@@ -4202,7 +4222,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
         if (valid_symbols[HERITAGE_TYPE_END]) {
             bool comment = false;
             if (scan_whitespace_and_comments(lexer, &comment, true, true) == REJECT) return false;
-            if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer->eof(lexer)) return false;
+            if (lexer->lookahead != ',' && lexer->lookahead != '{' && !lexer_eof(lexer)) return false;
         }
         scanner->heritage_type_pending = valid_symbols[HERITAGE_TYPE_START] && !starts_keyword_heritage_generic(lexer);
         lexer->result_symbol = valid_symbols[HERITAGE_TYPE_START] ? HERITAGE_TYPE_START : HERITAGE_TYPE_END;
@@ -4267,8 +4287,10 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     }
 
     if (valid_symbols[JSX_TEXT]) {
+        int32_t first = lexer->lookahead;
         if (scan_jsx_text(lexer, JSX_TEXT)) return true;
-        if (!restart_after_jsx_whitespace(lexer)) return false;
+        if (lexer->lookahead == ';') return false;
+        if (first == '\n' || first == '\r') restart_after_jsx_whitespace(lexer);
     }
 
     if (valid_symbols[AWAIT_YIELD_IDENTIFIER_CONTEXT] && valid_symbols[AWAIT_YIELD_IDENTIFIER]) {
@@ -4434,19 +4456,12 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     return scan_contextual_keyword(scanner, lexer, valid_symbols);
 }
 
-// When no JSX text follows, scan_jsx_text has consumed the whitespace before the next child without skipping it, so a
-// token scanned next must start after it. A failure after a character reference leaves the lexer inside the reference,
-// which only the internal lexer scans.
-static bool restart_after_jsx_whitespace(TSLexer *lexer) {
-    TSLexerPosition position;
-    TSLexerPosition text_end;
-    lexer->get_position(lexer, &position);
-    lexer->get_mark_end(lexer, &text_end);
-    if (position.bytes != text_end.bytes) return false;
+// When no JSX text follows a newline, scan_jsx_text has consumed the indentation before the next child without
+// skipping it, so a token scanned next must start after it.
+static void restart_after_jsx_whitespace(TSLexer *lexer) {
     TSLexerCheckpoint start;
     lexer->get_checkpoint(lexer, &start);
     lexer->mark_start(lexer, &start);
-    return true;
 }
 
 static bool scan_import_type_arguments_start(TSLexer *lexer) {
@@ -4459,47 +4474,14 @@ static bool scan_import_type_arguments_start(TSLexer *lexer) {
     return true;
 }
 
+static bool scan_let_trivia(TSLexer *lexer);
+static bool scan_default_slash_comment(TSLexer *lexer, bool allow_line_breaks, bool *line_break);
+static bool scan_inline_html_comment(TSLexer *lexer);
+
 static bool scan_let(TSLexer *lexer) {
-    for (const char *word = "let"; *word; word++) {
-        if (lexer->lookahead != *word) return false;
-        advance(lexer);
-    }
-    if (is_identifier_part(lexer->lookahead)) return false;
+    if (!scan_word(lexer, "let", false)) return false;
     lexer->mark_end(lexer);
-    bool line_start = false;
-    for (;;) {
-        while (is_whitespace(lexer->lookahead)) {
-            line_start |= is_line_terminator(lexer->lookahead);
-            advance(lexer);
-        }
-        if (lexer->lookahead == '<' || (line_start && lexer->lookahead == '-')) {
-            const char *prefix = lexer->lookahead == '<' ? "<!--" : "-->";
-            for (; *prefix; prefix++) {
-                if (lexer->lookahead != *prefix) return false;
-                advance(lexer);
-            }
-            while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
-            continue;
-        }
-        if (lexer->lookahead != '/') break;
-        advance(lexer);
-        if (lexer->lookahead == '/') {
-            while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
-        } else if (lexer->lookahead == '*') {
-            advance(lexer);
-            bool star = false;
-            while (!lexer->eof(lexer)) {
-                if (star && lexer->lookahead == '/') break;
-                star = lexer->lookahead == '*';
-                line_start |= is_line_terminator(lexer->lookahead);
-                advance(lexer);
-            }
-            if (lexer->eof(lexer)) return false;
-            advance(lexer);
-        } else {
-            return false;
-        }
-    }
+    if (!scan_let_trivia(lexer)) return false;
     if (lexer->lookahead == '[' || lexer->lookahead == '{') return true;
     if (!is_identifier_part(lexer->lookahead) || is_ascii_digit(lexer->lookahead)) return false;
     char name[16] = {0};
@@ -4512,74 +4494,64 @@ static bool scan_let(TSLexer *lexer) {
     return !is_reserved_word(name);
 }
 
-static bool is_reserved_word(const char *name) {
-    static const char *const reserved[] = {
-        "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else",
-        "export", "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "new",
-        "null", "return", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with"
-    };
-    for (unsigned i = 0; i < sizeof(reserved) / sizeof(reserved[0]); i++) {
-        if (strcmp(name, reserved[i]) == 0) return true;
+static bool scan_let_trivia(TSLexer *lexer) {
+    bool line_start = false;
+    for (;;) {
+        while (is_whitespace(lexer->lookahead)) {
+            line_start |= is_line_terminator(lexer->lookahead);
+            advance(lexer);
+        }
+        if (lexer->lookahead == '<' || (line_start && lexer->lookahead == '-')) {
+            if (!scan_inline_html_comment(lexer)) return false;
+            continue;
+        }
+        if (lexer->lookahead != '/') return true;
+        if (!scan_default_slash_comment(lexer, true, &line_start)) return false;
     }
-    return false;
+}
+
+static bool is_reserved_word(const char *name) {
+    return !WORD_EQ(name, "enum") && assertion_binding_word_is_reserved(name);
 }
 
 static bool scan_export_default(Scanner *scanner, TSLexer *lexer) {
-    while (is_whitespace(lexer->lookahead)) {
-        skip(lexer);
-    }
-    for (const char *word = "default"; *word; word++) {
-        if (lexer->lookahead != *word) {
-            return false;
-        }
-        advance(lexer);
-    }
-    if (is_identifier_part(lexer->lookahead)) {
-        return false;
-    }
+    while (is_whitespace(lexer->lookahead)) skip(lexer);
+    if (!scan_word(lexer, "default", false)) return false;
     lexer->mark_end(lexer);
     lexer->result_symbol = EXPORT_DEFAULT;
     scanner->default_declaration_pending = false;
     if (!scan_default_trivia(lexer, true, true)) return true;
     if (lexer->lookahead == '@') {
         scanner->default_declaration_pending = true;
-    } else {
-        char word[16] = {0};
-        if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
-        if (strcmp(word, "function") == 0 || strcmp(word, "class") == 0) {
-            scanner->default_declaration_pending = true;
-        } else if (strcmp(word, "abstract") == 0 && scan_default_trivia(lexer, false, true)) {
-            memset(word, 0, sizeof(word));
-            scanner->default_declaration_pending =
-                scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "class") == 0;
-        } else if (strcmp(word, "async") == 0 && scan_default_trivia(lexer, false, true)) {
-            memset(word, 0, sizeof(word));
-            scanner->default_declaration_pending =
-                scan_identifier(lexer, word, sizeof(word), false) && strcmp(word, "function") == 0;
-        }
+        return true;
+    }
+    char word[16] = {0};
+    if (!scan_identifier(lexer, word, sizeof(word), false)) return true;
+    if (WORD_EQ(word, "function") || WORD_EQ(word, "class")) {
+        scanner->default_declaration_pending = true;
+    } else if (WORD_EQ(word, "abstract") && scan_default_trivia(lexer, false, true)) {
+        scanner->default_declaration_pending =
+            scan_identifier(lexer, word, sizeof(word), false) && WORD_EQ(word, "class");
+    } else if (WORD_EQ(word, "async") && scan_default_trivia(lexer, false, true)) {
+        scanner->default_declaration_pending =
+            scan_identifier(lexer, word, sizeof(word), false) && WORD_EQ(word, "function");
     }
     return true;
 }
 
 static bool scan_jsx_closing_recovery_identifier(TSLexer *lexer) {
     while (is_whitespace(lexer->lookahead)) skip(lexer);
-    if (lexer->lookahead != 'i') return false;
-    advance(lexer);
-    if (lexer->lookahead != 's') return false;
-    advance(lexer);
-    if (is_identifier_part(lexer->lookahead) || lexer->lookahead == '-') return false;
+    if (!scan_word(lexer, "is", false) || lexer->lookahead == '-') return false;
     lexer->mark_end(lexer);
     if (!scan_default_trivia(lexer, true, true)) {
-        if (!lexer->eof(lexer)) return false;
-    } else if (lexer->lookahead == '.' || lexer->lookahead == ':') {
-        advance(lexer);
-        if (!scan_default_trivia(lexer, true, true)) {
-            if (!lexer->eof(lexer)) return false;
-        } else if (is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
-            return false;
-        }
+        if (!lexer_eof(lexer)) return false;
     } else if (lexer->lookahead == '>') {
         return false;
+    } else if (lexer->lookahead == '.' || lexer->lookahead == ':') {
+        advance(lexer);
+        bool has_trivia = scan_default_trivia(lexer, true, true);
+        if (!has_trivia && !lexer_eof(lexer)) return false;
+        if (has_trivia && is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) return false;
     }
     lexer->result_symbol = JSX_CLOSING_RECOVERY_IDENTIFIER;
     return true;
@@ -4589,6 +4561,7 @@ static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool htm
     return scan_default_trivia_with_line_break(lexer, allow_line_breaks, html_comments, NULL);
 }
 
+// code-gauge-allow functionCognitiveComplexity 26 -- Combines whitespace, line-break gating, slash comments, and HTML comments in one loop.
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break) {
     if (line_break) *line_break = false;
     for (;;) {
@@ -4600,39 +4573,31 @@ static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_
             advance(lexer);
         }
         if (lexer->lookahead == '/') {
-            advance(lexer);
-            if (lexer->lookahead == '*') {
-                advance(lexer);
-                bool closed = false;
-                while (!lexer->eof(lexer)) {
-                    if (is_line_terminator(lexer->lookahead)) {
-                        if (!allow_line_breaks) return false;
-                        if (line_break) *line_break = true;
-                    }
-                    if (lexer->lookahead == '*') {
-                        advance(lexer);
-                        if (lexer->lookahead == '/') {
-                            advance(lexer);
-                            closed = true;
-                            break;
-                        }
-                    } else {
-                        advance(lexer);
-                    }
-                }
-                if (!closed) return false;
-                continue;
-            }
-            if (lexer->lookahead != '/') return false;
-        } else if (html_comments && (lexer->lookahead == '<' || lexer->lookahead == '-')) {
-            const char *opening = lexer->lookahead == '<' ? "<!--" : "-->";
-            for (; *opening; opening++) {
-                if (lexer->lookahead != *opening) return false;
-                advance(lexer);
-            }
-        } else {
-            return true;
+            if (!scan_default_slash_comment(lexer, allow_line_breaks, line_break)) return false;
+            continue;
         }
-        while (!lexer->eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
+        if (!html_comments || (lexer->lookahead != '<' && lexer->lookahead != '-')) return true;
+        if (!scan_inline_html_comment(lexer)) return false;
     }
+}
+
+static bool scan_default_slash_comment(TSLexer *lexer, bool allow_line_breaks, bool *line_break) {
+    advance(lexer);
+    if (lexer->lookahead == '*') {
+        advance(lexer);
+        return scan_block_comment(lexer, line_break, false, allow_line_breaks);
+    }
+    if (lexer->lookahead != '/') return false;
+    while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
+    return true;
+}
+
+static bool scan_inline_html_comment(TSLexer *lexer) {
+    const char *opening = lexer->lookahead == '<' ? "<!--" : "-->";
+    for (; *opening; opening++) {
+        if (lexer->lookahead != *opening) return false;
+        advance(lexer);
+    }
+    while (!lexer_eof(lexer) && !is_line_terminator(lexer->lookahead)) advance(lexer);
+    return true;
 }

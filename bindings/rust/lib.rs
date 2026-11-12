@@ -14,9 +14,12 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The supported [willbooster-tree-sitter] runtime is version 19.1.0 or later within 19.x.
+//! Use [willbooster-tree-sitter] version 19.1.1 or later within 19.x. Each generated `TSLanguage`
+//! carries the WillBooster ABI (`0x5742000c`), which upstream `tree-sitter` runtimes reject, and
+//! omits `alias_map` and `primary_state_bitmap` tables that pre-19.1.0 WillBooster runtimes
+//! dereference despite sharing ABI `0x5742000c`.
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/19.1.0/tree_sitter/struct.Parser.html
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/19.1.1/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 //! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 

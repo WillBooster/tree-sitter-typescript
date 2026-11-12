@@ -15,6 +15,8 @@ for (let kind = ts.SyntaxKind.FirstReservedWord; kind <= ts.SyntaxKind.LastReser
   const word = ts.tokenToString(kind);
   if (word !== undefined) bindingKeywords.push(word);
 }
+keywords.sort();
+bindingKeywords.sort();
 assert.ok(keywords.length > 0);
 const grammarArgument = process.argv.indexOf('--grammar');
 const operandKeywords =
@@ -33,43 +35,45 @@ const header = `// Generated from TypeScript ${ts.version} and grammar token sta
 
 #define TS_GLOBAL_KEYWORD_MAX_LENGTH ${Math.max(...keywords.map((word) => word.length))}
 
-static const char *const TS_GLOBAL_KEYWORDS[] = {
+typedef char TSKeyword[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1];
+
+static const TSKeyword TS_GLOBAL_KEYWORDS[] = {
 ${keywords.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_BINDING_RESERVED_KEYWORDS[] = {
+static const TSKeyword TS_BINDING_RESERVED_KEYWORDS[] = {
 ${bindingKeywords.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
+static const TSKeyword TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
 ${operandKeywords.query.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
 ${operandKeywords.expressionOnly.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_PREFIX_KEYWORDS[] = {
 ${operandKeywords.expressionPrefix.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
+static const TSKeyword TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
 ${operandKeywords.nonParameterPattern.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
+static const TSKeyword TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
 ${operandKeywords.typeOnlyAtom.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
+static const TSKeyword TS_PARAMETER_HEADER_KEYWORDS[] = {
 ${operandKeywords.parameterHeader.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
+static const TSKeyword TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
 ${operandKeywords.assertionPredicate.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
+static const TSKeyword TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
 ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
 
