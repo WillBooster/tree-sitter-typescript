@@ -1,7 +1,8 @@
-import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { nonExtraNamedChildren } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type CaptureRange = [string, number, number];
@@ -24,17 +25,12 @@ const Header =
   '\n}\n' +
   '\n';
 const Suffix = ' { field = 1; method() { return this.field; } }\nconst following = 1;';
-const RoleQuery = `
-  (implements_clause (nested_type_identifier) @name)
-  (implements_clause (generic_type name: (nested_type_identifier) @name))
-`;
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`parses qualified contextual ${dialect} implements names with compiler fields`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const roles = new Query(language, RoleQuery);
     try {
       for (const word of Words) {
         for (const gap of Gaps) {
@@ -49,14 +45,13 @@ for (const dialect of ['typescript', 'tsx']) {
             `interface Extended extends ${word}.Inner.Deep<number> {}\nconst following = 1;`;
           const tree = parser.parse(source)!;
           try {
-            checkHeritage(tree, source, dialect, roles);
+            checkHeritage(tree, source, dialect);
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      roles.delete();
       parser.delete();
     }
   });
@@ -65,7 +60,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const roles = new Query(language, RoleQuery);
     try {
       for (const name of [
         'readonly.Foo',
@@ -81,19 +75,18 @@ for (const dialect of ['typescript', 'tsx']) {
         const source = Header + 'class C implements ' + name + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkHeritage(tree, source, dialect, roles);
+          checkHeritage(tree, source, dialect);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      roles.delete();
       parser.delete();
     }
   });
 }
 
-function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query): void {
+function checkHeritage(tree: Tree, source: string, dialect: string): void {
   const fileName = dialect === 'tsx' ? 'fixture.tsx' : 'fixture.ts';
   const reference = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   expect(
@@ -117,9 +110,9 @@ function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query
         .getStart(reference),
       statement.end,
     ]);
-    const names = parsed!
-      .descendantsOfType('implements_clause')[0]!
-      .namedChildren.map((node) => (node.type === 'generic_type' ? node.childForFieldName('name')! : node));
+    const names = nonExtraNamedChildren(parsed!.descendantsOfType('implements_clause')[0]!).map((node) =>
+      node.type === 'generic_type' ? node.childForFieldName('name')! : node
+    );
     const heritage = statement.heritageClauses!.flatMap((clause) => [...clause.types]);
     expect(names).toHaveLength(heritage.length);
     for (const [index, type] of heritage.entries()) {
@@ -127,9 +120,12 @@ function checkHeritage(tree: Tree, source: string, dialect: string, roles: Query
       checkQualifiedName(names[index]!, type.expression, reference);
     }
   }
-  const actual = roles
-    .captures(tree.rootNode)
-    .map(({ name, node }): CaptureRange => [name, node.startIndex, node.endIndex]);
+  const actual = tree.rootNode.descendantsOfType('implements_clause').flatMap((clause) =>
+    nonExtraNamedChildren(clause).flatMap((child): CaptureRange[] => {
+      const node = child.type === 'generic_type' ? child.childForFieldName('name') : child;
+      return node?.type === 'nested_type_identifier' ? [['name', node.startIndex, node.endIndex]] : [];
+    })
+  );
   expect(actual.toSorted(compareCaptureRange), source).toEqual(expected.toSorted(compareCaptureRange));
   expect(tree.rootNode.lastNamedChild?.text, source).toBe('const following = 1;');
 }

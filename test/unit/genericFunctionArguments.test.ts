@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -78,7 +78,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(type_arguments) @arguments (function_type) @function');
     const prefix = 'const result = ';
     const suffix = ';\nconst following = 1;';
     const source = prefix + 'a > b < c' + suffix;
@@ -93,17 +92,17 @@ for (const dialect of ['typescript', 'tsx']) {
       if (diagnostics.some((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error)) {
         expect(parsed.rootNode.hasError, text).toBe(true);
       } else {
-        checkArguments(parsed, text, dialect, query);
+        checkArguments(parsed, text, dialect);
       }
     };
     try {
-      checkArguments(tree, source, dialect, query);
+      checkArguments(tree, source, dialect);
       const controls = dialect === 'typescript' ? ['< <T>() => T>x', '<Box<<T>() => T>>x'] : ['<div>{a <!-- b}</div>'];
       for (const expression of controls) {
         const text = prefix + expression + suffix;
         const control = parser.parse(text)!;
         try {
-          checkArguments(control, text, dialect, query);
+          checkArguments(control, text, dialect);
         } finally {
           control.delete();
         }
@@ -165,7 +164,6 @@ for (const dialect of ['typescript', 'tsx']) {
       }
     } finally {
       tree.delete();
-      query.delete();
       parser.delete();
     }
   });
@@ -242,11 +240,9 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves adjacent generic function arguments and shift operators in ${dialect}`, async () => {
     await Parser.init();
     const parser = new Parser();
-    let query: Query | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
-      query = new Query(language, '(type_arguments) @arguments (function_type) @function');
       for (const argument of [
         '<T>() => T',
         ' <T>() => T',
@@ -265,13 +261,12 @@ for (const dialect of ['typescript', 'tsx']) {
         const source = Prefix + argument + Suffix;
         const tree = parser.parse(source)!;
         try {
-          checkArguments(tree, source, dialect, query);
+          checkArguments(tree, source, dialect);
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query?.delete();
       parser.delete();
     }
   });
@@ -375,7 +370,7 @@ function parseShiftCpu(
   return measurement.threadCpuMicroseconds;
 }
 
-function checkArguments(tree: Tree, source: string, dialect: string, query: Query): void {
+function checkArguments(tree: Tree, source: string, dialect: string): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile(
     `arguments.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
@@ -427,15 +422,11 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
     ts.forEachChild(node, visit);
   };
   visit(reference);
-  const captures = query.captures(tree.rootNode);
-  for (const [name, expected] of [
-    ['arguments', argumentsRanges],
-    ['function', functionRanges],
-  ] as const) {
-    expect(
-      captures.filter((capture) => capture.name === name).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-    ).toEqual(expected);
-  }
+  const typeArgumentsNodes = tree.rootNode.descendantsOfType('type_arguments');
+  expect(typeArgumentsNodes.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(argumentsRanges);
+  expect(
+    tree.rootNode.descendantsOfType('function_type').map((node) => [node.text, node.startIndex, node.endIndex])
+  ).toEqual(functionRanges);
   const binaries = tree.rootNode.descendantsOfType(['binary_expression', 'augmented_assignment_expression']);
   expect(
     binaries.map((node) => {
@@ -472,7 +463,7 @@ function checkArguments(tree: Tree, source: string, dialect: string, query: Quer
     expect(node.isNamed).toBe(false);
     expect(node.children).toHaveLength(0);
   }
-  for (const { node } of captures.filter((capture) => capture.name === 'arguments')) {
+  for (const node of typeArgumentsNodes) {
     const parent = node.parent!;
     expect(
       parent.type === 'type_assertion' ? parent.firstNamedChild!.id : parent.childForFieldName('type_arguments')?.id

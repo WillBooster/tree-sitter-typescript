@@ -47,10 +47,6 @@ function constructorObjectTarget(rule, target) {
   };
 }
 
-function isPrimaryExpression(entry) {
-  return entry.type === 'SYMBOL' && (entry.name === 'primary_expression' || entry.name === '_primary_atom');
-}
-
 function withPrimaryExpressionTargets($, lists, typeArgumentsOnly = []) {
   return lists.flatMap((list) =>
     list.some(isPrimaryExpression)
@@ -366,7 +362,8 @@ module.exports = function defineGrammar(dialect) {
         ),
         [
           ['_simple_target_primary', '_postfix_primary_expression'],
-          ['call_expression', '_constructor_import'],
+          ['_type_arguments_target', '_classic_call_target'],
+          ['_postfix_primary_expression', '_classic_call_target'],
         ]
       ),
       [$.for_in_clause, $._lexical_binding_identifier],
@@ -449,7 +446,6 @@ module.exports = function defineGrammar(dialect) {
 
       [$.object, $.object_pattern, $._object_type_head],
       [$.object, $.object_pattern, $._property_name],
-      [$.object, $._property_name],
       [$.binary_expression, $._initializer],
 
       [$.array, $.array_pattern, $._tuple_type_head],
@@ -508,7 +504,7 @@ module.exports = function defineGrammar(dialect) {
             field('body', $._single_statement)
           )
         ),
-      public_field_definition: ($) =>
+      field_definition: ($) =>
         seq(
           repeat(field('decorator', $.decorator)),
           optional(
@@ -667,17 +663,8 @@ module.exports = function defineGrammar(dialect) {
         ),
       _postfix_expression_target: ($) =>
         choice(alias($._postfix_primary_expression, $.primary_expression), $.instantiation_expression),
-      subscript_expression: ($) =>
-        prec.right(
-          'member',
-          seq(
-            field('object', alias($._postfix_expression_target, $.expression)),
-            optional(field('optional_chain', $.optional_chain)),
-            '[',
-            field('index', $._expressions),
-            ']'
-          )
-        ),
+      member_expression: ($) => memberExpression($),
+      subscript_expression: ($) => subscriptExpression($, alias($._postfix_expression_target, $.expression)),
 
       _constructor_atom: ($, previous) => choice(...expressionMembers($, dialect, previous.members)),
       _constructor: ($) =>
@@ -795,13 +782,21 @@ module.exports = function defineGrammar(dialect) {
 
       ternary_expression: ($, previous) => withExpressionOperands($, previous),
 
-      _augmented_assignment_lhs: ($, previous) => choice(previous, $.non_null_expression),
+      _augmented_assignment_lhs: ($, previous) => choice(withoutAssignmentMembers(previous), $.non_null_expression),
 
       _object_rest_target: ($, previous) =>
-        choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
+        choice(
+          withoutAssignmentMembers(previous),
+          $.non_null_expression,
+          alias($._predefined_annotated_name, $.identifier)
+        ),
 
       _lhs_expression: ($, previous) =>
-        choice(previous, $.non_null_expression, alias($._predefined_annotated_name, $.identifier)),
+        choice(
+          withoutAssignmentMembers(previous),
+          $.non_null_expression,
+          alias($._predefined_annotated_name, $.identifier)
+        ),
 
       binary_expression: ($, previous) => withTypeAngleOperators($, withExpressionOperands($, previous)),
 
@@ -1161,7 +1156,11 @@ module.exports = function defineGrammar(dialect) {
                 'function',
                 field('name', optional($.identifier))
               ),
-              seq(...(async ? [alias($._async_keyword, 'async')] : []), 'function', field('name', $.identifier))
+              seq(
+                ...(async ? [alias($._async_keyword, 'async')] : []),
+                choice('function', alias($._declaration_function_keyword, 'function')),
+                field('name', $.identifier)
+              )
             ),
             $[async ? '_async_function_signature_start' : '_function_signature_start'],
             $._call_signature,
@@ -1219,7 +1218,7 @@ module.exports = function defineGrammar(dialect) {
               seq($.method_signature, choice($._function_signature_automatic_semicolon, ',')),
               $.class_static_block,
               seq(
-                choice($.abstract_method_signature, $.index_signature, $.method_signature, $.public_field_definition),
+                choice($.abstract_method_signature, $.index_signature, $.method_signature, $.field_definition),
                 choice($._semicolon, ',')
               ),
               ';'
@@ -1893,9 +1892,9 @@ module.exports = function defineGrammar(dialect) {
 
       _extends_call: ($) => heritageRule($, heritageCallExpression($)),
 
-      _extends_member: ($) => heritageRule($, JavaScript.grammar.rules.member_expression),
+      _extends_member: ($) => heritageRule($, memberExpression($)),
 
-      _extends_subscript: ($) => heritageRule($, JavaScript.grammar.rules.subscript_expression),
+      _extends_subscript: ($) => heritageRule($, subscriptExpression($, $.primary_expression)),
 
       _extends_new: ($) => heritageRule($, heritageNewExpression($)),
 
@@ -2072,7 +2071,11 @@ module.exports = function defineGrammar(dialect) {
                 'class',
                 field('name', optional($._type_identifier))
               ),
-              seq(repeat(field('decorator', $.decorator)), 'class', field('name', $._type_identifier))
+              seq(
+                repeat(field('decorator', $.decorator)),
+                choice('class', alias($._declaration_class_keyword, 'class')),
+                field('name', $._type_identifier)
+              )
             ),
             field('type_parameters', optional($.type_parameters)),
             optional($.class_heritage),
@@ -2739,15 +2742,58 @@ module.exports = function defineGrammar(dialect) {
   });
 };
 
-// TypeScript lists JavaScript's primary expressions flat, with the atoms that JavaScript groups into `_primary_atom`.
+function memberExpression($) {
+  return prec(
+    'member',
+    seq(
+      field('object', choice($.primary_expression, $.import)),
+      choice('.', field('optional_chain', $.optional_chain)),
+      field(
+        'property',
+        choice($.private_property_identifier, reserved('properties', alias($.identifier, $.property_identifier)))
+      )
+    )
+  );
+}
+
+function subscriptExpression($, object) {
+  return prec.right(
+    'member',
+    seq(
+      field('object', object),
+      optional(field('optional_chain', $.optional_chain)),
+      '[',
+      field('index', $._expressions),
+      ']'
+    )
+  );
+}
+
+// TypeScript lists JavaScript's primary expressions flat, without JavaScript's call-assignment split.
 function javaScriptPrimaryExpressions() {
-  const flatten = (rule) =>
-    rule.type === 'CHOICE'
-      ? rule.members.flatMap(flatten)
-      : rule.type === 'SYMBOL' && rule.name === '_primary_atom'
-        ? flatten(JavaScript.grammar.rules._primary_atom)
-        : [rule];
+  const flatten = (rule) => {
+    const target = rule.type === 'ALIAS' && rule.content.name === '_assignment_call_primary' ? rule.content : rule;
+    if (target.type === 'CHOICE') return target.members.flatMap(flatten);
+    if (isPrimaryExpression(target)) return flatten(JavaScript.grammar.rules[target.name]);
+    if (
+      target.type === 'ALIAS' &&
+      target.content.type === 'SYMBOL' &&
+      (target.content.name.startsWith('_assignment_') || target.content.name === '_constructor_import')
+    ) {
+      return [];
+    }
+    return [target];
+  };
   return flatten(JavaScript.grammar.rules.primary_expression);
+}
+
+function isPrimaryExpression(entry) {
+  return (
+    entry.type === 'SYMBOL' &&
+    ['primary_expression', '_primary_atom', '_assignment_call_primary', '_non_assignment_call_primary'].includes(
+      entry.name
+    )
+  );
 }
 
 function expressionMembers($, dialect, members, excluded = []) {
@@ -2943,8 +2989,13 @@ function assertionFunctionParameters($) {
 
 // Drops the conflicts that JavaScript's grammar needs but TypeScript's does not, given as lists of rule names.
 function withoutConflicts(lists, unnecessary) {
-  const keys = new Set(unnecessary.map(conflictKey));
-  return lists.filter((list) => !keys.has(conflictKey(list.map((entry) => entry.name))));
+  const seen = new Set(unnecessary.map(conflictKey));
+  return lists.filter((list) => {
+    const key = conflictKey(list.map((entry) => entry.name));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function conflictKey(names) {
@@ -3717,10 +3768,7 @@ function heritageRule($, rule) {
     instantiation_expression: alias($._extends_instantiation, $.instantiation_expression),
     non_null_expression: alias($._extends_non_null, $.non_null_expression),
   };
-  // JavaScript's member and subscript objects are primary expressions aliased as expressions.
-  return mapRule(replaceAliases(rule, { _call_callee: aliases.primary_expression }), (part) =>
-    part.type === 'SYMBOL' ? (aliases[part.name] ?? part) : part
-  );
+  return mapRule(rule, (part) => (part.type === 'SYMBOL' ? (aliases[part.name] ?? part) : part));
 }
 
 function expressionReservedIdentifier() {
@@ -3905,6 +3953,10 @@ function stringHead(index) {
 
 function withExpressionOperands($, rule) {
   return replaceAliases(rule, { _binary_operand: $.expression, _unary_operand: $.expression });
+}
+
+function withoutAssignmentMembers(rule) {
+  return withoutSymbol(withoutSymbol(rule, '_assignment_member'), '_assignment_subscript');
 }
 
 function withoutSymbol(rule, name) {

@@ -1,4 +1,4 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -21,11 +21,9 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const parser = new Parser();
     let tree: Tree | undefined;
-    let query: Query | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
-      query = new Query(language, '(method_definition decorator: (decorator) @decorator) @method');
       for (const source of ['const value = { @observe method() {} };', 'const value = { @observe get value() {} };']) {
         const invalid = parser.parse(source)!;
         try {
@@ -37,19 +35,18 @@ for (const dialect of ['typescript', 'tsx']) {
       for (const replacement of ['@first', '@replacement() @additional', '']) {
         const source = Source.replace('@first', replacement);
         tree = parser.parse(source)!;
-        checkDecorators(tree, source, query);
+        checkDecorators(tree, source);
         tree.delete();
         tree = undefined;
       }
     } finally {
       tree?.delete();
-      query?.delete();
       parser.delete();
     }
   });
 }
 
-function checkDecorators(tree: Tree, source: string, query: Query): void {
+function checkDecorators(tree: Tree, source: string): void {
   expect(tree.rootNode.hasError).toBe(false);
   const reference = ts.createSourceFile('methods.ts', source, ts.ScriptTarget.Latest, true);
   const expected: unknown[] = [];
@@ -68,18 +65,18 @@ function checkDecorators(tree: Tree, source: string, query: Query): void {
   };
   visit(reference);
   expect(
-    query.matches(tree.rootNode).map(({ captures }) => {
-      const method = captures.find(({ name }) => name === 'method')!.node;
-      const decorator = captures.find(({ name }) => name === 'decorator')!.node;
-      expect(decorator.parent?.id).toBe(method.id);
-      return [method.childForFieldName('name')!.text, method.startIndex, decorator.startIndex, decorator.endIndex];
-    })
+    tree.rootNode.descendantsOfType('method_definition').flatMap((method) =>
+      method.childrenForFieldName('decorator').map((decorator) => {
+        expect(decorator.parent?.id).toBe(method.id);
+        return [method.childForFieldName('name')!.text, method.startIndex, decorator.startIndex, decorator.endIndex];
+      })
+    )
   ).toEqual(expected);
   const classBody = tree.rootNode.descendantsOfType('class_body')[0]!;
   expect(classBody.childrenForFieldName('decorator')).toEqual([]);
   expect(
     classBody
-      .descendantsOfType('public_field_definition')[0]!
+      .descendantsOfType('field_definition')[0]!
       .childrenForFieldName('decorator')
       .map((node) => node.text)
   ).toEqual(['@field']);

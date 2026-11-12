@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { nonExtraNamedChildren } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Operand = readonly [string, number, number];
@@ -20,22 +21,19 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`retains ${dialect} template type operands`, async () => {
     await Parser.init();
     const parser = new Parser();
-    let query: Query | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
-      query = new Query(language, '(template_type (_) @operand)');
       for (const source of [Source, Source.replace('readonly ', '')]) {
         const tree = parser.parse(source)!;
         try {
           expect(tree.rootNode.hasError).toBe(false);
-          expect(operands(query, tree)).toEqual(referenceOperands(source, dialect));
+          expect(operands(tree)).toEqual(referenceOperands(source, dialect));
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query?.delete();
       parser.delete();
     }
   });
@@ -60,9 +58,10 @@ function referenceOperands(source: string, dialect: string): Operand[] {
   return expected.toSorted((a, b) => a[1] - b[1]);
 }
 
-function operands(query: Query, tree: Tree): Operand[] {
-  return query
-    .captures(tree.rootNode)
-    .map(({ node }) => [node.text, node.startIndex, node.endIndex] as const)
+function operands(tree: Tree): Operand[] {
+  return tree.rootNode
+    .descendantsOfType('template_type')
+    .flatMap((node) => nonExtraNamedChildren(node))
+    .map((node) => [node.text, node.startIndex, node.endIndex] as const)
     .toSorted((a, b) => a[1] - b[1]);
 }

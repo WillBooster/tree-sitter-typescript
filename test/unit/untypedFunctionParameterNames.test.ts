@@ -1,6 +1,7 @@
-import { type Node, Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
+import { beforeAll, describe, expect, test } from 'vitest';
 
+import { parameterBindingIdentifiers, parameterBindingRanges } from '../helpers/nodeRoles.js';
 import { finishCpuMeasurement, type ParseCpuMeasurement, startCpuMeasurement } from '../helpers/parseCpuMeasurement.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
@@ -14,18 +15,11 @@ interface DeepReturnCpuMeasurement extends ParseCpuMeasurement {
 
 describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let bindingQuery: Query | undefined;
 
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    bindingQuery = new Query(
-      language,
-      `(required_parameter pattern: (identifier) @binding)
-      (optional_parameter pattern: (identifier) @binding)`
-    );
   }, 30_000);
-  afterAll(() => bindingQuery?.delete());
 
   test(
     'retains deeply parenthesized returns with bounded CPU growth',
@@ -66,12 +60,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
       expect(tree, 'deep-return parse must complete before the emergency deadline').toBeDefined();
       expect(tree!.rootNode.hasError).toBe(false);
       expect(tree!.rootNode.namedChildren).toHaveLength(3);
-      expect(
-        bindingQuery!
-          .captures(tree!.rootNode)
-          .filter((capture) => capture.name === 'binding')
-          .map((capture) => capture.node.text)
-      ).toEqual(['unknown']);
+      expect(parameterBindingIdentifiers(tree!.rootNode).map((node) => node.text)).toEqual(['unknown']);
       return measurement.threadCpuMicroseconds;
     } finally {
       tree?.delete();
@@ -81,7 +70,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
 
   test.each(['unknown', 'never', 'unique'])('does not claim incomplete untyped headers for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
     try {
       for (const continuation of ['=>', 'number', ')']) {
         const source = `type F=(${name})=>number;`;
@@ -200,10 +188,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           try {
             expect(tree.rootNode.hasError).toBe(replacement !== continuation);
             expect(
-              bindings
-                .captures(tree.rootNode)
-                .filter(({ node }) => node.text === name)
-                .map(({ node }) => node.text)
+              parameterBindingIdentifiers(tree.rootNode, false)
+                .filter((node) => node.text === name)
+                .map((node) => node.text)
             ).toEqual(replacement !== continuation ? [] : [name]);
           } finally {
             tree.delete();
@@ -211,7 +198,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         }
       }
     } finally {
-      bindings.delete();
       parser.delete();
     }
   });
@@ -683,15 +669,18 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'type F<T> = T extends (z: number, unknown)=>readonly ? .5:false;',
   ])('preserves the alias around an invalid conditional operand: %s', (source) => {
     const parser = new Parser().setLanguage(language);
-    const aliases = new Query(language, '(type_alias_declaration name: (type_identifier) @name)');
     const tree = parser.parse(source)!;
     try {
       expect(tree.rootNode.hasError).toBe(true);
       expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['type_alias_declaration']);
-      expect(aliases.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(['F']);
+      expect(
+        tree.rootNode.descendantsOfType('type_alias_declaration').flatMap((node) => {
+          const name = node.childForFieldName('name');
+          return name?.type === 'type_identifier' ? [name.text] : [];
+        })
+      ).toEqual(['F']);
     } finally {
       tree.delete();
-      aliases.delete();
       parser.delete();
     }
   });
@@ -735,7 +724,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'keeps conditional probes local after complete and incomplete preceding conditionals for %s',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
       const prefix = 'type Earlier = T extends ';
       try {
         for (const [suffix, expectedNames] of [
@@ -746,14 +734,13 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           for (const repair of ['', 'U ? 1 : 0']) {
             const tree = parser.parse(`${prefix}${repair}; ${suffix}`)!;
             try {
-              expect(bindings.captures(tree.rootNode).map(({ node }) => node.text)).toEqual(expectedNames);
+              expect(parameterBindingIdentifiers(tree.rootNode, false).map((node) => node.text)).toEqual(expectedNames);
             } finally {
               tree.delete();
             }
           }
         }
       } finally {
-        bindings.delete();
         parser.delete();
       }
     }
@@ -926,7 +913,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
 
   test.each(['unknown', 'never', 'unique'])('retains function-type arrow return annotations for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
     try {
       for (const parameters of ['()', '(a)', '<T>(a:T)']) {
         for (const trivia of ['', ' /* c */ ', '\n']) {
@@ -949,18 +935,12 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
               );
               expect(value.childForFieldName('body')!.text, source).toBe(body.slice(body.indexOf('=>') + 2));
               const start = source.indexOf(name);
-              expect(
-                bindings
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => [node.text, node.startIndex, node.endIndex])
-              ).toEqual([[name, start, start + name.length]]);
+              expect(parameterBindingRanges(tree.rootNode, name, false)).toEqual([[name, start, start + name.length]]);
             });
           }
         }
       }
     } finally {
-      bindings.delete();
       parser.delete();
     }
   });
@@ -1012,7 +992,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     'distinguishes complete and incomplete union and rest forms for %s',
     (name) => {
       const parser = new Parser().setLanguage(language);
-      const bindings = new Query(language, '(required_parameter pattern: (identifier) @name)');
       try {
         for (const [source, removed] of [
           [`type F=(${name})=>T | U;`, 'U'],
@@ -1052,10 +1031,9 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
             try {
               expect(tree.rootNode.hasError, next).toBe(next !== source);
               expect(
-                bindings
-                  .captures(tree.rootNode)
-                  .filter(({ node }) => node.text === name)
-                  .map(({ node }) => node.text)
+                parameterBindingIdentifiers(tree.rootNode, false)
+                  .filter((node) => node.text === name)
+                  .map((node) => node.text)
               ).toEqual(next !== source ? [] : [name]);
             } finally {
               tree.delete();
@@ -1063,7 +1041,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
           }
         }
       } finally {
-        bindings.delete();
         parser.delete();
       }
     }
@@ -1071,10 +1048,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
 
   test.each(['unknown', 'never', 'unique'])('retains canonical bindings for %s', (name) => {
     const parser = new Parser().setLanguage(language);
-    const bindings = new Query(
-      language,
-      '[(required_parameter pattern: (identifier) @name) (optional_parameter pattern: (identifier) @name)]'
-    );
     try {
       for (const generic of ['', '<T>']) {
         for (const optional of ['', '?']) {
@@ -1100,19 +1073,16 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
                 expect(tree.rootNode.hasError).toBe(false);
                 expect(snapshot(tree.rootNode)).toEqual(snapshot(reference.rootNode));
                 expect(
-                  bindings
-                    .captures(tree.rootNode)
-                    .filter(({ node }) => node.text === name)
-                    .map(({ node }) => [node.startIndex, node.endIndex])
+                  parameterBindingRanges(tree.rootNode, name).map(([, rangeStart, rangeEnd]) => [rangeStart, rangeEnd])
                 ).toEqual([[start, end]]);
                 const renamed = parser.parse(source.slice(0, start) + 'argument' + source.slice(end))!;
                 try {
                   expect(renamed.rootNode.hasError).toBe(false);
                   expect(
-                    bindings
-                      .captures(renamed.rootNode)
-                      .filter(({ node }) => node.text === 'argument')
-                      .map(({ node }) => [node.startIndex, node.endIndex])
+                    parameterBindingRanges(renamed.rootNode, 'argument').map(([, rangeStart, rangeEnd]) => [
+                      rangeStart,
+                      rangeEnd,
+                    ])
                   ).toEqual([[start, start + 'argument'.length]]);
                 } finally {
                   renamed.delete();
@@ -1126,7 +1096,6 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
         }
       }
     } finally {
-      bindings.delete();
       parser.delete();
     }
   });

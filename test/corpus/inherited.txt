@@ -367,7 +367,7 @@ Reserved words as decorator member names
         (arguments)))
     (type_identifier)
     (class_body
-      (public_field_definition
+      (field_definition
         (decorator
           (member_expression
             (identifier)

@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Prefix = `declare module "m" { export interface Foo<T = unknown> { member: T } }
@@ -25,15 +26,10 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`preserves parenthesized import types and expression boundaries in ${dialect}`, async () => {
     await Parser.init();
     const parser = new Parser();
-    let query: Query | undefined;
     let tree: Tree | undefined;
     try {
       const language = await loadCurrentWasmBuild(dialect);
       parser.setLanguage(language);
-      query = new Query(
-        language,
-        '(parenthesized_type) @type\n(parenthesized_type (primary_type) @operand)\n(lexical_declaration (variable_declarator name: (identifier) @binding))'
-      );
       for (const operand of [
         'import("m").Foo',
         'import("m").Foo<number>',
@@ -43,19 +39,18 @@ for (const dialect of ['typescript', 'tsx']) {
       ]) {
         const source = Prefix + operand + Suffix;
         tree = parser.parse(source)!;
-        checkTypes(tree, source, dialect, query);
+        checkTypes(tree, source, dialect);
         tree.delete();
         tree = undefined;
       }
     } finally {
       tree?.delete();
-      query?.delete();
       parser.delete();
     }
   });
 }
 
-function checkTypes(tree: Tree, source: string, dialect: string, query: Query): void {
+function checkTypes(tree: Tree, source: string, dialect: string): void {
   expect(tree.rootNode.hasError, source).toBe(false);
   const reference = ts.createSourceFile(
     `imports.${dialect === 'tsx' ? 'tsx' : 'ts'}`,
@@ -74,19 +69,24 @@ function checkTypes(tree: Tree, source: string, dialect: string, query: Query): 
     ts.forEachChild(node, visit);
   };
   visit(reference);
-  const captures = query.captures(tree.rootNode);
+  const types = tree.rootNode.descendantsOfType('parenthesized_type');
+  expect(types.map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(expected);
   expect(
-    captures.filter(({ name }) => name === 'type').map(({ node }) => [node.text, node.startIndex, node.endIndex])
-  ).toEqual(expected);
-  expect(
-    captures.filter(({ name }) => name === 'operand').map(({ node }) => [node.text, node.startIndex, node.endIndex])
+    types.flatMap((node) => {
+      const operand = firstNonExtraNamedChild(node);
+      return operand ? [[operand.text, operand.startIndex, operand.endIndex]] : [];
+    })
   ).toEqual(operands);
-  expect(captures.filter(({ name }) => name === 'binding').map(({ node }) => node.text)).toEqual([
-    'ordinary',
-    'dynamic',
-    'arrow',
-    'following',
-  ]);
+  expect(
+    tree.rootNode.descendantsOfType('lexical_declaration').flatMap((declaration) =>
+      declaration.namedChildren
+        .filter((child) => child.type === 'variable_declarator')
+        .flatMap((declarator) => {
+          const name = declarator.childForFieldName('name');
+          return name?.type === 'identifier' ? [name.text] : [];
+        })
+    )
+  ).toEqual(['ordinary', 'dynamic', 'arrow', 'following']);
   expect(tree.rootNode.descendantsOfType('parenthesized_expression').map((node) => node.text)).toEqual([
     '(factory("m").Foo)',
     '(import("m").then)',

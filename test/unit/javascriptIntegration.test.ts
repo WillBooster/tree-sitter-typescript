@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 
-import { Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import { expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild';
 
 await Parser.init();
@@ -15,19 +16,17 @@ for (const dialect of ['typescript', 'tsx']) {
     parser.setLanguage(language);
     const tree = parser.parse('async function f() { return await\n/* operand */ g<T>(x) + h; }');
     assert.ok(tree);
-    const query = new Query(language, '(await_expression (expression) @operand) @await');
     try {
       expect(tree.rootNode.hasError).toBe(false);
-      const captures = query.captures(tree.rootNode);
-      expect(captures.filter(({ name }) => name === 'operand').map(({ node }) => node.text)).toEqual(['g<T>(x)']);
-      const [awaitNode] = tree.rootNode.descendantsOfType('await_expression');
+      const awaitNodes = tree.rootNode.descendantsOfType('await_expression');
+      expect(awaitNodes.map((node) => firstNonExtraNamedChild(node)?.text)).toEqual(['g<T>(x)']);
+      const [awaitNode] = awaitNodes;
       expect(awaitNode?.parent?.type).toBe('binary_expression');
       const [call] = tree.rootNode.descendantsOfType('call_expression');
       expect(call?.childForFieldName('type_arguments')?.text).toBe('<T>');
       expect(call?.childForFieldName('function')?.text).toBe('g');
       expect(call?.childForFieldName('arguments')?.text).toBe('(x)');
     } finally {
-      query.delete();
       tree.delete();
       parser.delete();
     }
@@ -94,7 +93,6 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`${dialect} keeps conditional await arrow bodies and optional parameters`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const query = new Query(language, '(await_expression (expression) @operand)');
     try {
       for (const operand of ['g(x)', 'g<T>(x)', 'g!()', 'g?.<T>(x)']) {
         for (const comment of ['', '/* boundary\n */', '// boundary\n']) {
@@ -112,14 +110,15 @@ for (const dialect of ['typescript', 'tsx']) {
               'x?: T',
               'y?: U',
             ]);
-            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([operand]);
+            expect(
+              tree.rootNode.descendantsOfType('await_expression').map((node) => firstNonExtraNamedChild(node)?.text)
+            ).toEqual([operand]);
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -167,10 +166,6 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`${dialect} ends an await identifier statement before a namespace declaration`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const query = new Query(
-      language,
-      '(expression_statement (identifier) @await)\n(expression_statement (internal_module) @namespace)'
-    );
     try {
       for (const comment of ['\n', '/* boundary\n */', '\n// boundary\n']) {
         for (const wrapped of [false, true]) {
@@ -180,9 +175,14 @@ for (const dialect of ['typescript', 'tsx']) {
           try {
             expect(tree.rootNode.hasError).toBe(false);
             expect(tree.rootNode.descendantsOfType('await_expression')).toHaveLength(0);
-            const captures = query.captures(tree.rootNode);
-            expect(captures.filter(({ name }) => name === 'await').map(({ node }) => node.text)).toEqual(['await']);
-            expect(captures.filter(({ name }) => name === 'namespace').map(({ node }) => node.text)).toEqual([
+            const expressionHeads = tree.rootNode.descendantsOfType('expression_statement').flatMap((statement) => {
+              const head = firstNonExtraNamedChild(statement);
+              return head ? [head] : [];
+            });
+            expect(expressionHeads.filter((node) => node.type === 'identifier').map((node) => node.text)).toEqual([
+              'await',
+            ]);
+            expect(expressionHeads.filter((node) => node.type === 'internal_module').map((node) => node.text)).toEqual([
               'namespace N {}',
             ]);
           } finally {
@@ -204,7 +204,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -295,7 +294,6 @@ for (const dialect of ['typescript', 'tsx']) {
   test(`${dialect} attaches class bodies after comments`, () => {
     const parser = new Parser();
     parser.setLanguage(language);
-    const query = new Query(language, '(method_definition body: (statement_block) @body)');
     try {
       for (const [header, body] of [
         ['m()', '{}'],
@@ -311,22 +309,26 @@ for (const dialect of ['typescript', 'tsx']) {
           try {
             expect(tree.rootNode.hasError).toBe(false);
             expect(tree.rootNode.namedChildren.map((node) => node.type)).toEqual(['class_declaration']);
-            expect(tree.rootNode.descendantsOfType('method_definition')).toHaveLength(1);
-            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([body]);
+            const methods = tree.rootNode.descendantsOfType('method_definition');
+            expect(methods).toHaveLength(1);
+            expect(
+              methods.flatMap((node) => {
+                const methodBody = node.childForFieldName('body');
+                return methodBody?.type === 'statement_block' ? [methodBody.text] : [];
+              })
+            ).toEqual([body]);
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
 
   test(`${dialect} preserves typed declaration continuations after comments`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(predefined_type) @type');
     try {
       for (const [prefix, suffix, type] of [
         ['interface I { a', '\n: string; }', 'string'],
@@ -342,7 +344,7 @@ for (const dialect of ['typescript', 'tsx']) {
           try {
             expect(tree.rootNode.hasError).toBe(false);
             expect(tree.rootNode.namedChildren).toHaveLength(1);
-            expect(query.captures(tree.rootNode).map(({ node }) => node.text)).toEqual([type]);
+            expect(tree.rootNode.descendantsOfType('predefined_type').map((node) => node.text)).toEqual([type]);
             const [property] = tree.rootNode.descendantsOfType('property_signature');
             if (property) {
               expect(property.childForFieldName('name')?.text).toBe('a');
@@ -364,17 +366,12 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
 
   test(`${dialect} keeps trailing arrow comments outside declarations before a regex`, () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      '(arrow_function body: (statement_block) @body)\n(comment) @comment\n(regex) @regex'
-    );
     const prefix = 'const f = () => {}';
     const suffix = '\n/re/.test(a)\n';
     try {
@@ -384,15 +381,20 @@ for (const dialect of ['typescript', 'tsx']) {
         try {
           expect(tree.rootNode.hasError).toBe(false);
           const [declaration] = tree.rootNode.descendantsOfType('lexical_declaration');
-          const [arrow] = tree.rootNode.descendantsOfType('arrow_function');
+          const arrows = tree.rootNode.descendantsOfType('arrow_function');
+          const [arrow] = arrows;
           expect(declaration?.text).toBe(prefix);
           expect(declaration?.endIndex).toBe(prefix.length);
           expect(arrow?.text).toBe('() => {}');
           expect(arrow?.endIndex).toBe(prefix.length);
-          const captures = query.captures(tree.rootNode);
-          expect(captures.filter(({ name }) => name === 'body').map(({ node }) => node.text)).toEqual(['{}']);
-          expect(captures.filter(({ name }) => name === 'regex').map(({ node }) => node.text)).toEqual(['/re/']);
-          for (const { node } of captures.filter(({ name }) => name === 'comment')) {
+          expect(
+            arrows.flatMap((node) => {
+              const body = node.childForFieldName('body');
+              return body?.type === 'statement_block' ? [body.text] : [];
+            })
+          ).toEqual(['{}']);
+          expect(tree.rootNode.descendantsOfType('regex').map((node) => node.text)).toEqual(['/re/']);
+          for (const node of tree.rootNode.descendantsOfType('comment')) {
             expect(node.parent?.type).toBe('program');
           }
         } finally {
@@ -400,7 +402,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });

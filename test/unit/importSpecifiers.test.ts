@@ -1,4 +1,4 @@
-import { Parser, Query } from '@willbooster/web-tree-sitter';
+import { Parser } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
@@ -79,28 +79,29 @@ import "side-effect";
   for (const dialect of ['typescript', 'tsx']) {
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser().setLanguage(language);
-    const query = new Query(
-      language,
-      `
-      (import_statement import_clause: (import_clause) @bindings)
-      (import_statement import_clause: (import_require_clause) @requireBindings)
-      (import_statement !import_clause) @sideEffect
-    `
-    );
     const tree = parser.parse(source)!;
     try {
       expect(tree.rootNode.hasError).toBe(false);
-      const captures = query.captures(tree.rootNode);
-      expect(captures.filter(({ name }) => name === 'bindings').map(({ node }) => node.text)).toEqual(expectedBindings);
-      expect(captures.filter(({ name }) => name === 'requireBindings').map(({ node }) => node.text)).toEqual(
-        expectedRequireBindings
-      );
-      expect(captures.filter(({ name }) => name === 'sideEffect').map(({ node }) => node.text)).toEqual(
-        expectedSideEffects
-      );
+      const statements = tree.rootNode.descendantsOfType('import_statement');
+      expect(
+        statements.flatMap((statement) => {
+          const clause = statement.childForFieldName('import_clause');
+          return clause?.type === 'import_clause' ? [clause.text] : [];
+        })
+      ).toEqual(expectedBindings);
+      expect(
+        statements.flatMap((statement) => {
+          const clause = statement.childForFieldName('import_clause');
+          return clause?.type === 'import_require_clause' ? [clause.text] : [];
+        })
+      ).toEqual(expectedRequireBindings);
+      expect(
+        statements
+          .filter((statement) => !statement.childForFieldName('import_clause'))
+          .map((statement) => statement.text)
+      ).toEqual(expectedSideEffects);
     } finally {
       tree.delete();
-      query.delete();
       parser.delete();
     }
   }

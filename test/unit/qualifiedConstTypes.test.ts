@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { firstNonExtraNamedChild, nonExtraNamedChildren, walkNodes } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 type Ranges = [string, number, number][];
@@ -500,19 +501,8 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    let query: Query | undefined;
     try {
       parser.setLanguage(language);
-      query = new Query(
-        language,
-        '(function_type) @functionType (constructor_type) @constructorType (function_type return_type: (_) @functionReturn) (constructor_type type: (_) @constructorReturn) (type_predicate) @predicate (type_predicate type: (_) @predicateType) (asserts) @asserts (comment) @comment (nested_type_identifier) @qualified (generic_type) @generic (as_expression) @as (satisfies_expression) @satisfies ' +
-          '(required_parameter pattern: (array_pattern) @arrayBinding) (jsdoc_unknown_type) @unknownType ((type_identifier) @constType (#eq? @constType "const")) (as_expression "const" @wholeConst) ' +
-          '(flow_maybe_type) @flowMaybe (flow_maybe_type (_) @flowMaybeOperand) (readonly_type) @readonlyOperator (readonly_type (_) @readonlyOperand) (infer_type) @infer (array_type) @array (lookup_type) @lookup (union_type) @union (intersection_type) @intersection (conditional_type) @conditional ' +
-          '(unique_type) @uniqueOperator (unique_type "unique" @uniqueKeyword type: (_) @uniqueOperand) (predefined_type "unique symbol") @uniqueSymbol (index_type_query) @keyof (type_query) @typeQuery (type_query (member_expression) @queryOperand) (non_nullable_type) @nonNullable (non_nullable_type (_) @nullableOperand)' +
-          ' (index_type_query (infer_type) @inferOperand) (readonly_type (infer_type) @inferOperand) (unique_type (infer_type) @inferOperand) (type_query [(identifier) (this)] @queryOperand) (type_query (instantiation_expression [(identifier) (this)] @queryOperand)) (type_query (instantiation_expression (member_expression) @queryOperand)) (as_expression "as" . (_) @assertedType) (as_expression "const" @assertedType) (array_type (_) @arrayOperand)' +
-          ' (lookup_type (_) @lookupOperand "[") (conditional_type left: (_) @conditionalLeft) (binary_expression operator: _ @binaryOperator) @binary (ternary_expression) @ternary' +
-          (dialect === 'typescript' ? ' (type_assertion) @angle' : '')
-      );
       const sources = [
         ...Sources,
         ...SyntaxControls,
@@ -523,26 +513,18 @@ for (const dialect of ['typescript', 'tsx']) {
       for (const source of [...sources, ...invalidSources]) {
         const tree = parser.parse(source)!;
         try {
-          checkRanges(tree, source, dialect, query, !invalidSources.includes(source), !syntaxSources.has(source));
+          checkRanges(tree, source, dialect, !invalidSources.includes(source), !syntaxSources.has(source));
         } finally {
           tree.delete();
         }
       }
     } finally {
-      query?.delete();
       parser.delete();
     }
   });
 }
 
-function checkRanges(
-  tree: Tree,
-  source: string,
-  dialect: string,
-  query: Query,
-  valid = true,
-  compareRanges = true
-): void {
+function checkRanges(tree: Tree, source: string, dialect: string, valid = true, compareRanges = true): void {
   const fileName = dialect === 'tsx' ? 'const.tsx' : 'const.ts';
   const reference = ts.createSourceFile(
     fileName,
@@ -773,19 +755,122 @@ function checkRanges(
   };
   collectComments(reference);
   expected.comment!.push(...comments.values());
-  const actual: Record<string, Ranges> = Object.fromEntries(Object.keys(expected).map((name) => [name, []]));
-  for (const { name, node } of query.captures(tree.rootNode)) {
-    if (
-      (name !== 'comment' && node.type === 'comment') ||
-      (name === 'union' && node.parent?.type === 'union_type') ||
-      (name === 'intersection' && node.parent?.type === 'intersection_type')
-    )
-      continue;
-    actual[name]!.push([node.text, node.startIndex, node.endIndex]);
-  }
+  const actual = collectActualRanges(tree.rootNode, dialect, Object.keys(expected));
   const byRange = (a: Ranges[number], b: Ranges[number]): number => a[1] - b[1] || b[2] - a[2];
   for (const name of Object.keys(expected)) {
     expect(actual[name]!.toSorted(byRange), `${name}: ${source}`).toEqual(expected[name]!.toSorted(byRange));
+  }
+}
+
+const DirectNodeRole: Record<string, string> = {
+  function_type: 'functionType',
+  constructor_type: 'constructorType',
+  type_predicate: 'predicate',
+  jsdoc_unknown_type: 'unknownType',
+  comment: 'comment',
+  flow_maybe_type: 'flowMaybe',
+  readonly_type: 'readonlyOperator',
+  infer_type: 'infer',
+  ternary_expression: 'ternary',
+  binary_expression: 'binary',
+  index_type_query: 'keyof',
+  unique_type: 'uniqueOperator',
+  nested_type_identifier: 'qualified',
+  generic_type: 'generic',
+  as_expression: 'as',
+  satisfies_expression: 'satisfies',
+  array_type: 'array',
+  lookup_type: 'lookup',
+  conditional_type: 'conditional',
+  type_query: 'typeQuery',
+  non_nullable_type: 'nonNullable',
+};
+
+const FieldNodeRoles: readonly [string, string, string][] = [
+  ['function_type', 'return_type', 'functionReturn'],
+  ['constructor_type', 'type', 'constructorReturn'],
+  ['type_predicate', 'type', 'predicateType'],
+  ['binary_expression', 'operator', 'binaryOperator'],
+  ['unique_type', 'type', 'uniqueOperand'],
+  ['conditional_type', 'left', 'conditionalLeft'],
+];
+
+const ChildOperandRole: Record<string, string> = {
+  flow_maybe_type: 'flowMaybeOperand',
+  readonly_type: 'readonlyOperand',
+  array_type: 'arrayOperand',
+  non_nullable_type: 'nullableOperand',
+};
+
+function collectActualRanges(root: Node, dialect: string, keys: string[]): Record<string, Ranges> {
+  const actual: Record<string, Ranges> = Object.fromEntries(keys.map((name) => [name, []]));
+  const push = (name: string, node: Node | null | undefined): void => {
+    if (!node || (name !== 'comment' && node.type === 'comment')) return;
+    actual[name]!.push([node.text, node.startIndex, node.endIndex]);
+  };
+  walkNodes(root, (node) => {
+    const directRole = DirectNodeRole[node.type];
+    if (directRole) push(directRole, node);
+    for (const [ownerType, field, role] of FieldNodeRoles) {
+      if (node.type === ownerType) push(role, node.childForFieldName(field));
+    }
+    const operandRole = ChildOperandRole[node.type];
+    if (operandRole) for (const child of nonExtraNamedChildren(node)) push(operandRole, child);
+    collectSpecialNodeRoles(node, dialect, push);
+  });
+  return actual;
+}
+
+function collectSpecialNodeRoles(
+  node: Node,
+  dialect: string,
+  push: (name: string, target: Node | null | undefined) => void
+): void {
+  if (node.type === 'asserts' && node.isNamed) push('asserts', node);
+  if (node.type === 'type_identifier' && node.text === 'const') push('constType', node);
+  if (dialect === 'typescript' && node.type === 'type_assertion') push('angle', node);
+  if (node.type === 'union_type' && node.parent?.type !== 'union_type') push('union', node);
+  if (node.type === 'intersection_type' && node.parent?.type !== 'intersection_type') push('intersection', node);
+  if (node.type === 'required_parameter') {
+    const pattern = node.childForFieldName('pattern');
+    if (pattern?.type === 'array_pattern') push('arrayBinding', pattern);
+  }
+  if (
+    node.type === 'infer_type' &&
+    ['index_type_query', 'readonly_type', 'unique_type'].includes(node.parent?.type ?? '')
+  )
+    push('inferOperand', node);
+  if (node.type === 'unique_type')
+    push(
+      'uniqueKeyword',
+      node.children.find((c) => !c.isNamed && c.type === 'unique')
+    );
+  if (node.type === 'predefined_type' && node.children.some((c) => !c.isNamed && c.type === 'unique symbol'))
+    push('uniqueSymbol', node);
+  if (node.type === 'lookup_type') push('lookupOperand', firstNonExtraNamedChild(node));
+  if (node.type === 'type_query') push('queryOperand', typeQueryOperand(node));
+  if (node.type === 'as_expression') collectAsExpressionRoles(node, push);
+}
+
+function typeQueryOperand(node: Node): Node | undefined {
+  const inner = firstNonExtraNamedChild(node);
+  const target = inner?.type === 'instantiation_expression' ? firstNonExtraNamedChild(inner) : inner;
+  return target && ['member_expression', 'identifier', 'this'].includes(target.type) ? target : undefined;
+}
+
+function collectAsExpressionRoles(node: Node, push: (name: string, target: Node | null | undefined) => void): void {
+  const constToken = node.children.find((child) => !child.isNamed && child.type === 'const');
+  if (constToken) {
+    push('wholeConst', constToken);
+    push('assertedType', constToken);
+    return;
+  }
+  const asIndex = node.children.findIndex((child) => !child.isNamed && child.type === 'as');
+  if (asIndex !== -1) {
+    push(
+      'assertedType',
+      node.children.slice(asIndex + 1).find((child) => child.isNamed && !child.isExtra)
+    );
   }
 }
 

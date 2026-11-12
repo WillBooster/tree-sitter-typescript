@@ -64,7 +64,7 @@ declare module Foo {
     (class_declaration
       name: (type_identifier)
       body: (class_body
-        (public_field_definition
+        (field_definition
           name: (property_identifier)
           type: (type_annotation
             (type_identifier))))))
@@ -141,7 +141,7 @@ declare module Foo {
               pattern: (identifier)
               type: (type_annotation
                 (predefined_type)))))
-        (public_field_definition
+        (field_definition
           name: (property_identifier)
           type: (type_annotation
             (predefined_type)))
@@ -365,7 +365,7 @@ declare class Linter {
     (class_declaration
       (type_identifier)
       (class_body
-        (public_field_definition
+        (field_definition
           (property_identifier)
           (type_annotation
             (type_query
@@ -478,7 +478,7 @@ export class CloningRepository {
     (class_declaration
       (type_identifier)
       (class_body
-        (public_field_definition
+        (field_definition
           (accessibility_modifier)
           (property_identifier)
           (update_expression
@@ -849,18 +849,18 @@ class Foo {
   (class_declaration
     (type_identifier)
     (class_body
-      (public_field_definition
+      (field_definition
         (number)
         (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (accessibility_modifier)
         (number)
         (type_annotation
           (predefined_type))
         (string
           (string_fragment)))
-      (public_field_definition
+      (field_definition
         (accessibility_modifier)
         (string
           (string_fragment))
@@ -868,14 +868,14 @@ class Foo {
           (type_identifier))
         (string
           (string_fragment)))
-      (public_field_definition
+      (field_definition
         (string
           (string_fragment))
         (type_annotation
           (type_identifier))
         (string
           (string_fragment)))
-      (public_field_definition
+      (field_definition
         (string
           (string_fragment))
         (type_annotation
@@ -932,13 +932,13 @@ Classes with decorators
       (identifier))
     (type_identifier)
     (class_body
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (number)
         (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (decorator
           (call_expression
             (member_expression
@@ -952,7 +952,7 @@ Classes with decorators
           (predefined_type))
         (string
           (string_fragment)))
-      (public_field_definition
+      (field_definition
         (decorator
           (identifier))
         (string
@@ -998,7 +998,7 @@ class Foo<Bar> extends Baz { bar = 5; static one(a) { return a; }; two(b) { retu
       (extends_clause
         (identifier)))
     (class_body
-      (public_field_definition
+      (field_definition
         (property_identifier)
         (number))
       (method_definition
@@ -1106,11 +1106,11 @@ abstract class Foo {
   (abstract_class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))
@@ -1791,7 +1791,7 @@ class Lines {
   (class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type))
@@ -1799,13 +1799,13 @@ class Lines {
   (class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number))))
   (class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number))))
   (class_declaration
@@ -1814,42 +1814,42 @@ class Lines {
       (extends_clause
         value: (identifier)))
     body: (class_body
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier)
         value: (number))))
   (abstract_class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))))
   (class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         (accessibility_modifier)
         name: (property_identifier)
         value: (number))
-      (public_field_definition
+      (field_definition
         name: (private_property_identifier)
         value: (number))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number))))
   (class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         value: (number)))))
 
@@ -1868,11 +1868,11 @@ abstract class B extends A { abstract override accessor value: number; abstract 
   (abstract_class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))))
@@ -1882,12 +1882,12 @@ abstract class B extends A { abstract override accessor value: number; abstract 
       (extends_clause
         value: (identifier)))
     body: (class_body
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier)
         type: (type_annotation
@@ -1918,7 +1918,7 @@ abstract class Method extends Base {
   (abstract_class_declaration
     name: (type_identifier)
     body: (class_body
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))))
@@ -1928,10 +1928,10 @@ abstract class Method extends Base {
       (extends_clause
         value: (identifier)))
     body: (class_body
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier))
-      (public_field_definition
+      (field_definition
         name: (property_identifier)
         type: (type_annotation
           (predefined_type)))))
@@ -1941,7 +1941,7 @@ abstract class Method extends Base {
       (extends_clause
         value: (identifier)))
     body: (class_body
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier))))
   (abstract_class_declaration
@@ -1950,7 +1950,7 @@ abstract class Method extends Base {
       (extends_clause
         value: (identifier)))
     body: (class_body
-      (public_field_definition
+      (field_definition
         (override_modifier)
         name: (property_identifier))
       (method_definition

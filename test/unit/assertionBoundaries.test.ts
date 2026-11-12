@@ -1,7 +1,8 @@
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
 import { expect, test } from 'vitest';
 
+import { parameterBindingIdentifiers } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Statements = [
@@ -25,13 +26,19 @@ const Statements = [
   'const result = f!`tag`;',
 ];
 const Following = '\nconst following = 1;';
+const BoundaryKinds: Record<string, string> = {
+  as_expression: 'as',
+  call_expression: 'call',
+  subscript_expression: 'subscript',
+  expression_statement: 'statement',
+  regex: 'regex',
+};
 
 for (const dialect of ['typescript', 'tsx']) {
   test(`retains ${dialect} parameter fields while an assertion arrow is incomplete`, async () => {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const query = new Query(language, '(required_parameter pattern: (identifier) @binding)');
     try {
       parser.setLanguage(language);
       for (const form of ['(x: T)', 'new (x: T)', '()']) {
@@ -43,14 +50,13 @@ for (const dialect of ['typescript', 'tsx']) {
         ] as const) {
           const tree = parser.parse(source)!;
           try {
-            checkFormalFields(tree, source, dialect, valid, query);
+            checkFormalFields(tree, source, dialect, valid);
           } finally {
             tree.delete();
           }
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -89,10 +95,6 @@ for (const dialect of ['typescript', 'tsx']) {
     await Parser.init();
     const language = await loadCurrentWasmBuild(dialect);
     const parser = new Parser();
-    const query = new Query(
-      language,
-      '(as_expression) @as (call_expression) @call (subscript_expression) @subscript (expression_statement) @statement (regex) @regex'
-    );
     try {
       parser.setLanguage(language);
       for (const prefix of ['', 'const earlier = 1;\n']) {
@@ -107,7 +109,7 @@ for (const dialect of ['typescript', 'tsx']) {
           for (const source of sources) {
             const tree = parser.parse(source)!;
             try {
-              checkBoundaries(tree, source, dialect, query);
+              checkBoundaries(tree, source, dialect);
             } finally {
               tree.delete();
             }
@@ -115,7 +117,6 @@ for (const dialect of ['typescript', 'tsx']) {
         }
       }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -151,141 +152,6 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
-}
-
-function checkConstructorFields(tree: Tree, source: string, dialect: string, empty: boolean): void {
-  const reference = referenceFor(source, dialect);
-  const expected: unknown[][] = [];
-  const collect = (node: ts.Node): void => {
-    if (ts.isNewExpression(node)) {
-      const children = node.getChildren(reference);
-      const delimited = (open: ts.SyntaxKind, close: ts.SyntaxKind): number[] | undefined => {
-        const start = children.find((child) => child.kind === open);
-        const end = children.find((child) => child.kind === close);
-        return start && end ? [start.getStart(reference), end.end] : undefined;
-      };
-      expected.push([
-        [node.getStart(reference), node.end],
-        [node.expression.getStart(reference), node.expression.end],
-        delimited(ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken),
-        delimited(ts.SyntaxKind.OpenParenToken, ts.SyntaxKind.CloseParenToken),
-      ]);
-    }
-    ts.forEachChild(node, collect);
-  };
-  collect(reference);
-  const actual = tree.rootNode.descendantsOfType('new_expression').map((node) => {
-    const range = (field: string): number[] | undefined => {
-      const child = node.childForFieldName(field);
-      return child ? [child.startIndex, child.endIndex] : undefined;
-    };
-    return [[node.startIndex, node.endIndex], range('constructor'), range('type_arguments'), range('arguments')];
-  });
-  expect(actual, source).toEqual(expected);
-  expect(tree.rootNode.hasError, source).toBe(empty);
-  expect(tree.rootNode.descendantsOfType('ERROR'), source).toHaveLength(0);
-  const missing = tree.rootNode.descendantsOfType('type_identifier').filter((node) => node.isMissing);
-  expect(missing, source).toHaveLength(empty ? 1 : 0);
-  expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
-}
-
-function checkFormalFields(tree: Tree, source: string, dialect: string, valid: boolean, query: Query): void {
-  const reference = referenceFor(source, dialect, valid);
-  const types: (ts.FunctionTypeNode | ts.ConstructorTypeNode)[] = [];
-  const collect = (node: ts.Node): void => {
-    if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) types.push(node);
-    ts.forEachChild(node, collect);
-  };
-  collect(reference);
-  expect(types).toHaveLength(1);
-  const type = types[0]!;
-  const tokens = type.getChildren(reference);
-  const open = tokens.find((node) => node.kind === ts.SyntaxKind.OpenParenToken)!;
-  const close = tokens.find((node) => node.kind === ts.SyntaxKind.CloseParenToken)!;
-  const parameters = tree.rootNode.descendantsOfType('formal_parameters');
-  expect(parameters).toHaveLength(1);
-  const formal = parameters[0]!;
-  expect([formal.startIndex, formal.endIndex]).toEqual([open.getStart(reference), close.end]);
-  expect(
-    formal.namedChildren.map((node) => {
-      const pattern = node.childForFieldName('pattern')!;
-      const annotation = node.childForFieldName('type')!.namedChild(0)!;
-      return [
-        node.startIndex,
-        node.endIndex,
-        pattern.startIndex,
-        pattern.endIndex,
-        annotation.startIndex,
-        annotation.endIndex,
-      ];
-    })
-  ).toEqual(
-    type.parameters.map((node) => [
-      node.getStart(reference),
-      node.end,
-      node.name.getStart(reference),
-      node.name.end,
-      node.type!.getStart(reference),
-      node.type!.end,
-    ])
-  );
-  expect(query.captures(tree.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
-    type.parameters.map((node) => [node.name.getStart(reference), node.name.end])
-  );
-  const following = reference.statements.at(-1)!;
-  expect([tree.rootNode.lastNamedChild!.startIndex, tree.rootNode.lastNamedChild!.endIndex]).toEqual([
-    following.getStart(reference),
-    following.end,
-  ]);
-  expect(tree.rootNode.hasError).toBe(!valid);
-}
-
-function checkBoundaries(tree: Tree, source: string, dialect: string, query: Query): void {
-  const reference = referenceFor(source, dialect);
-  expect(tree.rootNode.hasError, source).toBe(false);
-  expect(tree.rootNode.lastNamedChild!.text).toBe(source.slice(source.lastIndexOf('const following')));
-  const expected: [string, number, number][] = [];
-  const collect = (node: ts.Node): void => {
-    const kind = ts.isAsExpression(node)
-      ? 'as'
-      : ts.isCallExpression(node) || ts.isTaggedTemplateExpression(node)
-        ? 'call'
-        : ts.isElementAccessExpression(node)
-          ? 'subscript'
-          : ts.isExpressionStatement(node)
-            ? 'statement'
-            : ts.isRegularExpressionLiteral(node)
-              ? 'regex'
-              : undefined;
-    if (kind) expected.push([kind, node.getStart(reference), node.end]);
-    ts.forEachChild(node, collect);
-  };
-  collect(reference);
-  const actual = query
-    .captures(tree.rootNode)
-    .map(({ name: capture, node }) => [capture, node.startIndex, node.endIndex]);
-  expect(sortRanges(actual), source).toEqual(sortRanges(expected));
-}
-
-function sortRanges(rows: unknown[][]): unknown[][] {
-  return rows.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-}
-
-function referenceFor(source: string, dialect: string, valid = true): ts.SourceFile {
-  const name = dialect === 'tsx' ? 'boundary.tsx' : 'boundary.ts';
-  const reference = ts.createSourceFile(
-    name,
-    source,
-    ts.ScriptTarget.Latest,
-    true,
-    dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
-  );
-  const options = { noLib: true, noResolve: true, jsx: ts.JsxEmit.Preserve };
-  const host = ts.createCompilerHost(options);
-  host.getSourceFile = (file) => (file === name ? reference : undefined);
-  const program = ts.createProgram([name], options, host);
-  expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
-  return reference;
 }
 
 for (const dialect of ['typescript', 'tsx']) {
@@ -390,4 +256,139 @@ for (const dialect of ['typescript', 'tsx']) {
       parser.delete();
     }
   });
+}
+
+function checkConstructorFields(tree: Tree, source: string, dialect: string, empty: boolean): void {
+  const reference = referenceFor(source, dialect);
+  const expected: unknown[][] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isNewExpression(node)) {
+      const children = node.getChildren(reference);
+      const delimited = (open: ts.SyntaxKind, close: ts.SyntaxKind): number[] | undefined => {
+        const start = children.find((child) => child.kind === open);
+        const end = children.find((child) => child.kind === close);
+        return start && end ? [start.getStart(reference), end.end] : undefined;
+      };
+      expected.push([
+        [node.getStart(reference), node.end],
+        [node.expression.getStart(reference), node.expression.end],
+        delimited(ts.SyntaxKind.LessThanToken, ts.SyntaxKind.GreaterThanToken),
+        delimited(ts.SyntaxKind.OpenParenToken, ts.SyntaxKind.CloseParenToken),
+      ]);
+    }
+    ts.forEachChild(node, collect);
+  };
+  collect(reference);
+  const actual = tree.rootNode.descendantsOfType('new_expression').map((node) => {
+    const range = (field: string): number[] | undefined => {
+      const child = node.childForFieldName(field);
+      return child ? [child.startIndex, child.endIndex] : undefined;
+    };
+    return [[node.startIndex, node.endIndex], range('constructor'), range('type_arguments'), range('arguments')];
+  });
+  expect(actual, source).toEqual(expected);
+  expect(tree.rootNode.hasError, source).toBe(empty);
+  expect(tree.rootNode.descendantsOfType('ERROR'), source).toHaveLength(0);
+  const missing = tree.rootNode.descendantsOfType('type_identifier').filter((node) => node.isMissing);
+  expect(missing, source).toHaveLength(empty ? 1 : 0);
+  expect(tree.rootNode.lastNamedChild?.text).toBe('const following = 1;');
+}
+
+function checkFormalFields(tree: Tree, source: string, dialect: string, valid: boolean): void {
+  const reference = referenceFor(source, dialect, valid);
+  const types: (ts.FunctionTypeNode | ts.ConstructorTypeNode)[] = [];
+  const collect = (node: ts.Node): void => {
+    if (ts.isFunctionTypeNode(node) || ts.isConstructorTypeNode(node)) types.push(node);
+    ts.forEachChild(node, collect);
+  };
+  collect(reference);
+  expect(types).toHaveLength(1);
+  const type = types[0]!;
+  const tokens = type.getChildren(reference);
+  const open = tokens.find((node) => node.kind === ts.SyntaxKind.OpenParenToken)!;
+  const close = tokens.find((node) => node.kind === ts.SyntaxKind.CloseParenToken)!;
+  const parameters = tree.rootNode.descendantsOfType('formal_parameters');
+  expect(parameters).toHaveLength(1);
+  const formal = parameters[0]!;
+  expect([formal.startIndex, formal.endIndex]).toEqual([open.getStart(reference), close.end]);
+  expect(
+    formal.namedChildren.map((node) => {
+      const pattern = node.childForFieldName('pattern')!;
+      const annotation = node.childForFieldName('type')!.namedChild(0)!;
+      return [
+        node.startIndex,
+        node.endIndex,
+        pattern.startIndex,
+        pattern.endIndex,
+        annotation.startIndex,
+        annotation.endIndex,
+      ];
+    })
+  ).toEqual(
+    type.parameters.map((node) => [
+      node.getStart(reference),
+      node.end,
+      node.name.getStart(reference),
+      node.name.end,
+      node.type!.getStart(reference),
+      node.type!.end,
+    ])
+  );
+  expect(parameterBindingIdentifiers(tree.rootNode, false).map((node) => [node.startIndex, node.endIndex])).toEqual(
+    type.parameters.map((node) => [node.name.getStart(reference), node.name.end])
+  );
+  const following = reference.statements.at(-1)!;
+  expect([tree.rootNode.lastNamedChild!.startIndex, tree.rootNode.lastNamedChild!.endIndex]).toEqual([
+    following.getStart(reference),
+    following.end,
+  ]);
+  expect(tree.rootNode.hasError).toBe(!valid);
+}
+
+function checkBoundaries(tree: Tree, source: string, dialect: string): void {
+  const reference = referenceFor(source, dialect);
+  expect(tree.rootNode.hasError, source).toBe(false);
+  expect(tree.rootNode.lastNamedChild!.text).toBe(source.slice(source.lastIndexOf('const following')));
+  const expected: [string, number, number][] = [];
+  const collect = (node: ts.Node): void => {
+    const kind = ts.isAsExpression(node)
+      ? 'as'
+      : ts.isCallExpression(node) || ts.isTaggedTemplateExpression(node)
+        ? 'call'
+        : ts.isElementAccessExpression(node)
+          ? 'subscript'
+          : ts.isExpressionStatement(node)
+            ? 'statement'
+            : ts.isRegularExpressionLiteral(node)
+              ? 'regex'
+              : undefined;
+    if (kind) expected.push([kind, node.getStart(reference), node.end]);
+    ts.forEachChild(node, collect);
+  };
+  collect(reference);
+  const actual = tree.rootNode
+    .descendantsOfType(Object.keys(BoundaryKinds))
+    .map((node) => [BoundaryKinds[node.type]!, node.startIndex, node.endIndex]);
+  expect(sortRanges(actual), source).toEqual(sortRanges(expected));
+}
+
+function sortRanges(rows: unknown[][]): unknown[][] {
+  return rows.toSorted((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
+function referenceFor(source: string, dialect: string, valid = true): ts.SourceFile {
+  const name = dialect === 'tsx' ? 'boundary.tsx' : 'boundary.ts';
+  const reference = ts.createSourceFile(
+    name,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    dialect === 'tsx' ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  );
+  const options = { noLib: true, noResolve: true, jsx: ts.JsxEmit.Preserve };
+  const host = ts.createCompilerHost(options);
+  host.getSourceFile = (file) => (file === name ? reference : undefined);
+  const program = ts.createProgram([name], options, host);
+  expect(program.getSyntacticDiagnostics(reference).length === 0, source).toBe(valid);
+  return reference;
 }

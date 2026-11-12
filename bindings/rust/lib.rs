@@ -14,9 +14,9 @@
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! The supported [willbooster-tree-sitter] runtime is version 17.0.1 or later within 17.x.
+//! The supported [willbooster-tree-sitter] runtime is version 19.1.0 or later within 19.x.
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/17.0.1/tree_sitter/struct.Parser.html
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/19.1.0/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 //! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 

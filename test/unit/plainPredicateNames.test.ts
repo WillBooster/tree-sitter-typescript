@@ -1,24 +1,22 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { Parser, Query, type Tree } from '@willbooster/web-tree-sitter';
+import { type Node, Parser, type Tree } from '@willbooster/web-tree-sitter';
 import ts from 'typescript-reference';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test } from 'vitest';
 
 import { expectNodeRanges } from '../helpers/nodeRanges.js';
+import { firstNonExtraNamedChild, jsxTagNameNodes, tupleLabelIdentifiers } from '../helpers/nodeRoles.js';
 import { loadCurrentWasmBuild } from './wasmBuild.js';
 
 const Source = fs.readFileSync(path.join(import.meta.dirname, '../fixtures/plainPredicateNames.ts'), 'utf8');
 
 describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
   let language: Awaited<ReturnType<typeof loadCurrentWasmBuild>>;
-  let query: Query | undefined;
   beforeAll(async () => {
     await Parser.init();
     language = await loadCurrentWasmBuild(dialect);
-    query = new Query(language, '(type_predicate name: (identifier) @name type: (_) @type)');
   }, 30_000);
-  afterAll(() => query?.delete());
   test.each([
     'declare function f(is: unknown): is.value is string;\nconst sentinel = 1;\n',
     'declare function f(is: unknown): is : string;\nconst sentinel = 1;\n',
@@ -158,18 +156,6 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
   });
   test.each(dialect === 'tsx' ? ['tuple', 'JSX'] : ['tuple'])('preserves %s name fields with renamed names', (role) => {
     const parser = new Parser().setLanguage(language);
-    const tupleQuery = `
-      (tuple_type (required_parameter name: (identifier) @name))
-      (tuple_type (optional_parameter name: (identifier) @name))
-      (tuple_type (required_parameter name: (rest_pattern (identifier) @name)))
-    `;
-    const jsxQuery = `
-      (jsx_opening_element name: (_) @name)
-      (jsx_closing_element name: (_) @name)
-      (jsx_self_closing_element name: (_) @name)
-    `;
-    const names = new Query(language, role === 'tuple' ? tupleQuery : jsxQuery);
-    const tuples = new Query(language, '(tuple_type) @tuple');
     const original =
       role === 'tuple'
         ? Source
@@ -224,17 +210,15 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         };
         visit(reference);
         expect(current.rootNode.hasError).toBe(false);
+        const nameNodes =
+          role === 'tuple' ? tupleLabelIdentifiers(current.rootNode) : jsxTagNameNodes(current.rootNode);
+        expect(nameNodes.map((node) => [node.text, node.type, node.startIndex, node.endIndex])).toEqual(expected);
         expect(
-          names.captures(current.rootNode).map(({ node }) => [node.text, node.type, node.startIndex, node.endIndex])
-        ).toEqual(expected);
-        expect(tuples.captures(current.rootNode).map(({ node }) => [node.startIndex, node.endIndex])).toEqual(
-          expectedTypes
-        );
+          current.rootNode.descendantsOfType('tuple_type').map((node) => [node.startIndex, node.endIndex])
+        ).toEqual(expectedTypes);
         if (role === 'JSX') expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
       }
     } finally {
-      names.delete();
-      tuples.delete();
       parser.delete();
     }
   });
@@ -303,8 +287,6 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     'preserves qualified type and bare assertion roles for %s and a renamed parameter',
     (role) => {
       const parser = new Parser().setLanguage(language);
-      const assertions = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
-      const qualified = new Query(language, '(nested_type_identifier) @qualified');
       const before = role === 'qualified type' ? 'is' : role;
       const marker = role === 'qualified type' ? 'value: ' : 'asserts ';
       const start = Source.indexOf(`${marker}${before}${role === 'qualified type' ? '.NS' : ';'}`) + marker.length;
@@ -312,48 +294,18 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + before.length)]) {
           const tree = parser.parse(source)!;
           try {
-            check(tree, source);
+            checkQualifiedAndBareAssertions(tree, source);
           } finally {
             tree.delete();
           }
         }
-        function check(current: Tree, text: string): void {
-          const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
-          const expected: [string, number, number][] = [];
-          let referenceType: ts.TypeNode | undefined;
-          const visit = (node: ts.Node): void => {
-            if (ts.isTypePredicateNode(node) && node.assertsModifier && !node.type)
-              expected.push([
-                node.parameterName.getText(reference),
-                node.parameterName.getStart(reference),
-                node.parameterName.getEnd(),
-              ]);
-            if (ts.isVariableDeclaration(node) && node.name.getText(reference) === 'value') referenceType = node.type;
-            ts.forEachChild(node, visit);
-          };
-          visit(reference);
-          expect(current.rootNode.hasError).toBe(false);
-          expect(
-            assertions.captures(current.rootNode).map(({ node }) => [node.text, node.startIndex, node.endIndex])
-          ).toEqual(expected);
-          const capture = qualified
-            .captures(current.rootNode)
-            .find(({ node }) => node.startIndex === referenceType!.getStart(reference))!;
-          expect(capture.node.text).toBe(referenceType!.getText(reference));
-          expect(capture.node.endIndex).toBe(referenceType!.getEnd());
-          expect(capture.node.childForFieldName('module')?.type).toBe('identifier');
-          expect(capture.node.childForFieldName('name')?.type).toBe('type_identifier');
-        }
       } finally {
-        assertions.delete();
-        qualified.delete();
         parser.delete();
       }
     }
   );
   test('preserves bare is assertion recovery with renamed names and trivia', () => {
     const parser = new Parser().setLanguage(language);
-    const query = new Query(language, '(asserts_annotation (asserts (identifier) @name))');
     try {
       for (const [name, replacement] of [
         ['is', 'is'],
@@ -362,25 +314,12 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         const source = `declare function f(is: unknown): asserts ${replacement}; const sentinel = 1;`;
         const tree = parser.parse(source)!;
         try {
-          check(tree, source, name);
+          checkBareIsAssertion(tree, source, name);
         } finally {
           tree.delete();
         }
       }
-      function check(current: Tree, text: string, name: string): void {
-        expect(current.rootNode.hasError, text).toBe(false);
-        const matches = query.captures(current.rootNode);
-        expect(matches).toHaveLength(1);
-        const node = matches[0]!.node;
-        expect(node.type).toBe('identifier');
-        expect(node.text).toBe(name);
-        const start = text.indexOf('asserts ') + 'asserts '.length;
-        expect(node.startIndex).toBe(start);
-        expect(node.endIndex).toBe(start + name.length);
-        expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
-      }
     } finally {
-      query.delete();
       parser.delete();
     }
   });
@@ -394,31 +333,10 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
         for (const source of [Source, Source.slice(0, start) + 'parameter' + Source.slice(start + word.length)]) {
           const tree = parser.parse(source)!;
           try {
-            check(tree, source);
+            checkPredicateOwnership(tree, source);
           } finally {
             tree.delete();
           }
-        }
-        function check(current: Tree, text: string): void {
-          const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
-          const expected: [string, string, number, number][] = [];
-          const visit = (node: ts.Node): void => {
-            if (ts.isTypePredicateNode(node) && ts.isIdentifier(node.parameterName) && node.type) {
-              expected.push([
-                'name',
-                node.parameterName.getText(reference),
-                node.parameterName.getStart(reference),
-                node.parameterName.getEnd(),
-              ]);
-              expected.push(['type', node.type.getText(reference), node.type.getStart(reference), node.type.getEnd()]);
-            }
-            ts.forEachChild(node, visit);
-          };
-          visit(reference);
-          expect(current.rootNode.hasError).toBe(false);
-          expect(
-            query!.captures(current.rootNode).map(({ name, node }) => [name, node.text, node.startIndex, node.endIndex])
-          ).toEqual(expected);
         }
       } finally {
         parser.delete();
@@ -426,6 +344,86 @@ describe.each(['typescript', 'tsx'])('%s plain predicate names', (dialect) => {
     }
   );
 });
+
+function checkQualifiedAndBareAssertions(current: Tree, text: string): void {
+  const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
+  const expected: [string, number, number][] = [];
+  let referenceType: ts.TypeNode | undefined;
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypePredicateNode(node) && node.assertsModifier && !node.type)
+      expected.push([
+        node.parameterName.getText(reference),
+        node.parameterName.getStart(reference),
+        node.parameterName.getEnd(),
+      ]);
+    if (ts.isVariableDeclaration(node) && node.name.getText(reference) === 'value') referenceType = node.type;
+    ts.forEachChild(node, visit);
+  };
+  visit(reference);
+  expect(current.rootNode.hasError).toBe(false);
+  expect(bareAssertionIdentifiers(current.rootNode).map((node) => [node.text, node.startIndex, node.endIndex])).toEqual(
+    expected
+  );
+  const qualifiedNode = current.rootNode
+    .descendantsOfType('nested_type_identifier')
+    .find((node) => node.startIndex === referenceType!.getStart(reference))!;
+  expect(qualifiedNode.text).toBe(referenceType!.getText(reference));
+  expect(qualifiedNode.endIndex).toBe(referenceType!.getEnd());
+  expect(qualifiedNode.childForFieldName('module')?.type).toBe('identifier');
+  expect(qualifiedNode.childForFieldName('name')?.type).toBe('type_identifier');
+}
+
+function checkBareIsAssertion(current: Tree, text: string, name: string): void {
+  expect(current.rootNode.hasError, text).toBe(false);
+  const matches = bareAssertionIdentifiers(current.rootNode);
+  expect(matches).toHaveLength(1);
+  const node = matches[0]!;
+  expect(node.type).toBe('identifier');
+  expect(node.text).toBe(name);
+  const start = text.indexOf('asserts ') + 'asserts '.length;
+  expect(node.startIndex).toBe(start);
+  expect(node.endIndex).toBe(start + name.length);
+  expect(current.rootNode.namedChildren.at(-1)?.text).toBe('const sentinel = 1;');
+}
+
+function checkPredicateOwnership(current: Tree, text: string): void {
+  const reference = ts.createSourceFile('predicates.ts', text, ts.ScriptTarget.Latest, true);
+  const expected: [string, string, number, number][] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isTypePredicateNode(node) && ts.isIdentifier(node.parameterName) && node.type) {
+      expected.push([
+        'name',
+        node.parameterName.getText(reference),
+        node.parameterName.getStart(reference),
+        node.parameterName.getEnd(),
+      ]);
+      expected.push(['type', node.type.getText(reference), node.type.getStart(reference), node.type.getEnd()]);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(reference);
+  expect(current.rootNode.hasError).toBe(false);
+  expect(
+    current.rootNode.descendantsOfType('type_predicate').flatMap((predicate) => {
+      const name = predicate.childForFieldName('name');
+      const type = predicate.childForFieldName('type');
+      return name?.type === 'identifier' && type
+        ? [
+            ['name', name.text, name.startIndex, name.endIndex],
+            ['type', type.text, type.startIndex, type.endIndex],
+          ]
+        : [];
+    })
+  ).toEqual(expected);
+}
+
+function bareAssertionIdentifiers(root: Node): Node[] {
+  return root.descendantsOfType('asserts_annotation').flatMap((annotation) => {
+    const assertion = firstNonExtraNamedChild(annotation);
+    const identifier = assertion?.type === 'asserts' ? firstNonExtraNamedChild(assertion) : undefined;
+    return identifier?.type === 'identifier' ? [identifier] : [];
+  });
+}
 
 function checkInferReturn(current: Tree, predicate: boolean): void {
   expect(current.rootNode.hasError).toBe(false);
