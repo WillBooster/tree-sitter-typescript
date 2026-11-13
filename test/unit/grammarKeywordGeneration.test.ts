@@ -34,3 +34,37 @@ for (const dialect of ['typescript', 'tsx']) {
     }
   });
 }
+
+test('check-keywords rejects unsorted or overlong TSKeyword tables in common/scanner.h', () => {
+  const fixture = fs.mkdtempSync('/tmp/typescript-keyword-check-');
+  try {
+    for (const file of [
+      'scripts/generateGlobalKeywords.ts',
+      'scripts/grammarKeywordStarts.ts',
+      'common/typeScriptKeywords.h',
+      'typescript/src/grammar.json',
+      'tsx/src/grammar.json',
+    ]) {
+      const target = path.join(fixture, file);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.copyFileSync(path.join(root, file), target);
+    }
+    fs.symlinkSync(path.join(root, 'node_modules'), path.join(fixture, 'node_modules'), 'junction');
+    const scannerSource = fs.readFileSync(path.join(root, 'common/scanner.h'), 'utf8');
+    for (const invalidScanner of [
+      scannerSource.replace('"while",    "with",', '"with",     "while",'),
+      scannerSource.replace('"satisfies",', '"instanceof22",'),
+    ]) {
+      fs.writeFileSync(path.join(fixture, 'common/scanner.h'), invalidScanner);
+      expect(() =>
+        execFileSync('bun', ['scripts/generateGlobalKeywords.ts', '--check'], {
+          cwd: fixture,
+          encoding: 'utf8',
+          stdio: 'pipe',
+        })
+      ).toThrow();
+    }
+  } finally {
+    fs.rmSync(fixture, { recursive: true, force: true });
+  }
+});

@@ -15,6 +15,8 @@ for (let kind = ts.SyntaxKind.FirstReservedWord; kind <= ts.SyntaxKind.LastReser
   const word = ts.tokenToString(kind);
   if (word !== undefined) bindingKeywords.push(word);
 }
+keywords.sort();
+bindingKeywords.sort();
 assert.ok(keywords.length > 0);
 const grammarArgument = process.argv.indexOf('--grammar');
 const operandKeywords =
@@ -28,48 +30,51 @@ if (grammarArgument === -1)
     operandKeywords,
     grammarOperandKeywords(JSON.parse(readFileSync(new URL('../tsx/src/grammar.json', import.meta.url), 'utf8')))
   );
+const maxKeywordLength = Math.max(...keywords.map((word) => word.length));
 const header = `// Generated from TypeScript ${ts.version} and grammar token starts by scripts/generateGlobalKeywords.ts.
 #pragma once
 
-#define TS_GLOBAL_KEYWORD_MAX_LENGTH ${Math.max(...keywords.map((word) => word.length))}
+#define TS_GLOBAL_KEYWORD_MAX_LENGTH ${maxKeywordLength}
 
-static const char *const TS_GLOBAL_KEYWORDS[] = {
+typedef char TSKeyword[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1];
+
+static const TSKeyword TS_GLOBAL_KEYWORDS[] = {
 ${keywords.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_BINDING_RESERVED_KEYWORDS[] = {
+static const TSKeyword TS_BINDING_RESERVED_KEYWORDS[] = {
 ${bindingKeywords.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
+static const TSKeyword TS_NON_IDENTIFIER_QUERY_KEYWORDS[] = {
 ${operandKeywords.query.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_ONLY_TYPE_KEYWORDS[] = {
 ${operandKeywords.expressionOnly.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_EXPRESSION_PREFIX_KEYWORDS[] = {
+static const TSKeyword TS_EXPRESSION_PREFIX_KEYWORDS[] = {
 ${operandKeywords.expressionPrefix.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
+static const TSKeyword TS_NON_PARAMETER_PATTERN_KEYWORDS[] = {
 ${operandKeywords.nonParameterPattern.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
+static const TSKeyword TS_TYPE_ONLY_ATOM_KEYWORDS[] = {
 ${operandKeywords.typeOnlyAtom.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_PARAMETER_HEADER_KEYWORDS[] = {
+static const TSKeyword TS_PARAMETER_HEADER_KEYWORDS[] = {
 ${operandKeywords.parameterHeader.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
+static const TSKeyword TS_ASSERTION_PREDICATE_SUBJECT_KEYWORDS[] = {
 ${operandKeywords.assertionPredicate.map((word) => `    "${word}",`).join('\n')}
 };
 
-static const char *const TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
+static const TSKeyword TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
 ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
 
@@ -80,8 +85,34 @@ ${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIde
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
   assert.equal(readFileSync(path, 'utf8'), header, 'Run bun run generate-keywords to update the scanner header.');
+  checkScannerKeywordTables(readFileSync(new URL('../common/scanner.h', import.meta.url), 'utf8'), maxKeywordLength);
 } else if (!existsSync(path) || readFileSync(path, 'utf8') !== header) {
   writeFileSync(path, header);
+}
+
+function checkScannerKeywordTables(scannerSource: string, maxLength: number): void {
+  const tablePattern = /\bTSKeyword\s+(\w+)\[\]\s*=\s*\{([^}]*)\}/g;
+  let tableCount = 0;
+  for (const match of scannerSource.matchAll(tablePattern)) {
+    tableCount++;
+    const [, name, body] = match;
+    const entries = [...body!.matchAll(/"([^"]*)"/g)].map((entry) => entry[1]!);
+    assert.ok(entries.length > 0, `TSKeyword table ${name} in common/scanner.h must not be empty.`);
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index]!;
+      assert.ok(
+        Buffer.byteLength(entry) <= maxLength,
+        `TSKeyword entry "${entry}" in ${name} exceeds TS_GLOBAL_KEYWORD_MAX_LENGTH (${maxLength}).`
+      );
+      if (index > 0) {
+        assert.ok(
+          Buffer.compare(Buffer.from(entries[index - 1]!), Buffer.from(entry)) < 0,
+          `TSKeyword table ${name} in common/scanner.h is not strictly sorted at "${entries[index - 1]}" -> "${entry}".`
+        );
+      }
+    }
+  }
+  assert.ok(tableCount > 0, 'Expected hand-written TSKeyword tables in common/scanner.h.');
 }
 
 function identifierCharacterRanges(name: string, contains: (character: number) => boolean): string {
