@@ -35,8 +35,8 @@ inside error nodes; consumers must not depend on a particular recovery-tree shap
 ## Support Scope
 
 This fork maintains only full parsing: valid input yields a correct tree, and invalid input yields `ERROR` or `MISSING`
-nodes without crashing, hanging, or taking more than linear time. Incremental parsing works as in upstream tree-sitter
-but is not tested here, and no queries (highlights, locals, injections, tags) are shipped. Node types, field names, and
+nodes without crashing, hanging, or taking more than linear time. Incremental parsing is not supported, and no queries
+(highlights, locals, injections, tags) are shipped. Node types, field names, and
 the trees that error recovery produces may change; such changes are released as new major versions.
 
 ## Usage
@@ -44,7 +44,7 @@ the trees that error recovery produces may change; such changes are released as 
 The npm package ships `tree-sitter-typescript.wasm` and `tree-sitter-tsx.wasm` for
 [@willbooster/web-tree-sitter](https://www.npmjs.com/package/@willbooster/web-tree-sitter), which runs in Node.js,
 Bun, browsers, and Cloudflare Workers. Load `tree-sitter-typescript.wasm` for `.ts` files and `tree-sitter-tsx.wasm`
-for `.tsx` files. Use `@willbooster/web-tree-sitter` version 19.1.1 or later within 19.x. Each generated `TSLanguage`
+for `.tsx` files. Use `@willbooster/web-tree-sitter` version 20.0.0 or later within 20.x. Each generated `TSLanguage`
 carries the WillBooster ABI (`0x5742000c`), which upstream `tree-sitter` runtimes reject, and omits `alias_map` and
 `primary_state_bitmap` tables that pre-19.1.0 WillBooster runtimes dereference despite sharing ABI `0x5742000c`.
 
@@ -90,11 +90,11 @@ parser.setLanguage(await Language.load(typescript));
 The package also ships the node types in `typescript/src/node-types.json` and `tsx/src/node-types.json`.
 
 In Rust, depend on the [crate](https://crates.io/crates/willbooster-tree-sitter-typescript) and on
-[willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter) version 19.1.1 or later within 19.x (the
+[willbooster-tree-sitter](https://crates.io/crates/willbooster-tree-sitter) version 20.0.0 or later within 20.x (the
 same `0x5742000c` ABI and `TSLanguage` table requirements apply):
 
 ```sh
-cargo add willbooster-tree-sitter@19.1.1 --rename tree-sitter
+cargo add willbooster-tree-sitter@20.0.0 --rename tree-sitter
 cargo add willbooster-tree-sitter-typescript --rename tree-sitter-typescript
 ```
 

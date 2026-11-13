@@ -10,16 +10,16 @@
 //! parser
 //!     .set_language(&language.into())
 //!     .expect("Error loading TypeScript parser");
-//! let tree = parser.parse(code, None).unwrap();
+//! let tree = parser.parse(code).unwrap();
 //! assert!(!tree.root_node().has_error());
 //! ```
 //!
-//! Use [willbooster-tree-sitter] version 19.1.1 or later within 19.x. Each generated `TSLanguage`
+//! Use [willbooster-tree-sitter] version 20.0.0 or later within 20.x. Each generated `TSLanguage`
 //! carries the WillBooster ABI (`0x5742000c`), which upstream `tree-sitter` runtimes reject, and
 //! omits `alias_map` and `primary_state_bitmap` tables that pre-19.1.0 WillBooster runtimes
 //! dereference despite sharing ABI `0x5742000c`.
 //!
-//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/19.1.1/tree_sitter/struct.Parser.html
+//! [`Parser`]: https://docs.rs/willbooster-tree-sitter/20.0.0/tree_sitter/struct.Parser.html
 //! [tree-sitter]: https://tree-sitter.github.io/
 //! [willbooster-tree-sitter]: https://crates.io/crates/willbooster-tree-sitter
 
@@ -70,13 +70,13 @@ mod tests {
         let mut parser = tree_sitter::Parser::new();
         parser.set_language(&super::LANGUAGE_TSX.into()).unwrap();
         let expected = parser
-            .parse("<p>\n  <b>x</b>\n</p>;", None)
+            .parse("<p>\n  <b>x</b>\n</p>;")
             .unwrap()
             .root_node()
             .to_sexp();
         for line_break in ["\r\n", "\r"] {
             let code = format!("<p>{line_break}  <b>x</b>{line_break}</p>;");
-            let tree = parser.parse(&code, None).unwrap();
+            let tree = parser.parse(&code).unwrap();
             assert_eq!(tree.root_node().to_sexp(), expected, "{code:?}");
         }
     }
@@ -87,41 +87,32 @@ mod tests {
             let mut parser = tree_sitter::Parser::new();
             parser.set_language(&language.into()).unwrap();
             for terminator in ["\r", "\u{2028}", "\u{2029}"] {
-                let code = format!("a\n--> c{terminator}b");
-                let tree = parser.parse(&code, None).unwrap();
-                assert_eq!(
-                    tree.root_node().to_sexp(),
-                    "(program (expression_statement (identifier)) (html_comment) (expression_statement (identifier)))",
-                    "{code:?}"
-                );
-
-                let code = format!("a{terminator}b");
-                let tree = parser.parse(&code, None).unwrap();
-                assert_eq!(
-                    tree.root_node().to_sexp(),
-                    "(program (expression_statement (identifier)) (expression_statement (identifier)))",
-                    "{code:?}"
-                );
-
-                let code = format!("const f = () => {{}}{terminator}(5)();");
-                let tree = parser.parse(&code, None).unwrap();
-                assert_eq!(
-                    tree.root_node().to_sexp(),
-                    "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
-                     parameters: (formal_parameters) body: (statement_block)))) (expression_statement \
-                     (call_expression function: (parenthesized_expression (number)) arguments: (arguments))))",
-                    "{code:?}"
-                );
-
-                let code = format!("const f = () => {{}} /*\n*/ // c{terminator}, g = 1;");
-                let tree = parser.parse(&code, None).unwrap();
-                assert_eq!(
-                    tree.root_node().to_sexp(),
-                    "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
-                     parameters: (formal_parameters) body: (statement_block))) (comment) (comment) \
-                     (variable_declarator name: (identifier) value: (number))))",
-                    "{code:?}"
-                );
+                let cases = [
+                    (
+                        format!("a\n--> c{terminator}b"),
+                        "(program (expression_statement (identifier)) (html_comment) (expression_statement (identifier)))",
+                    ),
+                    (
+                        format!("a{terminator}b"),
+                        "(program (expression_statement (identifier)) (expression_statement (identifier)))",
+                    ),
+                    (
+                        format!("const f = () => {{}}{terminator}(5)();"),
+                        "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
+                         parameters: (formal_parameters) body: (statement_block)))) (expression_statement \
+                         (call_expression function: (parenthesized_expression (number)) arguments: (arguments))))",
+                    ),
+                    (
+                        format!("const f = () => {{}} /*\n*/ // c{terminator}, g = 1;"),
+                        "(program (lexical_declaration (variable_declarator name: (identifier) value: (arrow_function \
+                         parameters: (formal_parameters) body: (statement_block))) (comment) (comment) \
+                         (variable_declarator name: (identifier) value: (number))))",
+                    ),
+                ];
+                for (code, expected) in cases {
+                    let tree = parser.parse(&code).unwrap();
+                    assert_eq!(tree.root_node().to_sexp(), expected, "{code:?}");
+                }
             }
         }
     }

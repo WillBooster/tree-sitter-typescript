@@ -54,7 +54,7 @@ describe.each(['typescript', 'tsx'])('%s untyped function-type parameter names',
     let tree: Tree | undefined;
     try {
       const start = startCpuMeasurement();
-      tree = parser.parse(source, undefined, { progressCallback: () => performance.now() > deadline }) ?? undefined;
+      tree = parser.parse(source, { progressCallback: () => performance.now() > deadline }) ?? undefined;
       const measurement = finishCpuMeasurement(start);
       cpuMeasurements.push({ depth, ...measurement });
       expect(tree, 'deep-return parse must complete before the emergency deadline').toBeDefined();

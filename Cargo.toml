@@ -4,7 +4,7 @@ autoexamples = false
 categories = ["parser-implementations", "parsing", "text-editors"]
 description = "TypeScript and TSX grammars for tree-sitter"
 edition = "2024"
-keywords = ["incremental", "parsing", "tree-sitter", "typescript", "tsx"]
+keywords = ["parsing", "tree-sitter", "typescript", "tsx"]
 license = "MIT"
 name = "willbooster-tree-sitter-typescript"
 readme = "README.md"
@@ -37,4 +37,4 @@ tree-sitter-language = "0.1"
 cc = "1.2"
 
 [dev-dependencies]
-tree-sitter = { package = "willbooster-tree-sitter", version = "19.1.1" }
+tree-sitter = { package = "willbooster-tree-sitter", version = "20.0.0" }
