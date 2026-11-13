@@ -1464,7 +1464,15 @@ static bool type_end_word_can_follow(TSLexer *lexer);
 
 static bool scan_as_const_type(TSLexer *lexer, const bool *valid_symbols, const TSLexerCheckpoint *name_start);
 static bool whole_const_assertion_can_end(TSLexer *lexer, bool trivia, bool line_break);
-static bool scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break);
+
+typedef enum {
+    ASSERTION_RETURN_NONE,
+    ASSERTION_RETURN_MATCH,
+    ASSERTION_RETURN_STOP,
+} AssertionReturnResult;
+
+static AssertionReturnResult scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break);
+static bool can_scan_type_predicate(const bool *valid_symbols, bool is_this, bool line_break, TSSymbol *symbol);
 
 typedef enum {
     ASSERTION_IDENTIFIER_INVALID,
@@ -1839,8 +1847,9 @@ reference:;
         }
     }
     if (assertion_return) {
-        if (scan_assertion_return_prefix(lexer, valid_symbols, word, ascii_word, &name_start, &line_break)) return true;
-        if (line_break && !heritage && !abstract_prefix) return false;
+        AssertionReturnResult return_prefix = scan_assertion_return_prefix(lexer, valid_symbols, word, ascii_word, &name_start, &line_break);
+        if (return_prefix == ASSERTION_RETURN_MATCH) return true;
+        if (return_prefix == ASSERTION_RETURN_STOP || (line_break && !heritage && !abstract_prefix)) return false;
     }
     if (!allow_type_arguments && !valid_symbols[ABSTRACT_CONSTRUCTOR_PREFIX]) return false;
     if (unqualified && ascii_word) {
@@ -1944,24 +1953,33 @@ static bool assertion_binding_word_is_reserved(const char *word) {
     return WORD_IN_SORTED_LIST(word, TS_BINDING_RESERVED_KEYWORDS);
 }
 
-static bool scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break) {
+static AssertionReturnResult scan_assertion_return_prefix(TSLexer *lexer, const bool *valid_symbols, const char *word, bool ascii_word, const TSLexerCheckpoint *name_start, bool *line_break) {
     bool is_this = ascii_word && WORD_EQ(word, "this");
-    if (ascii_word && !is_this && assertion_binding_word_is_reserved(word)) return false;
-    if (!scan_expression_trivia(lexer, line_break, NULL)) return false;
-    bool this_predicate = valid_symbols[AS_THIS_TYPE_PREDICATE_START] && is_this;
-    bool same_line_predicate = !*line_break && (this_predicate || valid_symbols[AS_TYPE_PREDICATE_START]);
-    TSSymbol predicate_symbol = this_predicate ? AS_THIS_TYPE_PREDICATE_START : AS_TYPE_PREDICATE_START;
-    if (valid_symbols[AS_ASSERTS_PREDICATE_START]) predicate_symbol = AS_ASSERTS_PREDICATE_START;
-    if ((valid_symbols[AS_ASSERTS_PREDICATE_START] || same_line_predicate) && lexer->lookahead == 'i' && scan_word(lexer, "is", true)) {
+    if (ascii_word && !is_this && assertion_binding_word_is_reserved(word)) return ASSERTION_RETURN_NONE;
+    if (!scan_expression_trivia(lexer, line_break, NULL)) return ASSERTION_RETURN_STOP;
+    bool name_follows = is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead);
+    TSSymbol predicate_symbol = AS_TYPE_PREDICATE_START;
+    bool probe_is = lexer->lookahead == 'i' && can_scan_type_predicate(valid_symbols, is_this, *line_break, &predicate_symbol);
+    if (probe_is && scan_word(lexer, "is", false)) {
         lexer->result_symbol = predicate_symbol;
-    } else if (valid_symbols[AS_ASSERTS_START] && !*line_break && ascii_word && WORD_EQ(word, "asserts") &&
-               is_identifier_part(lexer->lookahead) && !is_ascii_digit(lexer->lookahead)) {
+    } else if (valid_symbols[AS_ASSERTS_START] && !*line_break && ascii_word && WORD_EQ(word, "asserts") && name_follows) {
         lexer->result_symbol = AS_ASSERTS_START;
     } else {
-        return false;
+        return probe_is ? ASSERTION_RETURN_STOP : ASSERTION_RETURN_NONE;
     }
     lexer->mark_start(lexer, name_start);
     lexer->mark_end_at(lexer, name_start);
+    return ASSERTION_RETURN_MATCH;
+}
+
+static bool can_scan_type_predicate(const bool *valid_symbols, bool is_this, bool line_break, TSSymbol *symbol) {
+    bool this_predicate = valid_symbols[AS_THIS_TYPE_PREDICATE_START] && is_this;
+    if (valid_symbols[AS_ASSERTS_PREDICATE_START]) {
+        *symbol = AS_ASSERTS_PREDICATE_START;
+        return true;
+    }
+    if (line_break || (!this_predicate && !valid_symbols[AS_TYPE_PREDICATE_START])) return false;
+    *symbol = this_predicate ? AS_THIS_TYPE_PREDICATE_START : AS_TYPE_PREDICATE_START;
     return true;
 }
 
@@ -3745,7 +3763,7 @@ static bool scan_assertion_binding_identifier_start(TSLexer *lexer, const bool *
     if (reserved && (escaped || !WORD_EQ(word, "this"))) return false;
     bool line_break = false;
     if ((valid_symbols[AS_TYPE_PREDICATE_START] || valid_symbols[AS_THIS_TYPE_PREDICATE_START] || valid_symbols[AS_ASSERTS_PREDICATE_START]) &&
-        scan_assertion_return_prefix(lexer, valid_symbols, word, kind == ASSERTION_IDENTIFIER_WORD && !escaped, &name_start, &line_break)) return true;
+        scan_assertion_return_prefix(lexer, valid_symbols, word, kind == ASSERTION_IDENTIFIER_WORD && !escaped, &name_start, &line_break) == ASSERTION_RETURN_MATCH) return true;
     lexer->result_symbol = ASSERTION_BINDING_IDENTIFIER_START;
     return !reserved || WORD_EQ(word, "this");
 }

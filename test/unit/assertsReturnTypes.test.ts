@@ -46,6 +46,14 @@ function ordinary(value: unknown): asserts { return value; }
 declare function assertion(value: unknown): asserts value;
 declare function predicate(value: unknown): asserts value is string;
 declare function generic(value: unknown): asserts<string>;
+const castIsPrefix = ((value: unknown) => {}) as (is1: unknown) => asserts is1;
+const castShortPrefix = ((value: unknown) => {}) as (i: unknown) => asserts i;
+const castEscapedPrefix = ((value: unknown) => {}) as (\\u0069s1: unknown) => asserts \\u0069s1;
+const castAssertsPredicate = ((value: unknown) => {}) as (is1: unknown) => asserts is1 is string;
+const castShortAssertsPredicate = ((value: unknown) => {}) as (i: unknown) => asserts i is string;
+const castTypePredicate = ((value: unknown) => true) as (is1: unknown) => is1 is string;
+const castAssertsSubjectPredicate = ((value: unknown) => true) as (asserts: unknown) => asserts is string;
+const castGenericReturn = (() => '' as any) as () => asserts<string>;
 declare function editable(value: unknown): `;
 const Suffix = `;
 const following = 1;
