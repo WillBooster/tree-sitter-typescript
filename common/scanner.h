@@ -250,9 +250,10 @@ static inline int word_cmp(const char *a, const char *b) {
 
 static const char EMPTY_WORD[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1] = {0};
 
+// `word` must point to a null-terminated buffer of at least `sizeof(TSKeyword)` bytes.
 #define WORD_EQ(word, literal) \
-    ((void)sizeof(char[TS_GLOBAL_KEYWORD_MAX_LENGTH + 2 - sizeof(literal)]), \
-     __builtin_memcmp((word), (literal), sizeof(literal)) == 0)
+    ((void)sizeof(char[sizeof(literal) <= sizeof(TSKeyword) ? 1 : -1]), \
+     memcmp((word), (literal), sizeof(literal)) == 0)
 
 static inline bool word_starts_with(const char *word, const char *prefix) {
     for (unsigned i = 0; prefix[i]; i++) {
@@ -261,6 +262,7 @@ static inline bool word_starts_with(const char *word, const char *prefix) {
     return true;
 }
 
+// `words` must be sorted in ascending unsigned-byte order.
 static bool is_type_probe_word(const char *word, const TSKeyword *words, unsigned count) {
     unsigned char first = (unsigned char)word[0];
     if (!count || first < (unsigned char)words[0][0] || first > (unsigned char)words[count - 1][0]) return false;
@@ -339,6 +341,9 @@ typedef enum {
     ACCEPT_AFTER_COMMENT_LINE_BREAK_BEFORE_SLASH,
 } WhitespaceResult;
 
+/**
+ * @param consume If false, only consume enough to check if comment indicates semicolon-legality
+ */
 // code-gauge-allow functionCognitiveComplexity 25 -- Trivia comment and newline decisions share the same lexer cursor and consumption mode.
 static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_content, bool consume, bool skip_contents) {
     bool saw_comment_newline = false;
@@ -4307,6 +4312,7 @@ static inline bool external_scanner_scan(void *payload, TSLexer *lexer, const bo
     if (valid_symbols[JSX_TEXT]) {
         int32_t first = lexer->lookahead;
         if (scan_jsx_text(lexer, JSX_TEXT)) return true;
+        // A false `scan_jsx_text` with `;` as lookahead stopped at the end of a character reference for the internal lexer.
         if (lexer->lookahead == ';') return false;
         if (first == '\n' || first == '\r') restart_after_jsx_whitespace(lexer);
     }

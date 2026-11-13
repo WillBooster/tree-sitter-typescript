@@ -30,10 +30,11 @@ if (grammarArgument === -1)
     operandKeywords,
     grammarOperandKeywords(JSON.parse(readFileSync(new URL('../tsx/src/grammar.json', import.meta.url), 'utf8')))
   );
+const maxKeywordLength = Math.max(...keywords.map((word) => word.length));
 const header = `// Generated from TypeScript ${ts.version} and grammar token starts by scripts/generateGlobalKeywords.ts.
 #pragma once
 
-#define TS_GLOBAL_KEYWORD_MAX_LENGTH ${Math.max(...keywords.map((word) => word.length))}
+#define TS_GLOBAL_KEYWORD_MAX_LENGTH ${maxKeywordLength}
 
 typedef char TSKeyword[TS_GLOBAL_KEYWORD_MAX_LENGTH + 1];
 
@@ -84,8 +85,34 @@ ${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIde
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
   assert.equal(readFileSync(path, 'utf8'), header, 'Run bun run generate-keywords to update the scanner header.');
+  checkScannerKeywordTables(readFileSync(new URL('../common/scanner.h', import.meta.url), 'utf8'), maxKeywordLength);
 } else if (!existsSync(path) || readFileSync(path, 'utf8') !== header) {
   writeFileSync(path, header);
+}
+
+function checkScannerKeywordTables(scannerSource: string, maxLength: number): void {
+  const tablePattern = /\bTSKeyword\s+(\w+)\[\]\s*=\s*\{([^}]*)\}/g;
+  let tableCount = 0;
+  for (const match of scannerSource.matchAll(tablePattern)) {
+    tableCount++;
+    const [, name, body] = match;
+    const entries = [...body!.matchAll(/"([^"]*)"/g)].map((entry) => entry[1]!);
+    assert.ok(entries.length > 0, `TSKeyword table ${name} in common/scanner.h must not be empty.`);
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index]!;
+      assert.ok(
+        Buffer.byteLength(entry) <= maxLength,
+        `TSKeyword entry "${entry}" in ${name} exceeds TS_GLOBAL_KEYWORD_MAX_LENGTH (${maxLength}).`
+      );
+      if (index > 0) {
+        assert.ok(
+          Buffer.compare(Buffer.from(entries[index - 1]!), Buffer.from(entry)) < 0,
+          `TSKeyword table ${name} in common/scanner.h is not strictly sorted at "${entries[index - 1]}" -> "${entry}".`
+        );
+      }
+    }
+  }
+  assert.ok(tableCount > 0, 'Expected hand-written TSKeyword tables in common/scanner.h.');
 }
 
 function identifierCharacterRanges(name: string, contains: (character: number) => boolean): string {
