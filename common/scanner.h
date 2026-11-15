@@ -3687,6 +3687,8 @@ static bool type_argument_can_start(TSLexer *lexer) {
 }
 
 
+static inline bool is_ts_identifier_character(int32_t character, bool first);
+
 static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word, bool *escaped) {
     unsigned length = 0;
     bool first = true;
@@ -3694,10 +3696,7 @@ static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word,
     while (is_identifier_part(lexer->lookahead)) {
         *escaped |= lexer->lookahead == '\\';
         int32_t character = scan_identifier_character(lexer);
-        const TSCharacterRange *ranges = first ? TS_IDENTIFIER_START_RANGES : TS_IDENTIFIER_PART_RANGES;
-        uint32_t count = first ? sizeof(TS_IDENTIFIER_START_RANGES) / sizeof(TS_IDENTIFIER_START_RANGES[0]) :
-                                 sizeof(TS_IDENTIFIER_PART_RANGES) / sizeof(TS_IDENTIFIER_PART_RANGES[0]);
-        if (!set_contains(ranges, count, character)) {
+        if (!is_ts_identifier_character(character, first)) {
             word[length] = '\0';
             return ASSERTION_IDENTIFIER_INVALID;
         }
@@ -3708,6 +3707,17 @@ static AssertionIdentifier scan_assertion_identifier(TSLexer *lexer, char *word,
     word[length] = '\0';
     if (first) return ASSERTION_IDENTIFIER_INVALID;
     return other ? ASSERTION_IDENTIFIER_OTHER : ASSERTION_IDENTIFIER_WORD;
+}
+
+static inline bool is_ts_identifier_character(int32_t character, bool first) {
+    if (character < 0x80) {
+        return is_ascii_letter(character) || character == '_' || character == '$' ||
+               (!first && is_ascii_digit(character));
+    }
+    const TSCharacterRange *ranges = first ? TS_IDENTIFIER_START_RANGES : TS_IDENTIFIER_PART_RANGES;
+    uint32_t count = first ? sizeof(TS_IDENTIFIER_START_RANGES) / sizeof(TS_IDENTIFIER_START_RANGES[0]) :
+                             sizeof(TS_IDENTIFIER_PART_RANGES) / sizeof(TS_IDENTIFIER_PART_RANGES[0]);
+    return set_contains(ranges, count, character);
 }
 
 

@@ -78,9 +78,9 @@ static const TSKeyword TS_NON_ASSERTION_IDENTIFIER_KEYWORDS[] = {
 ${operandKeywords.assertion.map((word) => `    "${word}",`).join('\n')}
 };
 
-${identifierCharacterRanges('TS_IDENTIFIER_START_RANGES', (character) => ts.isIdentifierStart(character, ts.ScriptTarget.Latest))}
+${identifierCharacterRanges('TS_IDENTIFIER_START_RANGES', (character) => ts.isIdentifierStart(character, ts.ScriptTarget.Latest), false)}
 
-${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIdentifierPart(character, ts.ScriptTarget.Latest))}
+${identifierCharacterRanges('TS_IDENTIFIER_PART_RANGES', (character) => ts.isIdentifierPart(character, ts.ScriptTarget.Latest), true)}
 `;
 const path = new URL('../common/typeScriptKeywords.h', import.meta.url);
 if (process.argv.includes('--check')) {
@@ -115,15 +115,49 @@ function checkScannerKeywordTables(scannerSource: string, maxLength: number): vo
   assert.ok(tableCount > 0, 'Expected hand-written TSKeyword tables in common/scanner.h.');
 }
 
-function identifierCharacterRanges(name: string, contains: (character: number) => boolean): string {
+function identifierCharacterRanges(
+  name: string,
+  contains: (character: number) => boolean,
+  allowDigit: boolean
+): string {
+  verifyAsciiIdentifierRanges(name, contains, allowDigit);
   const ranges: [number, number][] = [];
-  for (let character = 0; character <= 0x10_ff_ff; character++) {
+  for (let character = 0x80; character <= 0x10_ff_ff; character++) {
     if (!contains(character)) continue;
     const last = ranges.at(-1);
     if (last && last[1] === character - 1) last[1] = character;
     else ranges.push([character, character]);
   }
-  return `static const TSCharacterRange ${name}[] = {
-${ranges.map(([start, end]) => `    {0x${start.toString(16)}, 0x${end.toString(16)}},`).join('\n')}
-};`;
+  return `static const TSCharacterRange ${name}[] = {\n${formatIdentifierRanges(ranges)}\n};`;
+}
+
+function verifyAsciiIdentifierRanges(
+  name: string,
+  contains: (character: number) => boolean,
+  allowDigit: boolean
+): void {
+  for (let character = 0; character < 0x80; character++) {
+    const isAscii =
+      (character >= 0x41 && character <= 0x5a) ||
+      (character >= 0x61 && character <= 0x7a) ||
+      character === 0x5f ||
+      character === 0x24 ||
+      (allowDigit && character >= 0x30 && character <= 0x39);
+    assert.equal(
+      contains(character),
+      isAscii,
+      `Unexpected ASCII membership in ${name} for U+${character.toString(16)}`
+    );
+  }
+}
+
+function formatIdentifierRanges(ranges: [number, number][]): string {
+  let lines = '';
+  for (let index = 0; index < ranges.length; index++) {
+    const [start, end] = ranges[index]!;
+    const column = index % 8;
+    const entry = `{0x${start.toString(16)}, 0x${end.toString(16)}},`;
+    lines += `${column ? ' ' : '    '}${entry}${column === 7 || index === ranges.length - 1 ? '\n' : ''}`;
+  }
+  return lines.trimEnd();
 }
