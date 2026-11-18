@@ -10407,8 +10407,13 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "SYMBOL",
-          "name": "undefined"
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "undefined"
+          },
+          "named": true,
+          "value": "identifier"
         },
         {
           "type": "SYMBOL",

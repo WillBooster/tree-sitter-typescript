@@ -484,6 +484,8 @@ module.exports = function defineGrammar(dialect) {
     },
 
     rules: withSharedHeads({
+      _identifier: ($) => choice(alias($.undefined, $.identifier), $.identifier),
+
       // TypeScript's scanner reads U+0085 as whitespace, so a name cannot contain it.
       identifier: ($, previous) => excludeFromNamePatterns(previous, String.raw`\u0085`),
 
