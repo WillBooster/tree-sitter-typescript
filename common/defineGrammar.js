@@ -455,6 +455,7 @@ module.exports = function defineGrammar(dialect) {
       [$.jsx_namespace_name, $.predefined_type],
       [$.predefined_type, $.type_parameter],
 
+      [$._template_literal_type_head],
       [$._template_literal_type_head, $._template_string_head],
       ...(dialect === 'typescript'
         ? [[$.primary_type, $.type_parameter]]
@@ -2348,18 +2349,7 @@ module.exports = function defineGrammar(dialect) {
 
       _single_string_head: () => stringHead(1),
 
-      template_literal_type: ($) =>
-        seq(
-          '`',
-          repeat(
-            choice(
-              alias($._template_chars, $.string_fragment),
-              alias($._template_escape_sequence, $.escape_sequence),
-              $.template_type
-            )
-          ),
-          '`'
-        ),
+      template_literal_type: ($) => templateLiteralType($),
 
       infer_type: ($) =>
         choice(seq('infer', $._type_identifier), prec.right(seq('infer', $._type_identifier, 'extends', $.type))),
@@ -4118,5 +4108,18 @@ function indexSignature($, classMember = false) {
         ? $.type_annotation
         : choice($.type_annotation, $.omitting_type_annotation, $.adding_type_annotation, $.opting_type_annotation)
     )
+  );
+}
+
+function templateLiteralType($) {
+  const fragment = alias($._template_chars, $.string_fragment);
+  const escape = alias($._template_escape_sequence, $.escape_sequence);
+  return choice(
+    seq(
+      '`',
+      repeat(choice(fragment, escape, $.escape_sequence, alias($._invalid_template_escape, $.escape_sequence))),
+      '`'
+    ),
+    seq('`', repeat(choice(fragment, escape)), $.template_type, repeat(choice(fragment, escape, $.template_type)), '`')
   );
 }
