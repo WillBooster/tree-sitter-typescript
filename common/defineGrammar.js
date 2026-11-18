@@ -2699,7 +2699,7 @@ module.exports = function defineGrammar(dialect) {
 
       index_signature: ($) => indexSignature($),
 
-      _class_index_signature: ($) => indexSignature($, optional('static')),
+      _class_index_signature: ($) => indexSignature($, true),
 
       array_type: ($) => seq($.primary_type, '[', ']'),
       tuple_type: ($) => tupleType($),
@@ -4100,23 +4100,23 @@ function decoratedExportClass($, abstract, ambient = false) {
   );
 }
 
-function indexSignature($, ...modifiers) {
+function indexSignature($, classMember = false) {
+  const parameter = seq(
+    field('name', choice($.identifier, alias($._reserved_identifier, $.identifier))),
+    ':',
+    field('index_type', $.type)
+  );
   return seq(
-    ...modifiers,
-    optional(seq(field('sign', optional(choice('-', '+'))), 'readonly')),
+    ...(classMember ? [optional('static')] : []),
+    optional(classMember ? 'readonly' : seq(field('sign', optional(choice('-', '+'))), 'readonly')),
     '[',
-    choice(
-      seq(
-        field('name', choice($.identifier, alias($._reserved_identifier, $.identifier))),
-        ':',
-        field('index_type', $.type)
-      ),
-      $.mapped_type_clause
-    ),
+    classMember ? parameter : choice(parameter, $.mapped_type_clause),
     ']',
     field(
       'type',
-      choice($.type_annotation, $.omitting_type_annotation, $.adding_type_annotation, $.opting_type_annotation)
+      classMember
+        ? $.type_annotation
+        : choice($.type_annotation, $.omitting_type_annotation, $.adding_type_annotation, $.opting_type_annotation)
     )
   );
 }

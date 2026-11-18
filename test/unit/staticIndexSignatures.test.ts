@@ -64,4 +64,21 @@ type ValuesByIndex = { [key: number]: number };
       parser.delete();
     }
   });
+
+  test.each([
+    'static +readonly [key: string]: number',
+    'static -readonly [key: string]: number',
+    'static [key: string]?: number',
+    'static [key: string]-?: number',
+    'static [key: string]+?: number',
+  ])(`${dialect} rejects invalid static index modifiers: %s`, (signature) => {
+    const parser = new Parser().setLanguage(language);
+    const tree = parser.parse(`class Values { ${signature}; }`)!;
+    try {
+      expect(tree.rootNode.hasError).toBe(true);
+    } finally {
+      tree.delete();
+      parser.delete();
+    }
+  });
 }
