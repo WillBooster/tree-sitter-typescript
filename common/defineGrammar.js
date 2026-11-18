@@ -1220,7 +1220,12 @@ module.exports = function defineGrammar(dialect) {
               seq($.method_signature, choice($._function_signature_automatic_semicolon, ',')),
               $.class_static_block,
               seq(
-                choice($.abstract_method_signature, $.index_signature, $.method_signature, $.field_definition),
+                choice(
+                  $.abstract_method_signature,
+                  alias($._class_index_signature, $.index_signature),
+                  $.method_signature,
+                  $.field_definition
+                ),
                 choice($._semicolon, ',')
               ),
               ';'
@@ -2692,24 +2697,9 @@ module.exports = function defineGrammar(dialect) {
           )
         ),
 
-      index_signature: ($) =>
-        seq(
-          optional(seq(field('sign', optional(choice('-', '+'))), 'readonly')),
-          '[',
-          choice(
-            seq(
-              field('name', choice($.identifier, alias($._reserved_identifier, $.identifier))),
-              ':',
-              field('index_type', $.type)
-            ),
-            $.mapped_type_clause
-          ),
-          ']',
-          field(
-            'type',
-            choice($.type_annotation, $.omitting_type_annotation, $.adding_type_annotation, $.opting_type_annotation)
-          )
-        ),
+      index_signature: ($) => indexSignature($),
+
+      _class_index_signature: ($) => indexSignature($, true),
 
       array_type: ($) => seq($.primary_type, '[', ']'),
       tuple_type: ($) => tupleType($),
@@ -4106,6 +4096,27 @@ function decoratedExportClass($, abstract, ambient = false) {
       optional($.class_heritage),
       field('body', $.class_body),
       optional($._automatic_semicolon)
+    )
+  );
+}
+
+function indexSignature($, classMember = false) {
+  const parameter = seq(
+    field('name', choice($.identifier, alias($._reserved_identifier, $.identifier))),
+    ':',
+    field('index_type', $.type)
+  );
+  return seq(
+    ...(classMember ? [optional('static')] : []),
+    optional(classMember ? 'readonly' : seq(field('sign', optional(choice('-', '+'))), 'readonly')),
+    '[',
+    classMember ? parameter : choice(parameter, $.mapped_type_clause),
+    ']',
+    field(
+      'type',
+      classMember
+        ? $.type_annotation
+        : choice($.type_annotation, $.omitting_type_annotation, $.adding_type_annotation, $.opting_type_annotation)
     )
   );
 }
