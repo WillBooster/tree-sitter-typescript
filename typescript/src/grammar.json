@@ -9567,8 +9567,11 @@
               "name": "_double_string_head"
             },
             {
-              "type": "STRING",
-              "value": "\""
+              "type": "IMMEDIATE_TOKEN",
+              "content": {
+                "type": "STRING",
+                "value": "\""
+              }
             }
           ]
         },
@@ -9580,8 +9583,11 @@
               "name": "_single_string_head"
             },
             {
-              "type": "STRING",
-              "value": "'"
+              "type": "IMMEDIATE_TOKEN",
+              "content": {
+                "type": "STRING",
+                "value": "'"
+              }
             }
           ]
         }
