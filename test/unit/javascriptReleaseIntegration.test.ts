@@ -7,6 +7,27 @@ import { loadCurrentWasmBuild } from './wasmBuild';
 await Parser.init();
 for (const dialect of ['typescript', 'tsx']) {
   const language = await loadCurrentWasmBuild(dialect);
+  test(`${dialect} rejects unescaped line breaks in quoted strings`, () => {
+    const parser = new Parser().setLanguage(language);
+    try {
+      for (const [text, valid] of [
+        ["const value: string = 'text\n';", false],
+        ['const value: string = "\r\n";', false],
+        ["const value: string = 'text\\\ncontinued';", true],
+        ['const value: string = "text\\\r\ncontinued";', true],
+      ] as const) {
+        const tree = parser.parse(text)!;
+        try {
+          expect(tree.rootNode.hasError, JSON.stringify(text)).toBe(!valid);
+        } finally {
+          tree.delete();
+        }
+      }
+    } finally {
+      parser.delete();
+    }
+  });
+
   test(`${dialect} rejects default variable and resource declarations`, () => {
     const parser = new Parser().setLanguage(language);
     try {
