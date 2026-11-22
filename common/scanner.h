@@ -344,7 +344,7 @@ typedef enum {
 /**
  * @param consume If false, only consume enough to check if comment indicates semicolon-legality
  */
-// code-gauge-allow functionCognitiveComplexity 25 -- Trivia comment and newline decisions share the same lexer cursor and consumption mode.
+// code-gauge-allow functionCognitiveComplexity -- Trivia comment and newline decisions share the same lexer cursor and consumption mode.
 static WhitespaceResult scan_whitespace_and_comments(TSLexer *lexer, bool *scanned_content, bool consume, bool skip_contents) {
     bool saw_comment_newline = false;
     for (;;) {
@@ -433,8 +433,8 @@ static bool scan_identifier(TSLexer *lexer, char *word, unsigned capacity, bool 
 static bool follows_yield_operand(TSLexer *lexer);
 static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator);
 
-// code-gauge-allow functionNcss 50 -- ASI state machine shares lookahead and comment-break state across branches.
-// code-gauge-allow functionParameterCount 8 -- ASI probes pass caller context flags without allocating state structs.
+// code-gauge-allow functionNcss -- ASI state machine shares lookahead and comment-break state across branches.
+// code-gauge-allow functionParameterCount -- ASI probes pass caller context flags without allocating state structs.
 static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, bool comment_condition, bool after_block_arrow,
                                      LineBreakRule rule, bool *scanned_content, bool *before_line_break, bool allow_resource_binding) {
     *before_line_break = false;
@@ -523,7 +523,7 @@ static bool scan_automatic_semicolon(TSLexer *lexer, const bool *valid_symbols, 
     return scan_after_line_break(lexer, valid_symbols, after_block_arrow, rule, scanned_content, false);
 }
 
-// code-gauge-allow duplicateLines 15 -- Punctuation switch mirrors operator delimiters with ASI-specific return values.
+// code-gauge-allow duplicateLines -- Punctuation switch mirrors operator delimiters with ASI-specific return values.
 static bool scan_after_line_break(TSLexer *lexer, const bool *valid_symbols, bool after_block_arrow, LineBreakRule rule,
                                   bool *scanned_content, bool before_slash) {
     if (after_block_arrow) {
@@ -1155,7 +1155,7 @@ static bool scan_global_declaration_end(TSLexer *lexer) {
     return true;
 }
 
-// code-gauge-allow duplicateLines 16 -- Expression-end lookahead switch differs in skip vs advance cursor semantics.
+// code-gauge-allow duplicateLines -- Expression-end lookahead switch differs in skip vs advance cursor semantics.
 static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statement_end, const bool *valid_symbols, bool *scanned_content) {
     lexer->mark_end(lexer);
     lexer->result_symbol = after_postfix ? POSTFIX_UPDATE_END : AWAIT_OPERAND_END;
@@ -1242,7 +1242,7 @@ static bool scan_expression_end(TSLexer *lexer, bool after_postfix, bool *statem
     }
 }
 
-// code-gauge-allow functionNcss 42 -- Decodes escaped resource binding identifiers inline with contextual checks.
+// code-gauge-allow functionNcss -- Decodes escaped resource binding identifiers inline with contextual checks.
 static bool scan_resource_binding(TSLexer *lexer, bool plain_for_of, bool after_line_break, bool *infix_operator) {
     char word[16] = {0};
     unsigned length = 0;
@@ -1516,7 +1516,7 @@ static bool skip_parameter_probe_regex(TSLexer *lexer);
 
 // Like TypeScript's `skipParameterStart`, reads `([a]: A) => B` as a parameter list rather than a parenthesized tuple:
 // a bracketed group holding a default or followed by `:`, `,`, `?`, `=`, or `) =>` is a binding pattern.
-// code-gauge-allow functionNcss 45 -- Keeps balanced-group traversal and its terminating parameter lookahead together.
+// code-gauge-allow functionNcss -- Keeps balanced-group traversal and its terminating parameter lookahead together.
 static bool bracket_group_starts_parameter(TSLexer *lexer) {
     unsigned depth = 0;
     bool angle = false;
@@ -1549,7 +1549,7 @@ static bool bracket_group_starts_parameter(TSLexer *lexer) {
     }
 }
 
-// code-gauge-allow functionNcss 50 -- Keeps lexical goal updates with the token dispatch that determines them.
+// code-gauge-allow functionNcss -- Keeps lexical goal updates with the token dispatch that determines them.
 static int32_t next_parameter_probe_token(TSLexer *lexer, ParameterProbe *probe) {
     int32_t c = lexer->lookahead;
     if (!c) return 0;
@@ -2038,7 +2038,7 @@ static bool scan_type_identifier_escape(TSLexer *lexer) {
 
 static bool grow_type_group_stack(TypeGroupFrame **stack, const TypeGroupFrame *inline_stack, unsigned *capacity);
 
-// code-gauge-allow functionParameterCount 7 -- Balanced type-group scanner threads mode flags without heap state.
+// code-gauge-allow functionParameterCount -- Balanced type-group scanner threads mode flags without heap state.
 static bool scan_type_group(TSLexer *lexer, int32_t close, bool type_operands, bool html_comments, unsigned *completion, bool complete_conditionals, bool *unsafe_conditional) {
     if (completion) *completion = 0;
     TypeGroupFrame inline_stack[32];
@@ -2940,7 +2940,7 @@ static bool grow_type_group_stack(TypeGroupFrame **stack, const TypeGroupFrame *
     return true;
 }
 
-// code-gauge-allow duplicateLines 15 -- Annotated type delimiter cases mirror punctuation boundaries with return-type state.
+// code-gauge-allow duplicateLines -- Annotated type delimiter cases mirror punctuation boundaries with return-type state.
 static bool scan_annotated_type_colons(TSLexer *lexer, bool allow_expression, bool first, bool untyped_return, bool enclosing_conditional, bool *requires_conditional_parameter) {
     unsigned conditional_depth = 0;
     bool saw_extends = false, conditional_question_pending = false, infer_name = false, infer_constraint = false;
@@ -3411,7 +3411,7 @@ static bool scan_declaration_keyword(TSLexer *lexer, const bool *valid_symbols) 
     return valid_symbols[lexer->result_symbol];
 }
 
-// code-gauge-allow functionNcss 49 -- Single-switch lookahead dispatch for arrow expression continuations.
+// code-gauge-allow functionNcss -- Single-switch lookahead dispatch for arrow expression continuations.
 static bool scan_arrow_context_end(TSLexer *lexer, bool *can_scan_ternary, bool after_type_assertion, bool *statement_end, bool *scanned_content) {
     lexer->mark_end(lexer);
     bool saw_newline = false;
@@ -3621,8 +3621,8 @@ static bool scan_assertion_type_boundary(TSLexer *lexer, const bool *valid_symbo
     return false;
 }
 
-// code-gauge-allow functionCognitiveComplexity 30 -- Disambiguates const assertion suffixes across valid symbol combinations.
-// code-gauge-allow functionNcss 48 -- Keeps const assertion suffix dispatch together in one place.
+// code-gauge-allow functionCognitiveComplexity -- Disambiguates const assertion suffixes across valid symbol combinations.
+// code-gauge-allow functionNcss -- Keeps const assertion suffix dispatch together in one place.
 static bool scan_const_assertion_context(TSLexer *lexer, const bool *valid_symbols) {
     lexer->mark_end(lexer);
     bool line_break = false;
@@ -3800,7 +3800,7 @@ static bool assertion_type_word_can_start(TSLexer *lexer, AssertionIdentifier ki
     return scan_assertion_name_tail(lexer);
 }
 
-// code-gauge-allow functionNcss 43 -- Handles parenthesized, signed, and punctuated index-type starts together.
+// code-gauge-allow functionNcss -- Handles parenthesized, signed, and punctuated index-type starts together.
 static bool as_lookup_index_can_start(TSLexer *lexer) {
     bool parenthesized = false;
     while (lexer->lookahead == '(') {
@@ -3867,7 +3867,7 @@ static bool assertion_compound_type_operand_can_start(TSLexer *lexer, bool inter
     return !constructor;
 }
 
-// code-gauge-allow functionCognitiveComplexity 20 -- Dispatches assertion type start probes by valid symbol priority.
+// code-gauge-allow functionCognitiveComplexity -- Dispatches assertion type start probes by valid symbol priority.
 static bool scan_assertion_type_start(TSLexer *lexer, const bool *valid_symbols) {
     if (valid_symbols[AS_COMPOUND_TYPE_OPERAND_START] || valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START]) {
         bool intersection = valid_symbols[AS_INTERSECTION_TYPE_OPERAND_START] && !valid_symbols[AS_COMPOUND_TYPE_OPERAND_START];
@@ -4111,8 +4111,8 @@ static bool declaration_keyword_allows_extends_type_argument(TSLexer *lexer, con
     return scan_identifier(lexer, next, sizeof(next), false) && WORD_EQ(next, "extends");
 }
 
-// code-gauge-allow functionCognitiveComplexity 20 -- Tracks HTML comments, block comments, and newline boundaries before heritage clauses.
-// code-gauge-allow functionNcss 49 -- Keeps heritage-clause trivia and delimiter checks together.
+// code-gauge-allow functionCognitiveComplexity -- Tracks HTML comments, block comments, and newline boundaries before heritage clauses.
+// code-gauge-allow functionNcss -- Keeps heritage-clause trivia and delimiter checks together.
 static bool scan_class_extends_end(TSLexer *lexer, const bool *valid_symbols) {
     bool allow_html_comment = valid_symbols[HTML_COMMENT];
     lexer->mark_end(lexer);
@@ -4584,7 +4584,7 @@ static bool scan_default_trivia(TSLexer *lexer, bool allow_line_breaks, bool htm
     return scan_default_trivia_with_line_break(lexer, allow_line_breaks, html_comments, NULL);
 }
 
-// code-gauge-allow functionCognitiveComplexity 26 -- Combines whitespace, line-break gating, slash comments, and HTML comments in one loop.
+// code-gauge-allow functionCognitiveComplexity -- Combines whitespace, line-break gating, slash comments, and HTML comments in one loop.
 static bool scan_default_trivia_with_line_break(TSLexer *lexer, bool allow_line_breaks, bool html_comments, bool *line_break) {
     if (line_break) *line_break = false;
     for (;;) {
