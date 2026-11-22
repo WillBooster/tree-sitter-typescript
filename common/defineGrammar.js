@@ -93,8 +93,8 @@ const DYNAMIC_PRECEDENCE = {
   QUALIFIED_ASSERTION_TYPE: 1,
 };
 
-// code-gauge-allow functionCognitiveComplexity 27 -- The grammar's rule table is one object literal whose rules tree-sitter calls by name; splitting it would only scatter the rules.
-// code-gauge-allow functionNcss 31 -- The grammar's rule table is one object literal whose rules tree-sitter calls by name.
+// code-gauge-allow functionCognitiveComplexity -- The grammar's rule table is one object literal whose rules tree-sitter calls by name; splitting it would only scatter the rules.
+// code-gauge-allow functionNcss -- The grammar's rule table is one object literal whose rules tree-sitter calls by name.
 module.exports = function defineGrammar(dialect) {
   return grammar(JavaScript, {
     name: dialect,
